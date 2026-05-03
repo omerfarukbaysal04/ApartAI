@@ -39,6 +39,7 @@ Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `da
 - `POST /api/dues/bulk`
 - `POST /api/dues/:id/pay`
 - `POST /api/requests`
+- `PATCH /api/requests/:id`
 - `PATCH /api/requests/:id/status`
 - `POST /api/announcements`
 - `POST /api/apartments`

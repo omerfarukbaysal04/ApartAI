@@ -6,6 +6,9 @@ const seedState = {
   view: "dashboard",
   mode: "manager",
   selectedResidentId: "resident-1",
+  selectedRequestId: null,
+  requestStatusFilter: "all",
+  requestCategoryFilter: "all",
   sessionUser: null,
   site: {
     id: "site-1",
@@ -278,6 +281,33 @@ function recurringIssues() {
   return Object.entries(groups)
     .filter(([, count]) => count > 1)
     .map(([label, count]) => ({ label: label.replace("-", " / "), count }));
+}
+
+function similarRequests(targetRequest) {
+  if (!targetRequest) return [];
+  const targetApartment = state.apartments.find((item) => item.id === targetRequest.apartmentId);
+  return state.requests
+    .filter((request) => {
+      if (request.id === targetRequest.id) return false;
+      const apartment = state.apartments.find((item) => item.id === request.apartmentId);
+      return request.category === targetRequest.category || apartment?.blockId === targetApartment?.blockId;
+    })
+    .slice(0, 4);
+}
+
+function aiActionForRequest(request) {
+  if (!request) return "";
+  const byCategory = {
+    Temizlik: "Temizlik firmasıyla aynı gün kontrol planla ve ilgili blokta takip notu oluştur.",
+    Asansör: "Bakım firmasına servis kaydı aç, çözüm saatini sakinlerle duyuru olarak paylaş.",
+    Güvenlik: "Güvenlik vardiyası ve kamera kayıtlarını kontrol ederek olay notu oluştur.",
+    "Su ve tesisat": "Tesisat firmasına keşif kaydı aç ve su kesintisi riski varsa duyuru hazırla.",
+    Elektrik: "Elektrik ekibine kontrol kaydı aç, ortak alan güvenliğini önceliklendir.",
+    Otopark: "Araç/plaka bilgisini netleştir ve otopark kullanım kuralını tekrar duyur.",
+    Gürültü: "İlgili daireyle kibar uyarı iletişimi kur ve tekrarı için kayıt tut.",
+    Peyzaj: "Bahçe bakım planına ekle ve çözüm tarihini sakin ekranında güncelle.",
+  };
+  return byCategory[request.category] ?? "Talebi ilgili sorumluya yönlendir ve çözüm tarihini görünür şekilde güncelle.";
 }
 
 function analyzeComplaint(text) {
@@ -700,6 +730,13 @@ function duesView() {
 }
 
 function requestsView() {
+  const categories = [...new Set(state.requests.map((request) => request.category))];
+  const filteredRequests = state.requests.filter((request) => {
+    const statusOk = state.requestStatusFilter === "all" || request.status === state.requestStatusFilter;
+    const categoryOk = state.requestCategoryFilter === "all" || request.category === state.requestCategoryFilter;
+    return statusOk && categoryOk;
+  });
+  const selectedRequest = state.requests.find((request) => request.id === state.selectedRequestId);
   return `
     <section class="section">
       <div class="section-header">
@@ -708,11 +745,26 @@ function requestsView() {
           <p>AI özetleri ve durum takibi aynı ekranda.</p>
         </div>
       </div>
+      <div class="toolbar">
+        <label>Durum
+          <select onchange="setState({ requestStatusFilter: this.value })">
+            <option value="all" ${state.requestStatusFilter === "all" ? "selected" : ""}>Tümü</option>
+            ${["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"].map((status) => `<option value="${status}" ${state.requestStatusFilter === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Kategori
+          <select onchange="setState({ requestCategoryFilter: this.value })">
+            <option value="all" ${state.requestCategoryFilter === "all" ? "selected" : ""}>Tümü</option>
+            ${categories.map((category) => `<option value="${category}" ${state.requestCategoryFilter === category ? "selected" : ""}>${category}</option>`).join("")}
+          </select>
+        </label>
+        <button class="btn" onclick="setState({ requestStatusFilter: 'all', requestCategoryFilter: 'all' })">Filtreleri Temizle</button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Talep</th><th>Daire</th><th>Kategori</th><th>Aciliyet</th><th>AI Özeti</th><th>Durum</th><th>İşlem</th></tr></thead>
           <tbody>
-            ${state.requests.map((request) => `
+            ${filteredRequests.map((request) => `
               <tr>
                 <td><strong>${request.title}</strong><br>${request.description}<br><small>${dateText(request.createdAt)} - ${request.location}</small></td>
                 <td>${apartmentLabel(request.apartmentId)}</td>
@@ -721,16 +773,66 @@ function requestsView() {
                 <td>${request.aiSummary}</td>
                 <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span></td>
                 <td>
-                  <select onchange="updateRequestStatus('${request.id}', this.value)">
-                    ${["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"].map((status) => `<option value="${status}" ${request.status === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
-                  </select>
+                  <button class="btn" onclick="setState({ selectedRequestId: '${request.id}' })">Detay</button>
                 </td>
               </tr>
-            `).join("")}
+            `).join("") || `<tr><td colspan="7">Bu filtrelere uygun talep yok.</td></tr>`}
           </tbody>
         </table>
       </div>
     </section>
+    ${selectedRequest ? requestDetailModal(selectedRequest) : ""}
+  `;
+}
+
+function requestDetailModal(request) {
+  const similar = similarRequests(request);
+  return `
+    <div class="modal-backdrop" onclick="closeRequestModal(event)">
+      <section class="request-modal" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="setState({ selectedRequestId: null })" aria-label="Kapat">×</button>
+        <div class="section-header">
+          <div>
+            <h2>${request.title}</h2>
+            <p>${apartmentLabel(request.apartmentId)} - ${dateText(request.createdAt)}</p>
+          </div>
+          <span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span>
+        </div>
+        <div class="request-detail-grid">
+          <div class="request-detail-main">
+            <div class="notice">
+              <strong>Talep Açıklaması</strong>
+              <p>${request.description}</p>
+            </div>
+            <div class="ai-panel">
+              <span class="status info">AI önerisi</span>
+              <h3>${request.category} - ${request.location}</h3>
+              <p>${request.aiSummary}</p>
+              <strong>${aiActionForRequest(request)}</strong>
+            </div>
+            <div class="notice">
+              <strong>Benzer Talepler</strong>
+              ${
+                similar.length
+                  ? `<ul class="mini-list">${similar.map((item) => `<li><span>${item.category}</span>${item.title}<small>${apartmentLabel(item.apartmentId)} - ${requestStatusText(item.status)}</small></li>`).join("")}</ul>`
+                  : `<p>Benzer blok veya kategoride yakın talep bulunmadı.</p>`
+              }
+            </div>
+          </div>
+          <form class="request-side-form" onsubmit="saveRequestDetail(event, '${request.id}')">
+            <label>Durum
+              <select name="status">
+                ${["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"].map((status) => `<option value="${status}" ${request.status === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Yönetici notu
+              <textarea name="adminNote" placeholder="Firma, aksiyon veya sakin iletişimi notu">${safeText(request.adminNote || "")}</textarea>
+            </label>
+            <button class="btn primary" type="submit">Kaydet</button>
+          </form>
+        </div>
+      </section>
+    </div>
   `;
 }
 
@@ -1040,6 +1142,42 @@ function updateRequestStatus(requestId, status) {
   );
   saveState();
   render();
+}
+
+function saveRequestDetail(event, requestId) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const payload = {
+    status: safeText(form.get("status")),
+    adminNote: safeText(form.get("adminNote")),
+  };
+  if (API_BASE) {
+    apiRequest(`/requests/${requestId}`, { method: "PATCH", body: JSON.stringify(payload) }).then((result) => {
+      state = result;
+      state.selectedRequestId = null;
+      render();
+    });
+    return;
+  }
+  state.requests = state.requests.map((request) =>
+    request.id === requestId
+      ? {
+          ...request,
+          status: payload.status,
+          adminNote: payload.adminNote,
+          resolvedAt: payload.status === "cozuldu" ? new Date().toISOString().slice(0, 10) : request.resolvedAt,
+        }
+      : request,
+  );
+  state.selectedRequestId = null;
+  saveState();
+  render();
+}
+
+function closeRequestModal(event) {
+  if (event.target.classList.contains("modal-backdrop")) {
+    setState({ selectedRequestId: null });
+  }
 }
 
 function createAnnouncement(event) {

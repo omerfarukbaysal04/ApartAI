@@ -293,6 +293,23 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const requestUpdateMatch = url.pathname.match(/^\/api\/requests\/([^/]+)$/);
+  if (method === "PATCH" && requestUpdateMatch) {
+    const body = await readBody(req);
+    const request = data.requests.find((item) => item.id === requestUpdateMatch[1]);
+    if (!request) {
+      json(res, 404, { error: "Request not found" });
+      return;
+    }
+    if (body.status !== undefined) request.status = clean(body.status);
+    if (body.adminNote !== undefined) request.adminNote = clean(body.adminNote);
+    if (request.status === "cozuldu" && !request.resolvedAt) request.resolvedAt = today();
+    if (request.status !== "cozuldu") request.resolvedAt = "";
+    await writeData(data);
+    json(res, 200, publicData(data));
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/announcements") {
     const body = await readBody(req);
     const content = clean(body.content);
