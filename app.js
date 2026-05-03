@@ -56,6 +56,7 @@ const seedState = {
       category: "Temizlik",
       title: "C blok girişinde çöp kokusu",
       description: "C blok girişinde iki gündür çöpler alınmıyor, koku oluştu.",
+      photoDataUrl: "",
       urgency: "Orta",
       status: "inceleniyor",
       adminNote: "Temizlik firması aranacak.",
@@ -70,6 +71,7 @@ const seedState = {
       category: "Asansör",
       title: "B blok asansör ses yapıyor",
       description: "B blok asansörü kalkışta sert ses çıkarıyor.",
+      photoDataUrl: "",
       urgency: "Yüksek",
       status: "firmaya_iletildi",
       adminNote: "Bakım firması bugün gelecek.",
@@ -197,6 +199,45 @@ function safeText(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Yalnızca görsel dosyası eklenebilir."));
+      return;
+    }
+    if (file.size > 1_500_000) {
+      reject(new Error("Fotoğraf 1.5 MB altında olmalı."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Fotoğraf okunamadı."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function previewRequestPhoto(input) {
+  const preview = document.querySelector("#request-photo-preview");
+  if (!preview) return;
+  const file = input.files?.[0];
+  if (!file) {
+    preview.innerHTML = "";
+    return;
+  }
+  fileToDataUrl(file)
+    .then((dataUrl) => {
+      preview.innerHTML = `<img src="${dataUrl}" alt="Talep fotoğrafı önizleme" />`;
+    })
+    .catch((error) => {
+      input.value = "";
+      preview.innerHTML = `<span>${safeText(error.message)}</span>`;
+    });
 }
 
 function money(value) {
@@ -950,7 +991,7 @@ function requestsView() {
                 <td>${apartmentLabel(request.apartmentId)}</td>
                 <td>${request.category}</td>
                 <td><span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span></td>
-                <td>${request.aiSummary}</td>
+                <td>${request.aiSummary}${request.photoDataUrl ? `<br><span class="status info">Fotoğraflı</span>` : ""}</td>
                 <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span></td>
                 <td>
                   <button class="btn" onclick="setState({ selectedRequestId: '${request.id}' })">Detay</button>
@@ -984,6 +1025,11 @@ function requestDetailModal(request) {
               <strong>Talep Açıklaması</strong>
               <p>${request.description}</p>
             </div>
+            ${
+              request.photoDataUrl
+                ? `<figure class="attachment-preview"><img src="${request.photoDataUrl}" alt="Talep fotoğrafı" /><figcaption>Sakin tarafından eklenen fotoğraf</figcaption></figure>`
+                : ""
+            }
             <div class="ai-panel">
               <span class="status info">AI önerisi</span>
               <h3>${request.category} - ${request.location}</h3>
@@ -1217,6 +1263,10 @@ function residentRequestView() {
         <form class="grid" onsubmit="createResidentRequest(event)">
           <label>Başlık<input name="title" required placeholder="Örn. Asansör çalışmıyor" /></label>
           <label>Açıklama<textarea name="description" required placeholder="Sorunu kısa ve net yazın"></textarea></label>
+          <label>Fotoğraf
+            <input name="photo" type="file" accept="image/*" onchange="previewRequestPhoto(this)" />
+          </label>
+          <div id="request-photo-preview" class="upload-preview"></div>
           <button class="btn primary" type="submit">AI ile Analiz Et ve Gönder</button>
         </form>
       </section>
@@ -1517,15 +1567,22 @@ function createApartment(event) {
   render();
 }
 
-function createResidentRequest(event) {
+async function createResidentRequest(event) {
   event.preventDefault();
   const form = new FormData(event.target);
   const title = safeText(form.get("title"));
   const description = safeText(form.get("description"));
+  let photoDataUrl = "";
+  try {
+    photoDataUrl = await fileToDataUrl(form.get("photo"));
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
   if (API_BASE) {
     apiRequest("/requests", {
       method: "POST",
-      body: JSON.stringify({ apartmentId: residentApartment().id, title, description }),
+      body: JSON.stringify({ apartmentId: residentApartment().id, title, description, photoDataUrl }),
     }).then((result) => {
       event.target.reset();
       applyServerData(result.data, { view: "resident-home" });
@@ -1541,6 +1598,7 @@ function createResidentRequest(event) {
       category: ai.category,
       title,
       description,
+      photoDataUrl,
       urgency: ai.urgency,
       status: "yeni",
       adminNote: "",

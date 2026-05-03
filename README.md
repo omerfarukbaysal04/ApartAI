@@ -25,6 +25,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] Aidat oluşturma, ödeme işaretleme ve risk özeti eklendi.
 - [x] Aidat hatırlatma taslağı ve hatırlatma kaydı eklendi.
 - [x] Sakin talep açma akışı eklendi.
+- [x] Talep fotoğrafı ekleme ve yönetici detayında görüntüleme eklendi.
 - [x] Talep detay modalı, yönetici notu, durum güncelleme ve silme eklendi.
 - [x] Kural tabanlı AI simülasyonları eklendi.
 - [x] Rapor ekranı aylık özet, blok yoğunluğu ve pilot metrikleriyle geliştirildi.
@@ -35,7 +36,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [ ] JSON dosya deposunu PostgreSQL repository katmanıyla değiştir.
 - [ ] Demo auth akışını gerçek session/JWT ve parola hash altyapısına taşı.
 - [ ] Kural tabanlı AI simülasyonlarını gerçek OpenAI API çağrılarına taşı.
-- [ ] Talep fotoğrafı yükleme ve S3 uyumlu dosya saklama ekle.
+- [ ] MVP fotoğraf saklamasını S3 uyumlu dosya saklama altyapısına taşı.
 - [ ] Pilot siteler için Excel içeri aktarma ekle.
 - [ ] Duyuru okunma takibi ve bildirim geçmişi ekle.
 - [ ] SMS/e-posta bildirim entegrasyonu ekle.

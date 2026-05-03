@@ -76,6 +76,7 @@ create table requests (
   title text not null,
   description text not null,
   photo_url text,
+  photo_data_url text,
   urgency text not null check (urgency in ('Düşük', 'Orta', 'Yüksek')),
   status text not null check (status in ('yeni', 'inceleniyor', 'firmaya_iletildi', 'cozuldu', 'reddedildi')),
   admin_note text,
