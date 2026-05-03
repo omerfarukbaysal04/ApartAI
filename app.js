@@ -364,16 +364,80 @@ function authView() {
   return `
     <main class="auth-page">
       <section class="auth-hero">
-        <div class="mark">A</div>
-        <h1>ApartAI</h1>
-        <p>Site yönetimini aidat, talep, duyuru ve AI destekli operasyon skorlarıyla tek panelde topla.</p>
+        <div class="auth-copy">
+          <div class="auth-kicker"><span></span>AI destekli site yönetim asistanı</div>
+          <h1>Apartman yönetimini tek panelde sakinleştir.</h1>
+          <p>Aidat, arıza, şikayet, duyuru ve aylık yönetici özetlerini aynı yerde topla. ApartAI veriyi yorumlar, tekrar eden sorunları yakalar ve yöneticinin sonraki aksiyonunu netleştirir.</p>
+        </div>
+        <div class="auth-scene" aria-hidden="true">
+          <svg viewBox="0 0 620 430" role="img">
+            <defs>
+              <linearGradient id="towerGradient" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f7fffb" stop-opacity="0.98" />
+                <stop offset="100%" stop-color="#bfe6df" stop-opacity="0.84" />
+              </linearGradient>
+              <linearGradient id="panelGradient" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.94" />
+                <stop offset="100%" stop-color="#dbeaf8" stop-opacity="0.76" />
+              </linearGradient>
+              <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#061816" flood-opacity="0.22" />
+              </filter>
+            </defs>
+            <path class="svg-orbit" d="M116 219c56-92 183-135 296-96 95 33 150 112 121 178-31 72-156 98-272 70-111-27-192-75-145-152z" />
+            <g class="svg-building" filter="url(#softShadow)">
+              <rect x="96" y="92" width="170" height="260" rx="18" fill="url(#towerGradient)" />
+              <rect x="130" y="132" width="35" height="35" rx="8" />
+              <rect x="194" y="132" width="35" height="35" rx="8" />
+              <rect x="130" y="190" width="35" height="35" rx="8" />
+              <rect x="194" y="190" width="35" height="35" rx="8" />
+              <rect x="130" y="248" width="35" height="35" rx="8" />
+              <rect x="194" y="248" width="35" height="35" rx="8" />
+              <rect x="160" y="308" width="42" height="44" rx="10" />
+            </g>
+            <g class="svg-panel" filter="url(#softShadow)">
+              <rect x="294" y="72" width="226" height="160" rx="20" fill="url(#panelGradient)" />
+              <path d="M326 183c25-31 52-19 72-42 21-25 45-19 80-50" />
+              <circle cx="326" cy="183" r="8" />
+              <circle cx="398" cy="141" r="8" />
+              <circle cx="478" cy="91" r="8" />
+              <rect x="326" y="112" width="82" height="10" rx="5" />
+              <rect x="326" y="132" width="50" height="10" rx="5" />
+            </g>
+            <g class="svg-score" filter="url(#softShadow)">
+              <circle cx="446" cy="304" r="70" />
+              <path d="M446 247a57 57 0 1 1-51 82" />
+              <text x="446" y="314" text-anchor="middle">72</text>
+            </g>
+            <g class="svg-chip chip-one">
+              <rect x="70" y="46" width="150" height="42" rx="21" />
+              <text x="145" y="73" text-anchor="middle">Tahsilat %68</text>
+            </g>
+            <g class="svg-chip chip-two">
+              <rect x="386" y="248" width="158" height="42" rx="21" />
+              <text x="465" y="275" text-anchor="middle">4 açık talep</text>
+            </g>
+          </svg>
+        </div>
         <div class="auth-stats">
-          <span><strong>72</strong> sağlık skoru</span>
-          <span><strong>4</strong> açık talep</span>
-          <span><strong>%68</strong> tahsilat</span>
+          <span><strong>72</strong> Site Sağlık Skoru</span>
+          <span><strong>3 dk</strong> Talep sınıflandırma</span>
+          <span><strong>1 panel</strong> Yönetici ve sakin akışı</span>
+        </div>
+        <div class="auth-features">
+          <article><strong>AI Şikayet Analizi</strong><span>Kategori, aciliyet, lokasyon ve önerilen aksiyon.</span></article>
+          <article><strong>Akıllı Yönetici Özeti</strong><span>Aidat, talep ve tekrar eden sorunlardan aylık özet.</span></article>
+          <article><strong>Mobil Sakin Ekranı</strong><span>Borç, duyuru ve talep durumu için sade web deneyimi.</span></article>
         </div>
       </section>
       <section class="auth-card">
+        <div class="auth-card-head">
+          <div class="mark">A</div>
+          <div>
+            <strong>ApartAI'ye Hoş Geldin</strong>
+            <span>Pilot paneline giriş yap veya yeni sakin hesabı oluştur.</span>
+          </div>
+        </div>
         <div class="auth-tabs">
           <button class="${isLogin ? "active" : ""}" onclick="authMode = 'login'; render()">Giriş</button>
           <button class="${!isLogin ? "active" : ""}" onclick="authMode = 'register'; render()">Sakin kaydı</button>
@@ -388,6 +452,7 @@ function authView() {
                   <button type="button" onclick="quickLogin('admin@apartai.local')">Yönetici demosu</button>
                   <button type="button" onclick="quickLogin('ayse@example.com')">Sakin demosu</button>
                 </div>
+                <p class="auth-note">Demo hesapları pilot akışlarını hızlıca denemen için hazırlandı.</p>
               </form>`
             : `<form class="grid" onsubmit="registerResident(event)">
                 <label>Ad soyad<input name="name" required /></label>
