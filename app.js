@@ -88,6 +88,7 @@ const seedState = {
 
 let state = structuredClone(seedState);
 let authMode = "login";
+let authModalOpen = false;
 
 function loadLocalState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -364,10 +365,27 @@ function authView() {
   return `
     <main class="auth-page">
       <section class="auth-hero">
+        <nav class="landing-nav">
+          <div class="landing-brand">
+            <div class="mark">A</div>
+            <div>
+              <strong>ApartAI</strong>
+              <span>AI destekli site yönetimi</span>
+            </div>
+          </div>
+          <div class="landing-actions">
+            <button class="btn ghost" onclick="openAuthModal('login')">Giriş</button>
+            <button class="btn primary" onclick="openAuthModal('register')">Sakin Kaydı</button>
+          </div>
+        </nav>
         <div class="auth-copy">
           <div class="auth-kicker"><span></span>AI destekli site yönetim asistanı</div>
           <h1>Apartman yönetimini tek panelde sakinleştir.</h1>
           <p>Aidat, arıza, şikayet, duyuru ve aylık yönetici özetlerini aynı yerde topla. ApartAI veriyi yorumlar, tekrar eden sorunları yakalar ve yöneticinin sonraki aksiyonunu netleştirir.</p>
+          <div class="hero-cta">
+            <button class="btn primary" onclick="openAuthModal('login')">Demo Panele Gir</button>
+            <button class="btn ghost" onclick="openAuthModal('register')">Sakin Hesabı Oluştur</button>
+          </div>
         </div>
         <div class="auth-scene" aria-hidden="true">
           <svg viewBox="0 0 620 430" role="img">
@@ -430,7 +448,16 @@ function authView() {
           <article><strong>Mobil Sakin Ekranı</strong><span>Borç, duyuru ve talep durumu için sade web deneyimi.</span></article>
         </div>
       </section>
-      <section class="auth-card">
+      ${authModalOpen ? authModalView(isLogin) : ""}
+    </main>
+  `;
+}
+
+function authModalView(isLogin) {
+  return `
+    <div class="modal-backdrop" onclick="closeAuthModal(event)">
+      <section class="auth-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="authModalOpen = false; render()" aria-label="Kapat">×</button>
         <div class="auth-card-head">
           <div class="mark">A</div>
           <div>
@@ -439,8 +466,8 @@ function authView() {
           </div>
         </div>
         <div class="auth-tabs">
-          <button class="${isLogin ? "active" : ""}" onclick="authMode = 'login'; render()">Giriş</button>
-          <button class="${!isLogin ? "active" : ""}" onclick="authMode = 'register'; render()">Sakin kaydı</button>
+          <button class="${isLogin ? "active" : ""}" onclick="authMode = 'login'; authModalOpen = true; render()">Giriş</button>
+          <button class="${!isLogin ? "active" : ""}" onclick="authMode = 'register'; authModalOpen = true; render()">Sakin kaydı</button>
         </div>
         ${
           isLogin
@@ -470,8 +497,21 @@ function authView() {
               </form>`
         }
       </section>
-    </main>
+    </div>
   `;
+}
+
+function openAuthModal(mode) {
+  authMode = mode;
+  authModalOpen = true;
+  render();
+}
+
+function closeAuthModal(event) {
+  if (event.target.classList.contains("modal-backdrop")) {
+    authModalOpen = false;
+    render();
+  }
 }
 
 function sessionActions() {

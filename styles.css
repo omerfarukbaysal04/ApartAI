@@ -241,26 +241,23 @@ textarea:focus-visible {
 
 .auth-page {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(420px, 1.24fr) minmax(340px, 0.76fr);
-  align-items: center;
-  gap: clamp(18px, 3vw, 36px);
-  padding: clamp(18px, 4.4vw, 62px);
+  display: block;
+  background:
+    radial-gradient(circle at 78% 16%, rgba(94, 230, 196, 0.18), transparent 32%),
+    radial-gradient(circle at 18% 84%, rgba(185, 95, 40, 0.28), transparent 28%),
+    linear-gradient(152deg, #092a27 0%, #101c26 52%, #7a4a2a 100%);
 }
 
 .auth-hero {
   position: relative;
-  min-height: 720px;
+  min-height: 100vh;
   display: grid;
-  grid-template-rows: auto minmax(260px, 1fr) auto auto;
-  gap: 18px;
-  padding: clamp(24px, 4.6vw, 56px);
-  border-radius: var(--radius);
+  grid-template-columns: minmax(360px, 0.96fr) minmax(360px, 1.04fr);
+  grid-template-rows: auto minmax(360px, 1fr) auto auto;
+  align-items: center;
+  gap: clamp(18px, 3.4vw, 46px);
+  padding: clamp(18px, 4vw, 54px);
   color: #ffffff;
-  background:
-    linear-gradient(152deg, rgba(18, 67, 61, 0.98), rgba(18, 29, 38, 0.86) 56%, rgba(185, 95, 40, 0.62)),
-    #12433d;
-  box-shadow: var(--shadow);
   overflow: hidden;
   animation: rise-in 520ms ease both;
 }
@@ -277,12 +274,51 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
+.landing-nav {
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.landing-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-brand strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.landing-brand span {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+}
+
+.landing-actions,
+.hero-cta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .auth-copy,
 .auth-scene,
 .auth-stats,
 .auth-features {
   position: relative;
   z-index: 1;
+}
+
+.auth-copy {
+  max-width: 850px;
 }
 
 .auth-kicker {
@@ -324,11 +360,15 @@ textarea:focus-visible {
   line-height: 1.55;
 }
 
+.hero-cta {
+  margin-top: 24px;
+}
+
 .auth-scene {
   align-self: center;
   justify-self: center;
   width: min(100%, 720px);
-  margin: -10px 0 -6px;
+  margin: 0;
 }
 
 .auth-scene svg {
@@ -423,6 +463,7 @@ textarea:focus-visible {
 }
 
 .auth-stats {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -446,6 +487,7 @@ textarea:focus-visible {
 }
 
 .auth-features {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -471,6 +513,7 @@ textarea:focus-visible {
 }
 
 .auth-card {
+  position: relative;
   width: min(100%, 500px);
   justify-self: center;
   padding: 24px;
@@ -480,6 +523,39 @@ textarea:focus-visible {
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
   animation: rise-in 520ms 90ms ease both;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(94, 230, 196, 0.14), transparent 28%),
+    rgba(5, 14, 18, 0.64);
+  backdrop-filter: blur(16px);
+  animation: fade-in 180ms ease both;
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--ink);
+  transform: rotate(8deg);
 }
 
 .auth-card-head {
@@ -892,6 +968,18 @@ textarea {
   color: #fff;
 }
 
+.btn.ghost {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
 .btn.warn {
   background: linear-gradient(135deg, var(--accent-2), var(--rose));
   border-color: transparent;
@@ -1015,6 +1103,15 @@ textarea {
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes score-pop {
   from {
     opacity: 0;
@@ -1133,12 +1230,9 @@ textarea {
     flex-direction: column;
   }
 
-  .auth-page {
-    grid-template-columns: 1fr;
-  }
-
   .auth-hero {
-    min-height: auto;
+    grid-template-columns: 1fr;
+    min-height: 100vh;
   }
 
   .mode-switch {
@@ -1189,11 +1283,11 @@ textarea {
   }
 
   .auth-page {
-    padding: 14px;
+    min-height: 100vh;
   }
 
   .auth-hero {
-    min-height: auto;
+    padding: 16px;
   }
 
   .auth-stats,
@@ -1208,5 +1302,18 @@ textarea {
 
   .auth-scene {
     margin: 0;
+  }
+
+  .landing-nav {
+    align-items: flex-start;
+  }
+
+  .landing-actions {
+    justify-content: flex-end;
+  }
+
+  .auth-card {
+    max-height: calc(100vh - 36px);
+    overflow: auto;
   }
 }
