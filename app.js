@@ -1,0 +1,867 @@
+const STORAGE_KEY = "apartai-mvp-state-v1";
+const API_BASE = location.protocol === "file:" ? "" : "/api";
+
+const seedState = {
+  view: "dashboard",
+  mode: "manager",
+  selectedResidentId: "resident-1",
+  site: {
+    id: "site-1",
+    name: "Çınar Apartmanı",
+    address: "Kadıköy, İstanbul",
+  },
+  blocks: [
+    { id: "block-a", name: "A Blok" },
+    { id: "block-b", name: "B Blok" },
+    { id: "block-c", name: "C Blok" },
+  ],
+  apartments: [
+    { id: "apt-1", blockId: "block-a", no: "1", floor: 1, residentId: "resident-1" },
+    { id: "apt-2", blockId: "block-a", no: "2", floor: 1, residentId: "resident-2" },
+    { id: "apt-3", blockId: "block-b", no: "7", floor: 3, residentId: "resident-3" },
+    { id: "apt-4", blockId: "block-c", no: "11", floor: 5, residentId: "resident-4" },
+  ],
+  residents: [
+    { id: "resident-1", name: "Ayşe Demir", phone: "05xx 111 22 33", email: "ayse@example.com" },
+    { id: "resident-2", name: "Mert Kaya", phone: "05xx 222 33 44", email: "mert@example.com" },
+    { id: "resident-3", name: "Selin Ak", phone: "05xx 333 44 55", email: "selin@example.com" },
+    { id: "resident-4", name: "Can Öztürk", phone: "05xx 444 55 66", email: "can@example.com" },
+  ],
+  dues: [
+    { id: "due-1", apartmentId: "apt-1", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
+    { id: "due-2", apartmentId: "apt-2", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "pending" },
+    { id: "due-3", apartmentId: "apt-3", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "overdue" },
+    { id: "due-4", apartmentId: "apt-4", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
+  ],
+  payments: [
+    { id: "pay-1", dueId: "due-1", apartmentId: "apt-1", amount: 1850, date: "2026-05-02", method: "Havale", note: "Mayıs aidatı" },
+    { id: "pay-2", dueId: "due-4", apartmentId: "apt-4", amount: 1850, date: "2026-05-03", method: "Nakit", note: "Makbuz kesildi" },
+  ],
+  requests: [
+    {
+      id: "req-1",
+      apartmentId: "apt-4",
+      category: "Temizlik",
+      title: "C blok girişinde çöp kokusu",
+      description: "C blok girişinde iki gündür çöpler alınmıyor, koku oluştu.",
+      urgency: "Orta",
+      status: "inceleniyor",
+      adminNote: "Temizlik firması aranacak.",
+      aiSummary: "C blok girişinde çöp toplama aksaması bildirildi.",
+      location: "C blok girişi",
+      createdAt: "2026-05-01",
+      resolvedAt: "",
+    },
+    {
+      id: "req-2",
+      apartmentId: "apt-3",
+      category: "Asansör",
+      title: "B blok asansör ses yapıyor",
+      description: "B blok asansörü kalkışta sert ses çıkarıyor.",
+      urgency: "Yüksek",
+      status: "firmaya_iletildi",
+      adminNote: "Bakım firması bugün gelecek.",
+      aiSummary: "B blok asansörü için teknik kontrol gerekli.",
+      location: "B blok",
+      createdAt: "2026-04-29",
+      resolvedAt: "",
+    },
+  ],
+  announcements: [
+    {
+      id: "ann-1",
+      title: "Mayıs aidat dönemi",
+      content: "Mayıs ayı aidat ödemeleri 10 Mayıs tarihine kadar yapılmalıdır.",
+      aiContent: "Değerli sakinlerimiz, Mayıs ayı aidat ödemelerinizi 10 Mayıs tarihine kadar tamamlamanızı rica ederiz.",
+      audience: "Tüm site",
+      date: "2026-05-01",
+    },
+  ],
+};
+
+let state = structuredClone(seedState);
+
+function loadLocalState() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return structuredClone(seedState);
+  try {
+    return { ...structuredClone(seedState), ...JSON.parse(saved) };
+  } catch {
+    return structuredClone(seedState);
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function setState(patch) {
+  state = { ...state, ...patch };
+  if (!API_BASE) saveState();
+  render();
+}
+
+async function apiRequest(path, options = {}) {
+  if (!API_BASE) return null;
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "İstek başarısız oldu" }));
+    throw new Error(error.error || "İstek başarısız oldu");
+  }
+  return response.json();
+}
+
+async function loadRemoteState() {
+  if (!API_BASE) {
+    state = loadLocalState();
+    render();
+    return;
+  }
+  try {
+    state = { ...state, ...(await apiRequest("/state")) };
+    render();
+  } catch (error) {
+    document.querySelector("#app").innerHTML = `<div class="main"><section class="section"><h1>Bağlantı kurulamadı</h1><p>${safeText(error.message)}</p></section></div>`;
+  }
+}
+
+function id(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function safeText(value) {
+  return String(value ?? "")
+    .trim()
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function money(value) {
+  return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(value);
+}
+
+function dateText(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function apartmentLabel(apartmentId) {
+  const apt = state.apartments.find((item) => item.id === apartmentId);
+  if (!apt) return "-";
+  const block = state.blocks.find((item) => item.id === apt.blockId);
+  return `${block?.name ?? "Blok"} / Daire ${apt.no}`;
+}
+
+function residentForApartment(apartmentId) {
+  const apt = state.apartments.find((item) => item.id === apartmentId);
+  return state.residents.find((item) => item.id === apt?.residentId);
+}
+
+function statusClass(status) {
+  if (["paid", "cozuldu"].includes(status)) return "ok";
+  if (["overdue", "reddedildi"].includes(status)) return "danger";
+  if (["firmaya_iletildi", "inceleniyor"].includes(status)) return "info";
+  return "warn";
+}
+
+function dueStatusText(status) {
+  return { paid: "Ödendi", pending: "Bekliyor", overdue: "Gecikti" }[status] ?? status;
+}
+
+function requestStatusText(status) {
+  return {
+    yeni: "Yeni",
+    inceleniyor: "İnceleniyor",
+    firmaya_iletildi: "Firmaya iletildi",
+    cozuldu: "Çözüldü",
+    reddedildi: "Reddedildi",
+  }[status] ?? status;
+}
+
+function calculateHealthScore() {
+  const totalDues = state.dues.length || 1;
+  const paidRatio = state.dues.filter((due) => due.status === "paid").length / totalDues;
+  const openRequests = state.requests.filter((request) => request.status !== "cozuldu" && request.status !== "reddedildi");
+  const resolved = state.requests.filter((request) => request.resolvedAt);
+  const avgResolutionDays = resolved.length
+    ? resolved.reduce((sum, request) => sum + daysBetween(request.createdAt, request.resolvedAt), 0) / resolved.length
+    : 2.5;
+  const complaintDensity = Math.min(state.requests.length / Math.max(state.apartments.length, 1), 1.4);
+  const recurringRatio = recurringIssues().length ? 0.35 : 0.08;
+  const communicationScore = Math.min(state.announcements.length / 4, 1);
+
+  const paymentScore = paidRatio * 35;
+  const resolutionScore = Math.max(0, 1 - avgResolutionDays / 10) * 25;
+  const complaintScore = Math.max(0, 1 - complaintDensity / 1.4) * 20;
+  const recurringScore = Math.max(0, 1 - recurringRatio) * 10;
+  const commScore = communicationScore * 10;
+  const score = Math.round(paymentScore + resolutionScore + complaintScore + recurringScore + commScore);
+
+  const reasons = [];
+  const actions = [];
+
+  if (paidRatio < 0.85) {
+    reasons.push(`Tahsilat oranı %${Math.round(paidRatio * 100)} seviyesinde.`);
+    actions.push("Gecikmedeki dairelere kibar ödeme hatırlatması gönder.");
+  }
+  if (openRequests.length > 0) {
+    reasons.push(`${openRequests.length} açık talep çözüm bekliyor.`);
+    actions.push("Yüksek aciliyetli talepleri bugün içinde durumlandır.");
+  }
+  if (recurringIssues().length) {
+    reasons.push("Aynı blok ve kategoride tekrar eden talepler var.");
+    actions.push(`${recurringIssues()[0].label} için kalıcı çözüm kontrolü planla.`);
+  }
+  if (state.announcements.length < 2) {
+    reasons.push("Duyuru trafiği düşük, sakin bilgilendirmesi sınırlı.");
+    actions.push("Haftalık kısa yönetim bilgilendirmesi yayınla.");
+  }
+
+  return {
+    score,
+    status: score >= 90 ? "Çok iyi" : score >= 75 ? "İyi" : score >= 60 ? "Dikkat edilmeli" : score >= 40 ? "Riskli" : "Kritik",
+    reasons: reasons.length ? reasons : ["Operasyonel göstergeler dengeli ilerliyor."],
+    actions: actions.length ? actions : ["Mevcut takip ritmini koru ve ay sonunda raporu paylaş."],
+  };
+}
+
+function daysBetween(start, end) {
+  return Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000));
+}
+
+function recurringIssues() {
+  const groups = {};
+  state.requests.forEach((request) => {
+    const apt = state.apartments.find((item) => item.id === request.apartmentId);
+    const block = state.blocks.find((item) => item.id === apt?.blockId);
+    const key = `${block?.name ?? "Genel"}-${request.category}`;
+    groups[key] = (groups[key] ?? 0) + 1;
+  });
+  return Object.entries(groups)
+    .filter(([, count]) => count > 1)
+    .map(([label, count]) => ({ label: label.replace("-", " / "), count }));
+}
+
+function analyzeComplaint(text) {
+  const lower = text.toLocaleLowerCase("tr-TR");
+  const rules = [
+    ["Asansör", ["asansör", "kabin", "bakım"]],
+    ["Temizlik", ["çöp", "temizlik", "koku", "kirli", "pas pas"]],
+    ["Güvenlik", ["güvenlik", "kapı", "kamera", "yabancı"]],
+    ["Su ve tesisat", ["su", "tesisat", "kaçak", "gider", "musluk"]],
+    ["Elektrik", ["elektrik", "lamba", "ışık", "sigorta"]],
+    ["Otopark", ["otopark", "araç", "park"]],
+    ["Gürültü", ["gürültü", "ses", "rahatsız"]],
+    ["Peyzaj", ["bahçe", "peyzaj", "ağaç", "çim"]],
+  ];
+  const category = rules.find(([, words]) => words.some((word) => lower.includes(word)))?.[0] ?? "Diğer";
+  const urgency = ["acil", "tehlike", "patladı", "yangın", "mahsur"].some((word) => lower.includes(word))
+    ? "Yüksek"
+    : ["iki gündür", "koku", "çalışmıyor", "kaçak"].some((word) => lower.includes(word))
+      ? "Orta"
+      : "Düşük";
+  const block = state.blocks.find((item) => lower.includes(item.name.toLocaleLowerCase("tr-TR").replace(" blok", "")));
+  const location = block ? `${block.name}` : lower.includes("giriş") ? "Giriş alanı" : "Belirtilmedi";
+  const similar = state.requests.filter((request) => request.category === category && request.location.includes(block?.name ?? "")).length;
+  return {
+    category,
+    urgency,
+    location,
+    summary: text.length > 120 ? `${text.slice(0, 117)}...` : text,
+    action: `${category} konusu için ilgili kontrol/servis kaydı açılmalı.`,
+    similar,
+  };
+}
+
+function improveAnnouncement(text, tone) {
+  const cleaned = text.trim();
+  const openings = {
+    Resmi: "Değerli sakinlerimiz,",
+    Kibar: "Değerli komşularımız,",
+    Kısa: "Bilgilendirme:",
+    Detaylı: "Değerli sakinlerimiz, aşağıdaki konu hakkında bilginize başvururuz:",
+    "Uyarı niteliğinde": "Önemli hatırlatma:",
+  };
+  const closing = tone === "Kısa" ? "" : " Anlayışınız ve iş birliğiniz için teşekkür ederiz.";
+  return `${openings[tone] ?? openings.Kibar} ${cleaned}${closing}`;
+}
+
+function render() {
+  const app = document.querySelector("#app");
+  app.innerHTML = `
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">A</div>
+          <div>
+            <strong>ApartAI</strong>
+            <span>AI destekli site yönetimi</span>
+          </div>
+        </div>
+        ${state.mode === "manager" ? managerNav() : residentNav()}
+        <div class="sidebar-footer">
+          ${state.site.name}<br />
+          ${state.site.address}
+        </div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <div class="title">
+            <h1>${pageTitle()}</h1>
+            <p>${pageDescription()}</p>
+          </div>
+          <div class="mode-switch" aria-label="Ekran tipi">
+            <button class="${state.mode === "manager" ? "active" : ""}" onclick="setState({ mode: 'manager', view: 'dashboard' })">Yönetici</button>
+            <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home' })">Sakin</button>
+          </div>
+        </div>
+        ${state.mode === "manager" ? managerView() : residentView()}
+      </main>
+    </div>
+  `;
+}
+
+function managerNav() {
+  const items = [
+    ["dashboard", "Panel"],
+    ["dues", "Aidatlar"],
+    ["requests", "Talepler"],
+    ["announcements", "Duyurular"],
+    ["setup", "Site Kurulumu"],
+    ["reports", "Rapor"],
+  ];
+  return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
+}
+
+function residentNav() {
+  const items = [
+    ["resident-home", "Özet"],
+    ["resident-request", "Talep Aç"],
+    ["resident-announcements", "Duyurular"],
+  ];
+  return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
+}
+
+function pageTitle() {
+  const titles = {
+    dashboard: "Yönetici Paneli",
+    dues: "Aidat Takibi",
+    requests: "Arıza ve Şikayet Talepleri",
+    announcements: "Duyurular",
+    setup: "Site Kurulumu",
+    reports: "Aylık Rapor",
+    "resident-home": "Sakin Ekranı",
+    "resident-request": "Talep Aç",
+    "resident-announcements": "Duyurular",
+  };
+  return titles[state.view] ?? "ApartAI";
+}
+
+function pageDescription() {
+  const descriptions = {
+    dashboard: "Site sağlığı, ödeme durumu, açık talepler ve AI aksiyonları.",
+    dues: "Dönem bazlı borç oluşturma ve manuel ödeme takibi.",
+    requests: "Sakin taleplerini sınıflandır, önceliklendir ve çözüm süresini izle.",
+    announcements: "Duyuru yayınla ve AI ile metni sakin bir tona getir.",
+    setup: "Blok, daire ve sakin kayıtlarını yönet.",
+    reports: "Tahsilat, kategori yoğunluğu ve skor nedenlerini incele.",
+    "resident-home": "Borcunu, ödeme geçmişini ve açık taleplerini gör.",
+    "resident-request": "Arıza veya şikayetini yönetime ilet.",
+    "resident-announcements": "Yönetim duyurularını takip et.",
+  };
+  return descriptions[state.view] ?? "";
+}
+
+function managerView() {
+  return {
+    dashboard: dashboardView,
+    dues: duesView,
+    requests: requestsView,
+    announcements: announcementsView,
+    setup: setupView,
+    reports: reportsView,
+  }[state.view]();
+}
+
+function residentView() {
+  return {
+    "resident-home": residentHomeView,
+    "resident-request": residentRequestView,
+    "resident-announcements": residentAnnouncementsView,
+  }[state.view]();
+}
+
+function dashboardView() {
+  const health = calculateHealthScore();
+  const paid = state.dues.filter((due) => due.status === "paid").length;
+  const openRequests = state.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status));
+  const avgResolution = openRequests.length ? "Açık takip" : "2.5 gün";
+  return `
+    <div class="grid dashboard-grid">
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Site Sağlık Skoru</h2>
+            <p>Operasyonel durumun tek bakış özeti.</p>
+          </div>
+          <span class="score-status">${health.status}</span>
+        </div>
+        <div class="score">
+          <div class="score-ring" style="--score: ${health.score}">
+            <strong>${health.score}</strong>
+          </div>
+          <div>
+            <ul class="plain-list">
+              ${health.reasons.map((reason) => `<li>${reason}</li>`).join("")}
+            </ul>
+          </div>
+        </div>
+      </section>
+      <section class="section metric">
+        <span>Bu ay tahsilat</span>
+        <strong>%${Math.round((paid / Math.max(state.dues.length, 1)) * 100)}</strong>
+        <small>${paid}/${state.dues.length} aidat ödendi</small>
+      </section>
+      <section class="section metric">
+        <span>Açık talep</span>
+        <strong>${openRequests.length}</strong>
+        <small>Ortalama çözüm: ${avgResolution}</small>
+      </section>
+    </div>
+    <div class="split" style="margin-top:16px">
+      <section class="section">
+        <div class="section-header"><h2>AI Aksiyon Önerileri</h2></div>
+        <ul class="actions-list">
+          ${health.actions.map((action) => `<li>${action}</li>`).join("")}
+        </ul>
+      </section>
+      <section class="section">
+        <div class="section-header"><h2>Son Duyurular</h2></div>
+        <ul class="plain-list">
+          ${state.announcements.slice(-3).reverse().map((item) => `<li><strong>${item.title}</strong><br>${item.aiContent || item.content}</li>`).join("")}
+        </ul>
+      </section>
+    </div>
+  `;
+}
+
+function duesView() {
+  return `
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Toplu Aidat Oluştur</h2>
+          <p>Seçilen dönem için tüm dairelere borç kaydı açılır.</p>
+        </div>
+      </div>
+      <form class="form-grid" onsubmit="createDues(event)">
+        <label>Dönem<input name="period" type="month" value="2026-05" required /></label>
+        <label>Tutar<input name="amount" type="number" min="1" value="1850" required /></label>
+        <label>Son ödeme<input name="dueDate" type="date" value="2026-05-10" required /></label>
+        <button class="btn primary" type="submit">Aidat Oluştur</button>
+      </form>
+    </section>
+    <section class="section" style="margin-top:16px">
+      <div class="section-header"><h2>Daire Bazlı Borçlar</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Daire</th><th>Sakin</th><th>Dönem</th><th>Tutar</th><th>Son Ödeme</th><th>Durum</th><th>İşlem</th></tr></thead>
+          <tbody>
+            ${state.dues.map((due) => `
+              <tr>
+                <td>${apartmentLabel(due.apartmentId)}</td>
+                <td>${residentForApartment(due.apartmentId)?.name ?? "-"}</td>
+                <td>${due.period}</td>
+                <td>${money(due.amount)}</td>
+                <td>${dateText(due.dueDate)}</td>
+                <td><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span></td>
+                <td>${due.status !== "paid" ? `<button class="btn" onclick="markPaid('${due.id}')">Ödendi</button>` : "-"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function requestsView() {
+  return `
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Talep Listesi</h2>
+          <p>AI özetleri ve durum takibi aynı ekranda.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Talep</th><th>Daire</th><th>Kategori</th><th>Aciliyet</th><th>AI Özeti</th><th>Durum</th><th>İşlem</th></tr></thead>
+          <tbody>
+            ${state.requests.map((request) => `
+              <tr>
+                <td><strong>${request.title}</strong><br>${request.description}<br><small>${dateText(request.createdAt)} - ${request.location}</small></td>
+                <td>${apartmentLabel(request.apartmentId)}</td>
+                <td>${request.category}</td>
+                <td><span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span></td>
+                <td>${request.aiSummary}</td>
+                <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span></td>
+                <td>
+                  <select onchange="updateRequestStatus('${request.id}', this.value)">
+                    ${["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"].map((status) => `<option value="${status}" ${request.status === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
+                  </select>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function announcementsView() {
+  return `
+    <div class="split">
+      <section class="section">
+        <div class="section-header"><h2>Duyuru Oluştur</h2></div>
+        <form class="grid" onsubmit="createAnnouncement(event)">
+          <label>Başlık<input name="title" required placeholder="Örn. Su kesintisi bilgilendirmesi" /></label>
+          <label>Ton
+            <select name="tone">
+              <option>Kibar</option>
+              <option>Resmi</option>
+              <option>Kısa</option>
+              <option>Detaylı</option>
+              <option>Uyarı niteliğinde</option>
+            </select>
+          </label>
+          <label>İçerik<textarea name="content" required placeholder="Duyuru metnini yazın"></textarea></label>
+          <label>Hedef kitle<input name="audience" value="Tüm site" required /></label>
+          <button class="btn primary" type="submit">AI ile Düzenle ve Yayınla</button>
+        </form>
+      </section>
+      <section class="section">
+        <div class="section-header"><h2>Yayınlanan Duyurular</h2></div>
+        <div class="grid">
+          ${state.announcements.slice().reverse().map((item) => `
+            <article class="notice">
+              <strong>${item.title}</strong>
+              <span class="status info">${item.audience}</span>
+              <p>${item.aiContent || item.content}</p>
+              <small>${dateText(item.date)}</small>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function setupView() {
+  return `
+    <div class="split">
+      <section class="section">
+        <div class="section-header"><h2>Daire ve Sakin Ekle</h2></div>
+        <form class="form-grid wide" onsubmit="createApartment(event)">
+          <label>Blok
+            <select name="blockId">${state.blocks.map((block) => `<option value="${block.id}">${block.name}</option>`).join("")}</select>
+          </label>
+          <label>Daire No<input name="no" required /></label>
+          <label>Kat<input name="floor" type="number" value="1" required /></label>
+          <label>Sakin Adı<input name="residentName" required /></label>
+          <label>Telefon<input name="phone" placeholder="05xx" /></label>
+          <label>E-posta<input name="email" type="email" /></label>
+          <button class="btn primary" type="submit">Kaydı Ekle</button>
+        </form>
+      </section>
+      <section class="section">
+        <div class="section-header"><h2>Mevcut Daireler</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Daire</th><th>Kat</th><th>Sakin</th><th>Telefon</th></tr></thead>
+            <tbody>
+              ${state.apartments.map((apt) => {
+                const resident = state.residents.find((item) => item.id === apt.residentId);
+                return `<tr><td>${apartmentLabel(apt.id)}</td><td>${apt.floor}</td><td>${resident?.name ?? "-"}</td><td>${resident?.phone ?? "-"}</td></tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function reportsView() {
+  const health = calculateHealthScore();
+  const byCategory = state.requests.reduce((acc, request) => {
+    acc[request.category] = (acc[request.category] ?? 0) + 1;
+    return acc;
+  }, {});
+  return `
+    <div class="split">
+      <section class="section">
+        <div class="section-header"><h2>Aylık Yönetici Özeti</h2></div>
+        <ul class="plain-list">
+          <li>Toplam tahsilat oranı %${Math.round((state.dues.filter((due) => due.status === "paid").length / Math.max(state.dues.length, 1)) * 100)}.</li>
+          <li>En çok talep gelen kategori: ${Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Henüz veri yok"}.</li>
+          <li>Site Sağlık Skoru ${health.score}/100 ve durum ${health.status}.</li>
+          <li>${health.actions[0]}</li>
+        </ul>
+      </section>
+      <section class="section">
+        <div class="section-header"><h2>Kategori Yoğunluğu</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Kategori</th><th>Talep Sayısı</th></tr></thead>
+            <tbody>
+              ${Object.entries(byCategory).map(([category, count]) => `<tr><td>${category}</td><td>${count}</td></tr>`).join("") || `<tr><td colspan="2">Henüz talep yok</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function currentResident() {
+  return state.residents.find((item) => item.id === state.selectedResidentId) ?? state.residents[0];
+}
+
+function residentApartment() {
+  return state.apartments.find((item) => item.residentId === currentResident().id);
+}
+
+function residentHomeView() {
+  const apt = residentApartment();
+  const dues = state.dues.filter((due) => due.apartmentId === apt?.id);
+  const requests = state.requests.filter((request) => request.apartmentId === apt?.id);
+  return `
+    <div class="resident-shell">
+      <section class="mobile-preview">
+        <div class="resident-header">
+          <h1>${currentResident().name}</h1>
+          <span>${apartmentLabel(apt?.id)}</span>
+        </div>
+        <div class="resident-body">
+          <section class="section">
+            <div class="section-header"><h2>Borç Durumu</h2></div>
+            ${dues.map((due) => `<div class="notice"><strong>${due.period} - ${money(due.amount)}</strong><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span><p>Son ödeme: ${dateText(due.dueDate)}</p></div>`).join("")}
+          </section>
+          <section class="section">
+            <div class="section-header"><h2>Açık Taleplerim</h2></div>
+            ${requests.length ? requests.map((request) => `<div class="notice"><strong>${request.title}</strong><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span><p>${request.aiSummary}</p></div>`).join("") : `<div class="empty">Açık talep bulunmuyor.</div>`}
+          </section>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function residentRequestView() {
+  const apt = residentApartment();
+  return `
+    <div class="resident-shell">
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Yeni Talep</h2>
+            <p>${apartmentLabel(apt?.id)} adına kayıt açılır.</p>
+          </div>
+        </div>
+        <form class="grid" onsubmit="createResidentRequest(event)">
+          <label>Başlık<input name="title" required placeholder="Örn. Asansör çalışmıyor" /></label>
+          <label>Açıklama<textarea name="description" required placeholder="Sorunu kısa ve net yazın"></textarea></label>
+          <button class="btn primary" type="submit">AI ile Analiz Et ve Gönder</button>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function residentAnnouncementsView() {
+  return `
+    <div class="resident-shell">
+      <section class="section">
+        <div class="section-header"><h2>Duyurular</h2></div>
+        <div class="grid">
+          ${state.announcements.slice().reverse().map((item) => `<article class="notice"><strong>${item.title}</strong><p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`).join("")}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function createDues(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const period = form.get("period");
+  const amount = Number(form.get("amount"));
+  const dueDate = form.get("dueDate");
+  if (API_BASE) {
+    apiRequest("/dues/bulk", { method: "POST", body: JSON.stringify({ period, amount, dueDate }) }).then((result) => {
+      state = result.data;
+      render();
+    });
+    return;
+  }
+  const existing = new Set(state.dues.filter((due) => due.period === period).map((due) => due.apartmentId));
+  const newDues = state.apartments
+    .filter((apt) => !existing.has(apt.id))
+    .map((apt) => ({ id: id("due"), apartmentId: apt.id, period, amount, dueDate, status: "pending" }));
+  state.dues = [...state.dues, ...newDues];
+  saveState();
+  render();
+}
+
+function markPaid(dueId) {
+  if (API_BASE) {
+    apiRequest(`/dues/${dueId}/pay`, { method: "POST" }).then((result) => {
+      state = result;
+      render();
+    });
+    return;
+  }
+  state.dues = state.dues.map((due) => (due.id === dueId ? { ...due, status: "paid" } : due));
+  const due = state.dues.find((item) => item.id === dueId);
+  state.payments = [
+    ...state.payments,
+    { id: id("pay"), dueId, apartmentId: due.apartmentId, amount: due.amount, date: new Date().toISOString().slice(0, 10), method: "Manuel", note: "Yönetici tarafından işlendi" },
+  ];
+  saveState();
+  render();
+}
+
+function updateRequestStatus(requestId, status) {
+  if (API_BASE) {
+    apiRequest(`/requests/${requestId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }).then((result) => {
+      state = result;
+      render();
+    });
+    return;
+  }
+  state.requests = state.requests.map((request) =>
+    request.id === requestId
+      ? { ...request, status, resolvedAt: status === "cozuldu" ? new Date().toISOString().slice(0, 10) : request.resolvedAt }
+      : request,
+  );
+  saveState();
+  render();
+}
+
+function createAnnouncement(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const content = safeText(form.get("content"));
+  const tone = safeText(form.get("tone"));
+  const payload = {
+    title: safeText(form.get("title")),
+    content,
+    tone,
+    audience: safeText(form.get("audience")),
+  };
+  if (API_BASE) {
+    apiRequest("/announcements", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
+      state = result.data;
+      event.target.reset();
+      render();
+    });
+    return;
+  }
+  state.announcements = [
+    ...state.announcements,
+    {
+      id: id("ann"),
+      title: payload.title,
+      content,
+      aiContent: improveAnnouncement(content, tone),
+      audience: payload.audience,
+      date: new Date().toISOString().slice(0, 10),
+    },
+  ];
+  saveState();
+  event.target.reset();
+  render();
+}
+
+function createApartment(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const payload = {
+    blockId: safeText(form.get("blockId")),
+    no: safeText(form.get("no")),
+    floor: Number(form.get("floor")),
+    residentName: safeText(form.get("residentName")),
+    phone: safeText(form.get("phone")),
+    email: safeText(form.get("email")),
+  };
+  if (API_BASE) {
+    apiRequest("/apartments", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
+      state = result.data;
+      event.target.reset();
+      render();
+    });
+    return;
+  }
+  const residentId = id("resident");
+  const apartmentId = id("apt");
+  state.residents = [
+    ...state.residents,
+    { id: residentId, name: payload.residentName, phone: payload.phone, email: payload.email },
+  ];
+  state.apartments = [
+    ...state.apartments,
+    { id: apartmentId, blockId: payload.blockId, no: payload.no, floor: payload.floor, residentId },
+  ];
+  saveState();
+  event.target.reset();
+  render();
+}
+
+function createResidentRequest(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const title = safeText(form.get("title"));
+  const description = safeText(form.get("description"));
+  if (API_BASE) {
+    apiRequest("/requests", {
+      method: "POST",
+      body: JSON.stringify({ apartmentId: residentApartment().id, title, description }),
+    }).then((result) => {
+      state = result.data;
+      event.target.reset();
+      setState({ view: "resident-home" });
+    });
+    return;
+  }
+  const ai = analyzeComplaint(`${title}. ${description}`);
+  state.requests = [
+    ...state.requests,
+    {
+      id: id("req"),
+      apartmentId: residentApartment().id,
+      category: ai.category,
+      title,
+      description,
+      urgency: ai.urgency,
+      status: "yeni",
+      adminNote: "",
+      aiSummary: ai.summary,
+      location: ai.location,
+      createdAt: new Date().toISOString().slice(0, 10),
+      resolvedAt: "",
+    },
+  ];
+  saveState();
+  event.target.reset();
+  setState({ view: "resident-home" });
+}
+
+loadRemoteState();
