@@ -253,6 +253,28 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const dueReminderMatch = url.pathname.match(/^\/api\/dues\/([^/]+)\/reminder$/);
+  if (method === "POST" && dueReminderMatch) {
+    const body = await readBody(req);
+    const due = data.dues.find((item) => item.id === dueReminderMatch[1]);
+    if (!due) {
+      json(res, 404, { error: "Due not found" });
+      return;
+    }
+    data.payments.push({
+      id: uid("reminder"),
+      dueId: due.id,
+      apartmentId: due.apartmentId,
+      amount: 0,
+      date: today(),
+      method: "Hatırlatma",
+      note: clean(body.note || "Ödeme hatırlatması gönderildi."),
+    });
+    await writeData(data);
+    json(res, 200, publicData(data));
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/requests") {
     const body = await readBody(req);
     const title = clean(body.title);

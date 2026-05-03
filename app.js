@@ -7,6 +7,8 @@ const seedState = {
   mode: "manager",
   selectedResidentId: "resident-1",
   selectedRequestId: null,
+  selectedDueId: null,
+  reminderDraft: "",
   requestStatusFilter: "all",
   requestCategoryFilter: "all",
   sessionUser: null,
@@ -119,6 +121,8 @@ function applyServerData(data, patch = {}) {
     mode: state.mode,
     selectedResidentId: state.selectedResidentId,
     selectedRequestId: state.selectedRequestId,
+    selectedDueId: state.selectedDueId,
+    reminderDraft: state.reminderDraft,
     requestStatusFilter: state.requestStatusFilter,
     requestCategoryFilter: state.requestCategoryFilter,
     sessionUser: state.sessionUser,
@@ -225,6 +229,31 @@ function statusClass(status) {
 
 function dueStatusText(status) {
   return { paid: "Ödendi", pending: "Bekliyor", overdue: "Gecikti" }[status] ?? status;
+}
+
+function dueSummary() {
+  const total = state.dues.reduce((sum, due) => sum + Number(due.amount), 0);
+  const paid = state.dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + Number(due.amount), 0);
+  const pending = state.dues.filter((due) => due.status !== "paid").reduce((sum, due) => sum + Number(due.amount), 0);
+  const overdue = state.dues.filter((due) => due.status === "overdue").reduce((sum, due) => sum + Number(due.amount), 0);
+  const paidCount = state.dues.filter((due) => due.status === "paid").length;
+  const collectionRate = Math.round((paid / Math.max(total, 1)) * 100);
+  return { total, paid, pending, overdue, paidCount, collectionRate };
+}
+
+function dueRiskLevel(due) {
+  if (due.status === "paid") return { label: "Düşük", className: "ok" };
+  if (due.status === "overdue") return { label: "Yüksek", className: "danger" };
+  const daysLeft = Math.ceil((new Date(due.dueDate) - new Date()) / 86400000);
+  if (daysLeft <= 3) return { label: "Orta", className: "warn" };
+  return { label: "Düşük", className: "info" };
+}
+
+function reminderTextForDue(due) {
+  const resident = residentForApartment(due.apartmentId);
+  const greeting = resident?.name ? `Sayın ${resident.name},` : "Değerli sakinimiz,";
+  const statusNote = due.status === "overdue" ? "son ödeme tarihi geçtiği için" : "son ödeme tarihi yaklaşan";
+  return `${greeting} ${due.period} dönemine ait ${money(due.amount)} tutarındaki aidat borcunuz ${statusNote} ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.`;
 }
 
 function requestStatusText(status) {
@@ -708,7 +737,64 @@ function dashboardView() {
 }
 
 function duesView() {
+  const summary = dueSummary();
+  const riskyDues = state.dues.filter((due) => due.status !== "paid").sort((a, b) => {
+    const riskOrder = { Yüksek: 0, Orta: 1, Düşük: 2 };
+    return riskOrder[dueRiskLevel(a).label] - riskOrder[dueRiskLevel(b).label];
+  });
+  const selectedDue = state.dues.find((due) => due.id === state.selectedDueId);
   return `
+    <div class="grid dashboard-grid">
+      <section class="section metric">
+        <span>Tahsilat oranı</span>
+        <strong>%${summary.collectionRate}</strong>
+        <small>${summary.paidCount}/${state.dues.length} aidat ödendi</small>
+      </section>
+      <section class="section metric">
+        <span>Tahsil edilen</span>
+        <strong>${money(summary.paid)}</strong>
+        <small>Toplam: ${money(summary.total)}</small>
+      </section>
+      <section class="section metric">
+        <span>Bekleyen risk</span>
+        <strong>${money(summary.pending)}</strong>
+        <small>Gecikmiş: ${money(summary.overdue)}</small>
+      </section>
+    </div>
+    <div class="split">
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Tahsilat Risk Listesi</h2>
+            <p>Öncelikli hatırlatma gönderilecek daireler.</p>
+          </div>
+        </div>
+        <ul class="mini-list">
+          ${
+            riskyDues.length
+              ? riskyDues.slice(0, 5).map((due) => {
+                  const risk = dueRiskLevel(due);
+                  return `<li><span>${risk.label} risk</span>${apartmentLabel(due.apartmentId)} - ${money(due.amount)}<small>${residentForApartment(due.apartmentId)?.name ?? "-"} / ${dateText(due.dueDate)}</small></li>`;
+                }).join("")
+              : `<li><span>Temiz</span>Bekleyen aidat bulunmuyor.<small>Tahsilat akışı dengeli.</small></li>`
+          }
+        </ul>
+      </section>
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>AI Tahsilat Yorumu</h2>
+            <p>Bu dönem için kısa yönetici aksiyonu.</p>
+          </div>
+        </div>
+        <div class="ai-panel">
+          <span class="status info">AI önerisi</span>
+          <h3>${summary.collectionRate >= 85 ? "Tahsilat ritmi sağlıklı" : "Hatırlatma aksiyonu gerekli"}</h3>
+          <p>${summary.collectionRate >= 85 ? "Ödeme düzeni iyi görünüyor. Bekleyen küçük tutarlar için dönem kapanışına yakın tek hatırlatma yeterli." : `${riskyDues.length} daire için ödeme takibi gerekiyor. Önce gecikmiş aidatlar, ardından son ödeme tarihi yaklaşan kayıtlar ele alınmalı.`}</p>
+          <strong>${summary.overdue > 0 ? "Gecikmiş dairelere bugün kibar hatırlatma metni gönder." : "Bekleyen kayıtları son ödeme tarihinden 3 gün önce hatırlat."}</strong>
+        </div>
+      </section>
+    </div>
     <section class="section">
       <div class="section-header">
         <div>
@@ -737,13 +823,59 @@ function duesView() {
                 <td>${money(due.amount)}</td>
                 <td>${dateText(due.dueDate)}</td>
                 <td><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span></td>
-                <td>${due.status !== "paid" ? `<button class="btn" onclick="markPaid('${due.id}')">Ödendi</button>` : "-"}</td>
+                <td>
+                  ${due.status !== "paid" ? `<div class="inline-actions"><button class="btn" onclick="markPaid('${due.id}')">Ödendi</button><button class="btn" onclick="openReminderModal('${due.id}')">Hatırlat</button></div>` : "-"}
+                </td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
     </section>
+    ${selectedDue ? reminderModal(selectedDue) : ""}
+  `;
+}
+
+function reminderModal(due) {
+  const resident = residentForApartment(due.apartmentId);
+  const risk = dueRiskLevel(due);
+  const draft = state.reminderDraft || reminderTextForDue(due);
+  return `
+    <div class="modal-backdrop" onclick="closeDueModal(event)">
+      <section class="request-modal" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="setState({ selectedDueId: null, reminderDraft: '' })" aria-label="Kapat">×</button>
+        <div class="section-header">
+          <div>
+            <h2>Ödeme Hatırlatma Taslağı</h2>
+            <p>${apartmentLabel(due.apartmentId)} - ${resident?.name ?? "Sakin"}</p>
+          </div>
+          <span class="status ${risk.className}">${risk.label} risk</span>
+        </div>
+        <div class="request-detail-grid">
+          <div class="request-detail-main">
+            <div class="ai-panel">
+              <span class="status info">AI taslak</span>
+              <h3>${due.period} dönemi / ${money(due.amount)}</h3>
+              <p>Son ödeme tarihi: ${dateText(due.dueDate)}. Bu metin sakinle paylaşılmadan önce yönetici tarafından düzenlenebilir.</p>
+              <strong>${due.status === "overdue" ? "Ton kibar ama net tutulmalı; gecikme bilgisi açıkça belirtilmeli." : "Ton yumuşak tutulmalı; son ödeme tarihi yaklaşımı hatırlatılmalı."}</strong>
+            </div>
+            <label>Hatırlatma metni
+              <textarea rows="7" oninput="state.reminderDraft = this.value">${safeText(draft)}</textarea>
+            </label>
+          </div>
+          <div class="request-side-form">
+            <span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span>
+            <div class="notice">
+              <strong>Ödeme Bilgisi</strong>
+              <p>${money(due.amount)} / ${due.period}</p>
+              <small>${resident?.phone ?? "-"} / ${resident?.email ?? "-"}</small>
+            </div>
+            <button class="btn primary" onclick="markReminderSent('${due.id}')">Hatırlatma Gönderildi İşaretle</button>
+            <button class="btn" onclick="markPaid('${due.id}')">Ödendi İşaretle</button>
+          </div>
+        </div>
+      </section>
+    </div>
   `;
 }
 
@@ -1135,7 +1267,7 @@ function logoutUser() {
 function markPaid(dueId) {
   if (API_BASE) {
     apiRequest(`/dues/${dueId}/pay`, { method: "POST" }).then((result) => {
-      applyServerData(result);
+      applyServerData(result, { selectedDueId: null, reminderDraft: "" });
     });
     return;
   }
@@ -1145,6 +1277,38 @@ function markPaid(dueId) {
     ...state.payments,
     { id: id("pay"), dueId, apartmentId: due.apartmentId, amount: due.amount, date: new Date().toISOString().slice(0, 10), method: "Manuel", note: "Yönetici tarafından işlendi" },
   ];
+  saveState();
+  render();
+}
+
+function openReminderModal(dueId) {
+  const due = state.dues.find((item) => item.id === dueId);
+  setState({ selectedDueId: dueId, reminderDraft: due ? reminderTextForDue(due) : "" });
+}
+
+function closeDueModal(event) {
+  if (event.target.classList.contains("modal-backdrop")) {
+    setState({ selectedDueId: null, reminderDraft: "" });
+  }
+}
+
+function markReminderSent(dueId) {
+  const due = state.dues.find((item) => item.id === dueId);
+  const payload = {
+    note: state.reminderDraft || (due ? reminderTextForDue(due) : "Ödeme hatırlatması gönderildi."),
+  };
+  if (API_BASE) {
+    apiRequest(`/dues/${dueId}/reminder`, { method: "POST", body: JSON.stringify(payload) }).then((result) => {
+      applyServerData(result, { selectedDueId: null, reminderDraft: "" });
+    });
+    return;
+  }
+  state.payments = [
+    ...state.payments,
+    { id: id("reminder"), dueId, apartmentId: due.apartmentId, amount: 0, date: new Date().toISOString().slice(0, 10), method: "Hatırlatma", note: payload.note },
+  ];
+  state.selectedDueId = null;
+  state.reminderDraft = "";
   saveState();
   render();
 }

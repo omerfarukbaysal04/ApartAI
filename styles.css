@@ -973,6 +973,17 @@ th {
   margin-bottom: 14px;
 }
 
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-actions .btn {
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
