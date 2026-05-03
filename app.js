@@ -330,6 +330,33 @@ function recurringIssues() {
     .map(([label, count]) => ({ label: label.replace("-", " / "), count }));
 }
 
+function requestStats() {
+  const open = state.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status)).length;
+  const resolved = state.requests.filter((request) => request.status === "cozuldu").length;
+  const resolutionRate = Math.round((resolved / Math.max(state.requests.length, 1)) * 100);
+  return { open, resolved, resolutionRate };
+}
+
+function blockIssueDensity() {
+  const counts = state.blocks.map((block) => {
+    const apartmentIds = state.apartments.filter((apartment) => apartment.blockId === block.id).map((apartment) => apartment.id);
+    const count = state.requests.filter((request) => apartmentIds.includes(request.apartmentId)).length;
+    return { block: block.name, count };
+  });
+  return counts.sort((a, b) => b.count - a.count);
+}
+
+function pilotMetrics() {
+  const residentsWithActivity = new Set([
+    ...state.dues.map((due) => state.apartments.find((apartment) => apartment.id === due.apartmentId)?.residentId).filter(Boolean),
+    ...state.requests.map((request) => state.apartments.find((apartment) => apartment.id === request.apartmentId)?.residentId).filter(Boolean),
+  ]);
+  const residentActivityRate = Math.round((residentsWithActivity.size / Math.max(state.residents.length, 1)) * 100);
+  const systemRequestRate = state.requests.length ? 100 : 0;
+  const announcementCount = state.announcements.length;
+  return { residentActivityRate, systemRequestRate, announcementCount };
+}
+
 function similarRequests(targetRequest) {
   if (!targetRequest) return [];
   const targetApartment = state.apartments.find((item) => item.id === targetRequest.apartmentId);
@@ -1065,17 +1092,41 @@ function setupView() {
 
 function reportsView() {
   const health = calculateHealthScore();
+  const dues = dueSummary();
+  const requests = requestStats();
+  const blocks = blockIssueDensity();
+  const pilot = pilotMetrics();
   const byCategory = state.requests.reduce((acc, request) => {
     acc[request.category] = (acc[request.category] ?? 0) + 1;
     return acc;
   }, {});
+  const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Henüz veri yok";
+  const topBlock = blocks[0]?.count ? blocks[0].block : "Henüz veri yok";
   return `
+    <div class="grid dashboard-grid">
+      <section class="section metric">
+        <span>Site Sağlık Skoru</span>
+        <strong>${health.score}</strong>
+        <small>${health.status}</small>
+      </section>
+      <section class="section metric">
+        <span>Tahsilat oranı</span>
+        <strong>%${dues.collectionRate}</strong>
+        <small>${money(dues.paid)} tahsil edildi</small>
+      </section>
+      <section class="section metric">
+        <span>Çözüm oranı</span>
+        <strong>%${requests.resolutionRate}</strong>
+        <small>${requests.open} açık talep</small>
+      </section>
+    </div>
     <div class="split">
       <section class="section">
         <div class="section-header"><h2>Aylık Yönetici Özeti</h2></div>
         <ul class="plain-list">
-          <li>Toplam tahsilat oranı %${Math.round((state.dues.filter((due) => due.status === "paid").length / Math.max(state.dues.length, 1)) * 100)}.</li>
-          <li>En çok talep gelen kategori: ${Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Henüz veri yok"}.</li>
+          <li>Toplam tahsilat oranı %${dues.collectionRate}; bekleyen tutar ${money(dues.pending)}.</li>
+          <li>En çok talep gelen kategori: ${topCategory}.</li>
+          <li>En yoğun blok/alan: ${topBlock}.</li>
           <li>Site Sağlık Skoru ${health.score}/100 ve durum ${health.status}.</li>
           <li>${health.actions[0]}</li>
         </ul>
@@ -1090,6 +1141,28 @@ function reportsView() {
             </tbody>
           </table>
         </div>
+      </section>
+    </div>
+    <div class="split">
+      <section class="section">
+        <div class="section-header"><h2>Blok Bazlı Yoğunluk</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Blok</th><th>Talep Sayısı</th><th>Durum</th></tr></thead>
+            <tbody>
+              ${blocks.map((item) => `<tr><td>${item.block}</td><td>${item.count}</td><td><span class="status ${item.count > 2 ? "warn" : "ok"}">${item.count > 2 ? "İzlenmeli" : "Normal"}</span></td></tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-header"><h2>Pilot Başarı Metrikleri</h2></div>
+        <ul class="plain-list">
+          <li>Sakin aktivite oranı: %${pilot.residentActivityRate}</li>
+          <li>Sistemden açılan talep oranı: %${pilot.systemRequestRate}</li>
+          <li>Yayınlanan duyuru sayısı: ${pilot.announcementCount}</li>
+          <li>Tekrarlayan sorun sinyali: ${recurringIssues().length ? recurringIssues().map((item) => `${item.label} (${item.count})`).join(", ") : "Henüz yok"}</li>
+        </ul>
       </section>
     </div>
   `;
