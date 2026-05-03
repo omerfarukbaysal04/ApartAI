@@ -113,6 +113,24 @@ function setState(patch) {
   render();
 }
 
+function applyServerData(data, patch = {}) {
+  const uiState = {
+    view: state.view,
+    mode: state.mode,
+    selectedResidentId: state.selectedResidentId,
+    selectedRequestId: state.selectedRequestId,
+    requestStatusFilter: state.requestStatusFilter,
+    requestCategoryFilter: state.requestCategoryFilter,
+    sessionUser: state.sessionUser,
+  };
+  state = { ...state, ...data, ...uiState, ...patch };
+  if (state.sessionUser?.role === "resident") {
+    state.mode = "resident";
+    state.selectedResidentId = state.sessionUser.residentId;
+  }
+  render();
+}
+
 function loadSession() {
   try {
     return JSON.parse(localStorage.getItem(SESSION_KEY));
@@ -731,9 +749,12 @@ function duesView() {
 
 function requestsView() {
   const categories = [...new Set(state.requests.map((request) => request.category))];
+  const statusOptions = ["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"];
+  const statusFilter = statusOptions.includes(state.requestStatusFilter) ? state.requestStatusFilter : "all";
+  const categoryFilter = categories.includes(state.requestCategoryFilter) ? state.requestCategoryFilter : "all";
   const filteredRequests = state.requests.filter((request) => {
-    const statusOk = state.requestStatusFilter === "all" || request.status === state.requestStatusFilter;
-    const categoryOk = state.requestCategoryFilter === "all" || request.category === state.requestCategoryFilter;
+    const statusOk = statusFilter === "all" || request.status === statusFilter;
+    const categoryOk = categoryFilter === "all" || request.category === categoryFilter;
     return statusOk && categoryOk;
   });
   const selectedRequest = state.requests.find((request) => request.id === state.selectedRequestId);
@@ -748,14 +769,14 @@ function requestsView() {
       <div class="toolbar">
         <label>Durum
           <select onchange="setState({ requestStatusFilter: this.value })">
-            <option value="all" ${state.requestStatusFilter === "all" ? "selected" : ""}>Tümü</option>
-            ${["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"].map((status) => `<option value="${status}" ${state.requestStatusFilter === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
+            <option value="all" ${statusFilter === "all" ? "selected" : ""}>Tümü</option>
+            ${statusOptions.map((status) => `<option value="${status}" ${statusFilter === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
           </select>
         </label>
         <label>Kategori
           <select onchange="setState({ requestCategoryFilter: this.value })">
-            <option value="all" ${state.requestCategoryFilter === "all" ? "selected" : ""}>Tümü</option>
-            ${categories.map((category) => `<option value="${category}" ${state.requestCategoryFilter === category ? "selected" : ""}>${category}</option>`).join("")}
+            <option value="all" ${categoryFilter === "all" ? "selected" : ""}>Tümü</option>
+            ${categories.map((category) => `<option value="${category}" ${categoryFilter === category ? "selected" : ""}>${category}</option>`).join("")}
           </select>
         </label>
         <button class="btn" onclick="setState({ requestStatusFilter: 'all', requestCategoryFilter: 'all' })">Filtreleri Temizle</button>
@@ -829,6 +850,7 @@ function requestDetailModal(request) {
               <textarea name="adminNote" placeholder="Firma, aksiyon veya sakin iletişimi notu">${safeText(request.adminNote || "")}</textarea>
             </label>
             <button class="btn primary" type="submit">Kaydet</button>
+            <button class="btn warn" type="button" onclick="deleteRequest('${request.id}')">Talebi Sil</button>
           </form>
         </div>
       </section>
@@ -1018,8 +1040,7 @@ function createDues(event) {
   const dueDate = form.get("dueDate");
   if (API_BASE) {
     apiRequest("/dues/bulk", { method: "POST", body: JSON.stringify({ period, amount, dueDate }) }).then((result) => {
-      state = result.data;
-      render();
+      applyServerData(result.data);
     });
     return;
   }
@@ -1042,6 +1063,8 @@ function applyLoggedInUser(user) {
   const safeUser = userWithoutPassword(user);
   saveSession(safeUser);
   state.sessionUser = safeUser;
+  authModalOpen = false;
+  state.selectedRequestId = null;
   if (safeUser.role === "resident") {
     state.mode = "resident";
     state.view = "resident-home";
@@ -1112,8 +1135,7 @@ function logoutUser() {
 function markPaid(dueId) {
   if (API_BASE) {
     apiRequest(`/dues/${dueId}/pay`, { method: "POST" }).then((result) => {
-      state = result;
-      render();
+      applyServerData(result);
     });
     return;
   }
@@ -1130,8 +1152,7 @@ function markPaid(dueId) {
 function updateRequestStatus(requestId, status) {
   if (API_BASE) {
     apiRequest(`/requests/${requestId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }).then((result) => {
-      state = result;
-      render();
+      applyServerData(result);
     });
     return;
   }
@@ -1153,9 +1174,7 @@ function saveRequestDetail(event, requestId) {
   };
   if (API_BASE) {
     apiRequest(`/requests/${requestId}`, { method: "PATCH", body: JSON.stringify(payload) }).then((result) => {
-      state = result;
-      state.selectedRequestId = null;
-      render();
+      applyServerData(result, { selectedRequestId: null });
     });
     return;
   }
@@ -1169,6 +1188,20 @@ function saveRequestDetail(event, requestId) {
         }
       : request,
   );
+  state.selectedRequestId = null;
+  saveState();
+  render();
+}
+
+function deleteRequest(requestId) {
+  if (!confirm("Bu talebi silmek istediğine emin misin?")) return;
+  if (API_BASE) {
+    apiRequest(`/requests/${requestId}`, { method: "DELETE" }).then((result) => {
+      applyServerData(result, { selectedRequestId: null });
+    });
+    return;
+  }
+  state.requests = state.requests.filter((request) => request.id !== requestId);
   state.selectedRequestId = null;
   saveState();
   render();
@@ -1193,9 +1226,8 @@ function createAnnouncement(event) {
   };
   if (API_BASE) {
     apiRequest("/announcements", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
-      state = result.data;
       event.target.reset();
-      render();
+      applyServerData(result.data);
     });
     return;
   }
@@ -1228,9 +1260,8 @@ function createApartment(event) {
   };
   if (API_BASE) {
     apiRequest("/apartments", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
-      state = result.data;
       event.target.reset();
-      render();
+      applyServerData(result.data);
     });
     return;
   }
@@ -1259,9 +1290,8 @@ function createResidentRequest(event) {
       method: "POST",
       body: JSON.stringify({ apartmentId: residentApartment().id, title, description }),
     }).then((result) => {
-      state = result.data;
       event.target.reset();
-      setState({ view: "resident-home" });
+      applyServerData(result.data, { view: "resident-home" });
     });
     return;
   }

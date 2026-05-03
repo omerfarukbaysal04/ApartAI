@@ -294,6 +294,18 @@ async function routeApi(req, res, url) {
   }
 
   const requestUpdateMatch = url.pathname.match(/^\/api\/requests\/([^/]+)$/);
+  if (method === "DELETE" && requestUpdateMatch) {
+    const index = data.requests.findIndex((item) => item.id === requestUpdateMatch[1]);
+    if (index === -1) {
+      json(res, 404, { error: "Request not found" });
+      return;
+    }
+    data.requests.splice(index, 1);
+    await writeData(data);
+    json(res, 200, publicData(data));
+    return;
+  }
+
   if (method === "PATCH" && requestUpdateMatch) {
     const body = await readBody(req);
     const request = data.requests.find((item) => item.id === requestUpdateMatch[1]);
