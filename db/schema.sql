@@ -81,6 +81,10 @@ create table requests (
   status text not null check (status in ('yeni', 'inceleniyor', 'firmaya_iletildi', 'cozuldu', 'reddedildi')),
   admin_note text,
   ai_summary text,
+  ai_suggested_action text,
+  ai_provider text,
+  ai_model text,
+  ai_fallback_used boolean not null default true,
   location text,
   created_at timestamptz not null default now(),
   resolved_at timestamptz

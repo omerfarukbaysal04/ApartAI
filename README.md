@@ -28,6 +28,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] Talep fotoğrafı ekleme ve yönetici detayında görüntüleme eklendi.
 - [x] Talep detay modalı, yönetici notu, durum güncelleme ve silme eklendi.
 - [x] Kural tabanlı AI simülasyonları eklendi.
+- [x] OpenAI API entegrasyonu için gerçek AI/fallback servis katmanı eklendi.
 - [x] Rapor ekranı aylık özet, blok yoğunluğu ve pilot metrikleriyle geliştirildi.
 - [x] PostgreSQL geçiş şeması taslağı eklendi.
 
@@ -35,7 +36,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 
 - [ ] JSON dosya deposunu PostgreSQL repository katmanıyla değiştir.
 - [ ] Demo auth akışını gerçek session/JWT ve parola hash altyapısına taşı.
-- [ ] Kural tabanlı AI simülasyonlarını gerçek OpenAI API çağrılarına taşı.
+- [ ] Fotoğraf analizini multimodal AI akışına taşı.
 - [ ] MVP fotoğraf saklamasını S3 uyumlu dosya saklama altyapısına taşı.
 - [ ] Pilot siteler için Excel içeri aktarma ekle.
 - [ ] Duyuru okunma takibi ve bildirim geçmişi ekle.
@@ -54,6 +55,16 @@ Backend bağlantılı çalışma için:
 node server.js
 ```
 
+OpenAI API ile çalıştırmak için:
+
+```powershell
+$env:OPENAI_API_KEY="sk-..."
+$env:OPENAI_MODEL="gpt-5.4-nano"
+node server.js
+```
+
+`OPENAI_API_KEY` yoksa sistem otomatik olarak kural tabanlı Demo AI fallback akışını kullanır.
+
 Ardından tarayıcıda:
 
 ```text
@@ -65,10 +76,12 @@ Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `da
 ## API
 
 - `GET /api/state`
+- `GET /api/ai/status`
 - `POST /api/auth/login`
 - `POST /api/auth/register`
 - `POST /api/dues/bulk`
 - `POST /api/dues/:id/pay`
+- `POST /api/dues/:id/reminder-draft`
 - `POST /api/dues/:id/reminder`
 - `POST /api/requests`
 - `PATCH /api/requests/:id`
@@ -91,6 +104,6 @@ PostgreSQL geçiş şeması `db/schema.sql` dosyasındadır.
 
 1. JSON dosya deposunu PostgreSQL repository katmanıyla değiştir.
 2. Demo auth akışını gerçek session/JWT ve parola hash altyapısına taşı.
-3. AI yardımcılarını gerçek model çağrılarına taşı.
+3. Fotoğraf analizini gerçek model çağrılarına taşı.
 4. Pilot siteler için Excel içeri aktarma ekle.
 5. Fotoğraf yükleme için S3 uyumlu storage bağla.

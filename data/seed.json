@@ -48,6 +48,10 @@
       "status": "inceleniyor",
       "adminNote": "Temizlik firması aranacak.",
       "aiSummary": "C blok girişinde çöp toplama aksaması bildirildi.",
+      "aiSuggestedAction": "Temizlik firmasıyla aynı gün kontrol planla ve ilgili blokta takip notu oluştur.",
+      "aiProvider": "rules",
+      "aiModel": "fallback",
+      "aiFallbackUsed": true,
       "location": "C blok girişi",
       "createdAt": "2026-05-01",
       "resolvedAt": ""
@@ -63,6 +67,10 @@
       "status": "firmaya_iletildi",
       "adminNote": "Bakım firması bugün gelecek.",
       "aiSummary": "B blok asansörü için teknik kontrol gerekli.",
+      "aiSuggestedAction": "Bakım firmasına servis kaydı aç, çözüm saatini sakinlerle duyuru olarak paylaş.",
+      "aiProvider": "rules",
+      "aiModel": "fallback",
+      "aiFallbackUsed": true,
       "location": "B blok",
       "createdAt": "2026-04-29",
       "resolvedAt": ""

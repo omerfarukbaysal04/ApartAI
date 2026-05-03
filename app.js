@@ -9,6 +9,7 @@ const seedState = {
   selectedRequestId: null,
   selectedDueId: null,
   reminderDraft: "",
+  reminderFallbackUsed: true,
   requestStatusFilter: "all",
   requestCategoryFilter: "all",
   sessionUser: null,
@@ -61,6 +62,10 @@ const seedState = {
       status: "inceleniyor",
       adminNote: "Temizlik firması aranacak.",
       aiSummary: "C blok girişinde çöp toplama aksaması bildirildi.",
+      aiSuggestedAction: "Temizlik firmasıyla aynı gün kontrol planla ve ilgili blokta takip notu oluştur.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
       location: "C blok girişi",
       createdAt: "2026-05-01",
       resolvedAt: "",
@@ -76,6 +81,10 @@ const seedState = {
       status: "firmaya_iletildi",
       adminNote: "Bakım firması bugün gelecek.",
       aiSummary: "B blok asansörü için teknik kontrol gerekli.",
+      aiSuggestedAction: "Bakım firmasına servis kaydı aç, çözüm saatini sakinlerle duyuru olarak paylaş.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
       location: "B blok",
       createdAt: "2026-04-29",
       resolvedAt: "",
@@ -125,6 +134,7 @@ function applyServerData(data, patch = {}) {
     selectedRequestId: state.selectedRequestId,
     selectedDueId: state.selectedDueId,
     reminderDraft: state.reminderDraft,
+    reminderFallbackUsed: state.reminderFallbackUsed,
     requestStatusFilter: state.requestStatusFilter,
     requestCategoryFilter: state.requestCategoryFilter,
     sessionUser: state.sessionUser,
@@ -295,6 +305,13 @@ function reminderTextForDue(due) {
   const greeting = resident?.name ? `Sayın ${resident.name},` : "Değerli sakinimiz,";
   const statusNote = due.status === "overdue" ? "son ödeme tarihi geçtiği için" : "son ödeme tarihi yaklaşan";
   return `${greeting} ${due.period} dönemine ait ${money(due.amount)} tutarındaki aidat borcunuz ${statusNote} ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.`;
+}
+
+function aiBadge(item) {
+  if (!item) return `<span class="status warn">Demo AI</span>`;
+  return item.aiFallbackUsed === false || item.fallbackUsed === false
+    ? `<span class="status info">AI</span>`
+    : `<span class="status warn">Demo AI</span>`;
 }
 
 function requestStatusText(status) {
@@ -922,7 +939,7 @@ function reminderModal(due) {
         <div class="request-detail-grid">
           <div class="request-detail-main">
             <div class="ai-panel">
-              <span class="status info">AI taslak</span>
+              ${aiBadge({ fallbackUsed: state.reminderFallbackUsed })}
               <h3>${due.period} dönemi / ${money(due.amount)}</h3>
               <p>Son ödeme tarihi: ${dateText(due.dueDate)}. Bu metin sakinle paylaşılmadan önce yönetici tarafından düzenlenebilir.</p>
               <strong>${due.status === "overdue" ? "Ton kibar ama net tutulmalı; gecikme bilgisi açıkça belirtilmeli." : "Ton yumuşak tutulmalı; son ödeme tarihi yaklaşımı hatırlatılmalı."}</strong>
@@ -991,7 +1008,7 @@ function requestsView() {
                 <td>${apartmentLabel(request.apartmentId)}</td>
                 <td>${request.category}</td>
                 <td><span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span></td>
-                <td>${request.aiSummary}${request.photoDataUrl ? `<br><span class="status info">Fotoğraflı</span>` : ""}</td>
+                <td>${request.aiSummary}<br>${aiBadge(request)}${request.photoDataUrl ? ` <span class="status info">Fotoğraflı</span>` : ""}</td>
                 <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span></td>
                 <td>
                   <button class="btn" onclick="setState({ selectedRequestId: '${request.id}' })">Detay</button>
@@ -1031,10 +1048,10 @@ function requestDetailModal(request) {
                 : ""
             }
             <div class="ai-panel">
-              <span class="status info">AI önerisi</span>
+              ${aiBadge(request)}
               <h3>${request.category} - ${request.location}</h3>
               <p>${request.aiSummary}</p>
-              <strong>${aiActionForRequest(request)}</strong>
+              <strong>${request.aiSuggestedAction || aiActionForRequest(request)}</strong>
             </div>
             <div class="notice">
               <strong>Benzer Talepler</strong>
@@ -1090,7 +1107,7 @@ function announcementsView() {
           ${state.announcements.slice().reverse().map((item) => `
             <article class="notice">
               <strong>${item.title}</strong>
-              <span class="status info">${item.audience}</span>
+              <span class="status info">${item.audience}</span> ${aiBadge(item)}
               <p>${item.aiContent || item.content}</p>
               <small>${dateText(item.date)}</small>
             </article>
@@ -1280,7 +1297,7 @@ function residentAnnouncementsView() {
       <section class="section">
         <div class="section-header"><h2>Duyurular</h2></div>
         <div class="grid">
-          ${state.announcements.slice().reverse().map((item) => `<article class="notice"><strong>${item.title}</strong><p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`).join("")}
+          ${state.announcements.slice().reverse().map((item) => `<article class="notice"><strong>${item.title}</strong>${aiBadge(item)}<p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`).join("")}
         </div>
       </section>
     </div>
@@ -1390,7 +1407,7 @@ function logoutUser() {
 function markPaid(dueId) {
   if (API_BASE) {
     apiRequest(`/dues/${dueId}/pay`, { method: "POST" }).then((result) => {
-      applyServerData(result, { selectedDueId: null, reminderDraft: "" });
+      applyServerData(result, { selectedDueId: null, reminderDraft: "", reminderFallbackUsed: true });
     });
     return;
   }
@@ -1406,12 +1423,21 @@ function markPaid(dueId) {
 
 function openReminderModal(dueId) {
   const due = state.dues.find((item) => item.id === dueId);
-  setState({ selectedDueId: dueId, reminderDraft: due ? reminderTextForDue(due) : "" });
+  setState({ selectedDueId: dueId, reminderDraft: due ? reminderTextForDue(due) : "", reminderFallbackUsed: true });
+  if (API_BASE) {
+    apiRequest(`/dues/${dueId}/reminder-draft`, { method: "POST" }).then((result) => {
+      setState({
+        selectedDueId: dueId,
+        reminderDraft: result.content || (due ? reminderTextForDue(due) : ""),
+        reminderFallbackUsed: result.fallbackUsed !== false,
+      });
+    });
+  }
 }
 
 function closeDueModal(event) {
   if (event.target.classList.contains("modal-backdrop")) {
-    setState({ selectedDueId: null, reminderDraft: "" });
+    setState({ selectedDueId: null, reminderDraft: "", reminderFallbackUsed: true });
   }
 }
 
@@ -1422,7 +1448,7 @@ function markReminderSent(dueId) {
   };
   if (API_BASE) {
     apiRequest(`/dues/${dueId}/reminder`, { method: "POST", body: JSON.stringify(payload) }).then((result) => {
-      applyServerData(result, { selectedDueId: null, reminderDraft: "" });
+      applyServerData(result, { selectedDueId: null, reminderDraft: "", reminderFallbackUsed: true });
     });
     return;
   }
@@ -1432,6 +1458,7 @@ function markReminderSent(dueId) {
   ];
   state.selectedDueId = null;
   state.reminderDraft = "";
+  state.reminderFallbackUsed = true;
   saveState();
   render();
 }
@@ -1603,6 +1630,10 @@ async function createResidentRequest(event) {
       status: "yeni",
       adminNote: "",
       aiSummary: ai.summary,
+      aiSuggestedAction: ai.action,
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
       location: ai.location,
       createdAt: new Date().toISOString().slice(0, 10),
       resolvedAt: "",

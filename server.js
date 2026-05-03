@@ -7,6 +7,8 @@ const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
 const SEED_FILE = path.join(DATA_DIR, "seed.json");
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-nano";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -75,6 +77,14 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function aiStatus() {
+  return {
+    enabled: Boolean(OPENAI_API_KEY),
+    model: OPENAI_MODEL,
+    fallbackAvailable: true,
+  };
+}
+
 function normalizeData(data) {
   if (!Array.isArray(data.users)) {
     data.users = [
@@ -116,23 +126,23 @@ function publicData(data) {
 function analyzeComplaint(data, text) {
   const lower = clean(text).toLocaleLowerCase("tr-TR");
   const rules = [
-    ["Asansör", ["asansör", "kabin", "bakım"]],
-    ["Temizlik", ["çöp", "temizlik", "koku", "kirli", "pas pas"]],
-    ["Güvenlik", ["güvenlik", "kapı", "kamera", "yabancı"]],
-    ["Su ve tesisat", ["su", "tesisat", "kaçak", "gider", "musluk"]],
-    ["Elektrik", ["elektrik", "lamba", "ışık", "sigorta"]],
-    ["Otopark", ["otopark", "araç", "park"]],
-    ["Gürültü", ["gürültü", "ses", "rahatsız"]],
-    ["Peyzaj", ["bahçe", "peyzaj", "ağaç", "çim"]],
+    ["Asansör", ["asansör", "asansÃ¶r", "kabin", "bakım", "bakÄ±m"]],
+    ["Temizlik", ["çöp", "Ã§Ã¶p", "temizlik", "koku", "kirli", "pas pas"]],
+    ["Güvenlik", ["güvenlik", "gÃ¼venlik", "kapı", "kapÄ±", "kamera", "yabancı", "yabancÄ±"]],
+    ["Su ve tesisat", ["su", "tesisat", "kaçak", "kaÃ§ak", "gider", "musluk"]],
+    ["Elektrik", ["elektrik", "lamba", "ışık", "Ä±ÅŸÄ±k", "sigorta"]],
+    ["Otopark", ["otopark", "araç", "araÃ§", "park"]],
+    ["Gürültü", ["gürültü", "gÃ¼rÃ¼ltÃ¼", "ses", "rahatsız", "rahatsÄ±z"]],
+    ["Peyzaj", ["bahçe", "bahÃ§e", "peyzaj", "ağaç", "aÄŸaÃ§", "çim", "Ã§im"]],
   ];
   const category = rules.find(([, words]) => words.some((word) => lower.includes(word)))?.[0] ?? "Diğer";
-  const urgency = ["acil", "tehlike", "patladı", "yangın", "mahsur"].some((word) => lower.includes(word))
+  const urgency = ["acil", "tehlike", "patladı", "patladÄ±", "yangın", "yangÄ±n", "mahsur"].some((word) => lower.includes(word))
     ? "Yüksek"
-    : ["iki gündür", "koku", "çalışmıyor", "kaçak"].some((word) => lower.includes(word))
+    : ["iki gündür", "iki gÃ¼ndÃ¼r", "koku", "çalışmıyor", "Ã§alÄ±ÅŸmÄ±yor", "kaçak", "kaÃ§ak"].some((word) => lower.includes(word))
       ? "Orta"
       : "Düşük";
   const block = data.blocks.find((item) => lower.includes(item.name.toLocaleLowerCase("tr-TR").replace(" blok", "")));
-  const location = block ? block.name : lower.includes("giriş") ? "Giriş alanı" : "Belirtilmedi";
+  const location = block ? block.name : lower.includes("giriş") || lower.includes("giriÅŸ") ? "Giriş alanı" : "Belirtilmedi";
   const similar = data.requests.filter((request) => request.category === category && request.location.includes(block?.name ?? "")).length;
 
   return {
@@ -147,14 +157,107 @@ function analyzeComplaint(data, text) {
 
 function improveAnnouncement(content, tone) {
   const openings = {
-    Resmi: "Değerli sakinlerimiz,",
-    Kibar: "Değerli komşularımız,",
-    Kısa: "Bilgilendirme:",
-    Detaylı: "Değerli sakinlerimiz, aşağıdaki konu hakkında bilginize başvururuz:",
+    "Resmi": "Değerli sakinlerimiz,",
+    "Kibar": "Değerli komşularımız,",
+    "Kısa": "Bilgilendirme:",
+    "KÄ±sa": "Bilgilendirme:",
+    "Detaylı": "Değerli sakinlerimiz, aşağıdaki konu hakkında bilginize başvururuz:",
+    "DetaylÄ±": "Değerli sakinlerimiz, aşağıdaki konu hakkında bilginize başvururuz:",
     "Uyarı niteliğinde": "Önemli hatırlatma:",
+    "UyarÄ± niteliÄŸinde": "Önemli hatırlatma:",
   };
-  const closing = tone === "Kısa" ? "" : " Anlayışınız ve iş birliğiniz için teşekkür ederiz.";
+  const closing = tone === "Kısa" || tone === "KÄ±sa" ? "" : " Anlayışınız ve iş birliğiniz için teşekkür ederiz.";
   return `${openings[tone] ?? openings.Kibar} ${clean(content)}${closing}`;
+}
+
+function withAiMeta(result, fallbackUsed) {
+  return {
+    ...result,
+    provider: fallbackUsed ? "rules" : "openai",
+    model: fallbackUsed ? "fallback" : OPENAI_MODEL,
+    fallbackUsed,
+  };
+}
+
+function fallbackPaymentReminder({ resident, due }) {
+  const greeting = resident?.name ? `Sayın ${resident.name},` : "Değerli sakinimiz,";
+  const statusNote = due.status === "overdue" ? "son ödeme tarihi geçtiği için" : "son ödeme tarihi yaklaşan";
+  return `${greeting} ${due.period} dönemine ait ${due.amount} TL tutarındaki aidat borcunuz ${statusNote} ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.`;
+}
+
+async function callOpenAIJson({ instructions, input, fallback }) {
+  if (!OPENAI_API_KEY) return withAiMeta(fallback, true);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${OPENAI_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        input: [
+          { role: "system", content: instructions },
+          { role: "user", content: JSON.stringify(input) },
+        ],
+        text: { format: { type: "json_object" } },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`OpenAI ${response.status}`);
+    const payload = await response.json();
+    const outputText =
+      payload.output_text ||
+      payload.output?.flatMap((item) => item.content || [])?.find((item) => item.type === "output_text")?.text;
+    const parsed = JSON.parse(outputText || "{}");
+    return withAiMeta({ ...fallback, ...parsed }, false);
+  } catch {
+    return withAiMeta(fallback, true);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function analyzeComplaintWithAI({ data, title, description }) {
+  const fallback = analyzeComplaint(data, `${title}. ${description}`);
+  return callOpenAIJson({
+    fallback,
+    instructions:
+      "ApartAI için Türkçe apartman/site talebini analiz et. Sadece JSON döndür. Alanlar: category, urgency, location, summary, action. category şu değerlerden biri olmalı: Temizlik, Güvenlik, Asansör, Su ve tesisat, Elektrik, Otopark, Gürültü, Peyzaj, Diğer. urgency: Düşük, Orta veya Yüksek. summary kısa olsun. action yöneticiye uygulanabilir aksiyon olsun.",
+    input: {
+      title,
+      description,
+      blocks: data.blocks.map((block) => block.name),
+      categories: ["Temizlik", "Güvenlik", "Asansör", "Su ve tesisat", "Elektrik", "Otopark", "Gürültü", "Peyzaj", "Diğer"],
+    },
+  });
+}
+
+async function improveAnnouncementWithAI({ content, tone }) {
+  return callOpenAIJson({
+    fallback: { content: improveAnnouncement(content, tone) },
+    instructions:
+      "ApartAI yöneticisinin duyuru metnini Türkçe olarak iyileştir. Sadece JSON döndür. Alan: content. Ton isteğine uy; metin sakin, profesyonel ve apartman/site sakinlerine uygun olsun.",
+    input: { content, tone },
+  });
+}
+
+async function draftPaymentReminderWithAI({ resident, apartment, due }) {
+  return callOpenAIJson({
+    fallback: { content: fallbackPaymentReminder({ resident, apartment, due }) },
+    instructions:
+      "ApartAI için Türkçe, kibar ve net aidat ödeme hatırlatma metni yaz. Sadece JSON döndür. Alan: content. Yasal tehdit veya sert ifade kullanma.",
+    input: {
+      residentName: resident?.name,
+      apartmentNo: apartment?.no,
+      period: due.period,
+      amount: due.amount,
+      dueDate: due.dueDate,
+      status: due.status,
+    },
+  });
 }
 
 async function routeApi(req, res, url) {
@@ -216,6 +319,11 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (method === "GET" && url.pathname === "/api/ai/status") {
+    json(res, 200, aiStatus());
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/dues/bulk") {
     const body = await readBody(req);
     const period = clean(body.period);
@@ -254,6 +362,20 @@ async function routeApi(req, res, url) {
   }
 
   const dueReminderMatch = url.pathname.match(/^\/api\/dues\/([^/]+)\/reminder$/);
+  const dueReminderDraftMatch = url.pathname.match(/^\/api\/dues\/([^/]+)\/reminder-draft$/);
+  if (method === "POST" && dueReminderDraftMatch) {
+    const due = data.dues.find((item) => item.id === dueReminderDraftMatch[1]);
+    if (!due) {
+      json(res, 404, { error: "Due not found" });
+      return;
+    }
+    const apartment = data.apartments.find((item) => item.id === due.apartmentId);
+    const resident = data.residents.find((item) => item.id === apartment?.residentId);
+    const reminder = await draftPaymentReminderWithAI({ resident, apartment, due });
+    json(res, 200, reminder);
+    return;
+  }
+
   if (method === "POST" && dueReminderMatch) {
     const body = await readBody(req);
     const due = data.dues.find((item) => item.id === dueReminderMatch[1]);
@@ -261,6 +383,11 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Due not found" });
       return;
     }
+    const apartment = data.apartments.find((item) => item.id === due.apartmentId);
+    const resident = data.residents.find((item) => item.id === apartment?.residentId);
+    const reminder = clean(body.note)
+      ? { content: clean(body.note), provider: "manual", model: "manual", fallbackUsed: false }
+      : await draftPaymentReminderWithAI({ resident, apartment, due });
     data.payments.push({
       id: uid("reminder"),
       dueId: due.id,
@@ -268,7 +395,10 @@ async function routeApi(req, res, url) {
       amount: 0,
       date: today(),
       method: "Hatırlatma",
-      note: clean(body.note || "Ödeme hatırlatması gönderildi."),
+      note: reminder.content,
+      aiProvider: reminder.provider,
+      aiModel: reminder.model,
+      aiFallbackUsed: reminder.fallbackUsed,
     });
     await writeData(data);
     json(res, 200, publicData(data));
@@ -279,7 +409,7 @@ async function routeApi(req, res, url) {
     const body = await readBody(req);
     const title = clean(body.title);
     const description = clean(body.description);
-    const analysis = analyzeComplaint(data, `${title}. ${description}`);
+    const analysis = await analyzeComplaintWithAI({ data, title, description });
     const request = {
       id: uid("req"),
       apartmentId: clean(body.apartmentId),
@@ -291,6 +421,10 @@ async function routeApi(req, res, url) {
       status: "yeni",
       adminNote: "",
       aiSummary: analysis.summary,
+      aiSuggestedAction: analysis.action,
+      aiProvider: analysis.provider,
+      aiModel: analysis.model,
+      aiFallbackUsed: analysis.fallbackUsed,
       location: analysis.location,
       createdAt: today(),
       resolvedAt: "",
@@ -348,11 +482,15 @@ async function routeApi(req, res, url) {
   if (method === "POST" && url.pathname === "/api/announcements") {
     const body = await readBody(req);
     const content = clean(body.content);
+    const improved = await improveAnnouncementWithAI({ content, tone: clean(body.tone) });
     const announcement = {
       id: uid("ann"),
       title: clean(body.title),
       content,
-      aiContent: improveAnnouncement(content, clean(body.tone)),
+      aiContent: improved.content,
+      aiProvider: improved.provider,
+      aiModel: improved.model,
+      aiFallbackUsed: improved.fallbackUsed,
       audience: clean(body.audience || "Tüm site"),
       date: today(),
     };
