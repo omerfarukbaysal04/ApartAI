@@ -4,6 +4,11 @@
     "name": "Çınar Apartmanı",
     "address": "Kadıköy, İstanbul"
   },
+  "users": [
+    { "id": "user-admin-1", "name": "Ömer Faruk Baysal", "email": "admin@apartai.local", "phone": "05xx 000 00 00", "role": "admin", "password": "demo123" },
+    { "id": "user-resident-1", "name": "Ayşe Demir", "email": "ayse@example.com", "phone": "05xx 111 22 33", "role": "resident", "residentId": "resident-1", "password": "demo123" },
+    { "id": "user-resident-2", "name": "Mert Kaya", "email": "mert@example.com", "phone": "05xx 222 33 44", "role": "resident", "residentId": "resident-2", "password": "demo123" }
+  ],
   "blocks": [
     { "id": "block-a", "name": "A Blok" },
     { "id": "block-b", "name": "B Blok" },

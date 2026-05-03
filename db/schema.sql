@@ -3,6 +3,7 @@ create table users (
   full_name text not null,
   phone text,
   email text,
+  password_hash text,
   role text not null check (role in ('admin', 'resident')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -15,6 +16,14 @@ create table sites (
   manager_id text references users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table resident_profiles (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  site_id text not null references sites(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (user_id, site_id)
 );
 
 create table blocks (
@@ -30,7 +39,7 @@ create table apartments (
   block_id text not null references blocks(id) on delete cascade,
   apartment_no text not null,
   floor integer,
-  resident_id text references users(id),
+  resident_profile_id text references resident_profiles(id),
   created_at timestamptz not null default now(),
   unique (block_id, apartment_no)
 );

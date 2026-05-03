@@ -1,15 +1,22 @@
 const STORAGE_KEY = "apartai-mvp-state-v1";
+const SESSION_KEY = "apartai-session-v1";
 const API_BASE = location.protocol === "file:" ? "" : "/api";
 
 const seedState = {
   view: "dashboard",
   mode: "manager",
   selectedResidentId: "resident-1",
+  sessionUser: null,
   site: {
     id: "site-1",
     name: "Çınar Apartmanı",
     address: "Kadıköy, İstanbul",
   },
+  users: [
+    { id: "user-admin-1", name: "Ömer Faruk Baysal", email: "admin@apartai.local", phone: "05xx 000 00 00", role: "admin" },
+    { id: "user-resident-1", name: "Ayşe Demir", email: "ayse@example.com", phone: "05xx 111 22 33", role: "resident", residentId: "resident-1" },
+    { id: "user-resident-2", name: "Mert Kaya", email: "mert@example.com", phone: "05xx 222 33 44", role: "resident", residentId: "resident-2" },
+  ],
   blocks: [
     { id: "block-a", name: "A Blok" },
     { id: "block-b", name: "B Blok" },
@@ -80,6 +87,7 @@ const seedState = {
 };
 
 let state = structuredClone(seedState);
+let authMode = "login";
 
 function loadLocalState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -101,6 +109,22 @@ function setState(patch) {
   render();
 }
 
+function loadSession() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(user) {
+  if (user) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
+}
+
 async function apiRequest(path, options = {}) {
   if (!API_BASE) return null;
   const response = await fetch(`${API_BASE}${path}`, {
@@ -117,11 +141,18 @@ async function apiRequest(path, options = {}) {
 async function loadRemoteState() {
   if (!API_BASE) {
     state = loadLocalState();
+    state.sessionUser = loadSession();
     render();
     return;
   }
   try {
     state = { ...state, ...(await apiRequest("/state")) };
+    state.sessionUser = loadSession();
+    if (state.sessionUser?.role === "resident") {
+      state.mode = "resident";
+      state.view = "resident-home";
+      state.selectedResidentId = state.sessionUser.residentId;
+    }
     render();
   } catch (error) {
     document.querySelector("#app").innerHTML = `<div class="main"><section class="section"><h1>Bağlantı kurulamadı</h1><p>${safeText(error.message)}</p></section></div>`;
@@ -294,6 +325,10 @@ function improveAnnouncement(text, tone) {
 
 function render() {
   const app = document.querySelector("#app");
+  if (!state.sessionUser) {
+    app.innerHTML = authView();
+    return;
+  }
   app.innerHTML = `
     <div class="shell">
       <aside class="sidebar">
@@ -316,13 +351,81 @@ function render() {
             <h1>${pageTitle()}</h1>
             <p>${pageDescription()}</p>
           </div>
-          <div class="mode-switch" aria-label="Ekran tipi">
-            <button class="${state.mode === "manager" ? "active" : ""}" onclick="setState({ mode: 'manager', view: 'dashboard' })">Yönetici</button>
-            <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home' })">Sakin</button>
-          </div>
+          ${sessionActions()}
         </div>
         ${state.mode === "manager" ? managerView() : residentView()}
       </main>
+    </div>
+  `;
+}
+
+function authView() {
+  const isLogin = authMode === "login";
+  return `
+    <main class="auth-page">
+      <section class="auth-hero">
+        <div class="mark">A</div>
+        <h1>ApartAI</h1>
+        <p>Site yönetimini aidat, talep, duyuru ve AI destekli operasyon skorlarıyla tek panelde topla.</p>
+        <div class="auth-stats">
+          <span><strong>72</strong> sağlık skoru</span>
+          <span><strong>4</strong> açık talep</span>
+          <span><strong>%68</strong> tahsilat</span>
+        </div>
+      </section>
+      <section class="auth-card">
+        <div class="auth-tabs">
+          <button class="${isLogin ? "active" : ""}" onclick="authMode = 'login'; render()">Giriş</button>
+          <button class="${!isLogin ? "active" : ""}" onclick="authMode = 'register'; render()">Sakin kaydı</button>
+        </div>
+        ${
+          isLogin
+            ? `<form class="grid" onsubmit="loginUser(event)">
+                <label>E-posta<input name="email" type="email" value="admin@apartai.local" required /></label>
+                <label>Şifre<input name="password" type="password" value="demo123" required /></label>
+                <button class="btn primary" type="submit">Panele Gir</button>
+                <div class="demo-users">
+                  <button type="button" onclick="quickLogin('admin@apartai.local')">Yönetici demosu</button>
+                  <button type="button" onclick="quickLogin('ayse@example.com')">Sakin demosu</button>
+                </div>
+              </form>`
+            : `<form class="grid" onsubmit="registerResident(event)">
+                <label>Ad soyad<input name="name" required /></label>
+                <label>E-posta<input name="email" type="email" required /></label>
+                <label>Telefon<input name="phone" placeholder="05xx" /></label>
+                <label>Blok
+                  <select name="blockId">${state.blocks.map((block) => `<option value="${block.id}">${block.name}</option>`).join("")}</select>
+                </label>
+                <div class="form-grid wide">
+                  <label>Daire no<input name="apartmentNo" required /></label>
+                  <label>Kat<input name="floor" type="number" value="1" required /></label>
+                </div>
+                <label>Şifre<input name="password" type="password" value="demo123" required /></label>
+                <button class="btn primary" type="submit">Sakin Hesabı Oluştur</button>
+              </form>`
+        }
+      </section>
+    </main>
+  `;
+}
+
+function sessionActions() {
+  const user = state.sessionUser;
+  const switcher =
+    user.role === "admin"
+      ? `<div class="mode-switch" aria-label="Ekran tipi">
+          <button class="${state.mode === "manager" ? "active" : ""}" onclick="setState({ mode: 'manager', view: 'dashboard' })">Yönetici</button>
+          <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${state.residents[0]?.id ?? ""}' })">Sakin</button>
+        </div>`
+      : `<span class="status info">Sakin hesabı</span>`;
+  return `
+    <div class="session-bar">
+      ${switcher}
+      <div class="user-chip">
+        <strong>${user.name}</strong>
+        <span>${user.email}</span>
+      </div>
+      <button class="btn" onclick="logoutUser()">Çıkış</button>
     </div>
   `;
 }
@@ -632,7 +735,8 @@ function reportsView() {
 }
 
 function currentResident() {
-  return state.residents.find((item) => item.id === state.selectedResidentId) ?? state.residents[0];
+  const residentId = state.sessionUser?.role === "resident" ? state.sessionUser.residentId : state.selectedResidentId;
+  return state.residents.find((item) => item.id === residentId) ?? state.residents[0];
 }
 
 function residentApartment() {
@@ -718,6 +822,83 @@ function createDues(event) {
     .map((apt) => ({ id: id("due"), apartmentId: apt.id, period, amount, dueDate, status: "pending" }));
   state.dues = [...state.dues, ...newDues];
   saveState();
+  render();
+}
+
+function userWithoutPassword(user) {
+  if (!user) return null;
+  const { password, ...safeUser } = user;
+  return safeUser;
+}
+
+function applyLoggedInUser(user) {
+  const safeUser = userWithoutPassword(user);
+  saveSession(safeUser);
+  state.sessionUser = safeUser;
+  if (safeUser.role === "resident") {
+    state.mode = "resident";
+    state.view = "resident-home";
+    state.selectedResidentId = safeUser.residentId;
+  } else {
+    state.mode = "manager";
+    state.view = "dashboard";
+  }
+  render();
+}
+
+function loginUser(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const email = safeText(form.get("email"));
+  const password = safeText(form.get("password"));
+  if (API_BASE) {
+    apiRequest("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }).then((result) => {
+      state = { ...state, ...result.data };
+      applyLoggedInUser(result.user);
+    });
+    return;
+  }
+  const user = state.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email.toLocaleLowerCase("tr-TR"));
+  applyLoggedInUser(user);
+}
+
+function quickLogin(email) {
+  const form = document.createElement("form");
+  form.innerHTML = `<input name="email" value="${email}"><input name="password" value="demo123">`;
+  loginUser({ preventDefault() {}, target: form });
+}
+
+function registerResident(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const payload = {
+    name: safeText(form.get("name")),
+    email: safeText(form.get("email")),
+    phone: safeText(form.get("phone")),
+    blockId: safeText(form.get("blockId")),
+    apartmentNo: safeText(form.get("apartmentNo")),
+    floor: Number(form.get("floor")),
+    password: safeText(form.get("password")),
+  };
+  if (API_BASE) {
+    apiRequest("/auth/register", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
+      state = { ...state, ...result.data };
+      applyLoggedInUser(result.user);
+    });
+    return;
+  }
+  const residentId = id("resident");
+  const user = { id: id("user"), name: payload.name, email: payload.email, phone: payload.phone, role: "resident", residentId };
+  state.residents = [...state.residents, { id: residentId, name: payload.name, phone: payload.phone, email: payload.email }];
+  state.apartments = [...state.apartments, { id: id("apt"), blockId: payload.blockId, no: payload.apartmentNo, floor: payload.floor, residentId }];
+  state.users = [...state.users, user];
+  saveState();
+  applyLoggedInUser(user);
+}
+
+function logoutUser() {
+  saveSession(null);
+  state.sessionUser = null;
   render();
 }
 

@@ -34,6 +34,8 @@ Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `da
 ## API
 
 - `GET /api/state`
+- `POST /api/auth/login`
+- `POST /api/auth/register`
 - `POST /api/dues/bulk`
 - `POST /api/dues/:id/pay`
 - `POST /api/requests`
@@ -46,10 +48,15 @@ Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `da
 
 PostgreSQL geçiş şeması `db/schema.sql` dosyasındadır.
 
+## Demo Kullanıcıları
+
+- Yönetici: `admin@apartai.local` / `demo123`
+- Sakin: `ayse@example.com` / `demo123`
+
 ## Sonraki Teknik Adımlar
 
 1. JSON dosya deposunu PostgreSQL repository katmanıyla değiştir.
-2. Kimlik doğrulama ve sakin-yönetici yetkilendirmesini bağla.
+2. Demo auth akışını gerçek session/JWT ve parola hash altyapısına taşı.
 3. AI yardımcılarını gerçek model çağrılarına taşı.
 4. Pilot siteler için Excel içeri aktarma ekle.
 5. Fotoğraf yükleme için S3 uyumlu storage bağla.

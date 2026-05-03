@@ -27,7 +27,7 @@ async function ensureDataFile() {
 
 async function readData() {
   await ensureDataFile();
-  return JSON.parse(await fs.readFile(DATA_FILE, "utf8"));
+  return normalizeData(JSON.parse(await fs.readFile(DATA_FILE, "utf8")));
 }
 
 async function writeData(data) {
@@ -73,6 +73,44 @@ function clean(value) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeData(data) {
+  if (!Array.isArray(data.users)) {
+    data.users = [
+      {
+        id: "user-admin-1",
+        name: "Ömer Faruk Baysal",
+        email: "admin@apartai.local",
+        phone: "05xx 000 00 00",
+        role: "admin",
+        password: "demo123",
+      },
+      ...data.residents.slice(0, 2).map((resident, index) => ({
+        id: `user-resident-${index + 1}`,
+        name: resident.name,
+        email: resident.email,
+        phone: resident.phone,
+        role: "resident",
+        residentId: resident.id,
+        password: "demo123",
+      })),
+    ];
+  }
+  return data;
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  const { password, ...safeUser } = user;
+  return safeUser;
+}
+
+function publicData(data) {
+  return {
+    ...data,
+    users: data.users.map(publicUser),
+  };
 }
 
 function analyzeComplaint(data, text) {
@@ -123,8 +161,58 @@ async function routeApi(req, res, url) {
   const data = await readData();
   const method = req.method;
 
+  if (method === "POST" && url.pathname === "/api/auth/login") {
+    const body = await readBody(req);
+    const email = clean(body.email).toLocaleLowerCase("tr-TR");
+    const password = clean(body.password);
+    const user = data.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email && item.password === password);
+    if (!user) {
+      json(res, 401, { error: "E-posta veya şifre hatalı" });
+      return;
+    }
+    json(res, 200, { user: publicUser(user), data: publicData(data) });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/auth/register") {
+    const body = await readBody(req);
+    const email = clean(body.email).toLocaleLowerCase("tr-TR");
+    if (data.users.some((item) => item.email.toLocaleLowerCase("tr-TR") === email)) {
+      json(res, 409, { error: "Bu e-posta ile kayıtlı kullanıcı var" });
+      return;
+    }
+    const resident = {
+      id: uid("resident"),
+      name: clean(body.name),
+      phone: clean(body.phone),
+      email,
+    };
+    const apartment = {
+      id: uid("apt"),
+      blockId: clean(body.blockId || data.blocks[0]?.id),
+      no: clean(body.apartmentNo),
+      floor: Number(body.floor || 1),
+      residentId: resident.id,
+    };
+    const user = {
+      id: uid("user"),
+      name: resident.name,
+      email,
+      phone: resident.phone,
+      role: "resident",
+      residentId: resident.id,
+      password: clean(body.password || "demo123"),
+    };
+    data.residents.push(resident);
+    data.apartments.push(apartment);
+    data.users.push(user);
+    await writeData(data);
+    json(res, 201, { user: publicUser(user), data: publicData(data) });
+    return;
+  }
+
   if (method === "GET" && url.pathname === "/api/state") {
-    json(res, 200, data);
+    json(res, 200, publicData(data));
     return;
   }
 
@@ -139,7 +227,7 @@ async function routeApi(req, res, url) {
       .map((apartment) => ({ id: uid("due"), apartmentId: apartment.id, period, amount, dueDate, status: "pending" }));
     data.dues.push(...newDues);
     await writeData(data);
-    json(res, 201, { created: newDues.length, data });
+    json(res, 201, { created: newDues.length, data: publicData(data) });
     return;
   }
 
@@ -161,7 +249,7 @@ async function routeApi(req, res, url) {
       note: "Yönetici tarafından işlendi",
     });
     await writeData(data);
-    json(res, 200, data);
+    json(res, 200, publicData(data));
     return;
   }
 
@@ -186,7 +274,7 @@ async function routeApi(req, res, url) {
     };
     data.requests.push(request);
     await writeData(data);
-    json(res, 201, { request, analysis, data });
+    json(res, 201, { request, analysis, data: publicData(data) });
     return;
   }
 
@@ -201,7 +289,7 @@ async function routeApi(req, res, url) {
     request.status = clean(body.status);
     if (request.status === "cozuldu") request.resolvedAt = today();
     await writeData(data);
-    json(res, 200, data);
+    json(res, 200, publicData(data));
     return;
   }
 
@@ -218,7 +306,7 @@ async function routeApi(req, res, url) {
     };
     data.announcements.push(announcement);
     await writeData(data);
-    json(res, 201, { announcement, data });
+    json(res, 201, { announcement, data: publicData(data) });
     return;
   }
 
@@ -237,16 +325,25 @@ async function routeApi(req, res, url) {
       floor: Number(body.floor),
       residentId: resident.id,
     };
+    data.users.push({
+      id: uid("user"),
+      name: resident.name,
+      phone: resident.phone,
+      email: resident.email,
+      role: "resident",
+      residentId: resident.id,
+      password: "demo123",
+    });
     data.residents.push(resident);
     data.apartments.push(apartment);
     await writeData(data);
-    json(res, 201, { resident, apartment, data });
+    json(res, 201, { resident, apartment, data: publicData(data) });
     return;
   }
 
   if (method === "POST" && url.pathname === "/api/reset") {
     await fs.copyFile(SEED_FILE, DATA_FILE);
-    json(res, 200, await readData());
+    json(res, 200, publicData(await readData()));
     return;
   }
 
