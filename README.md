@@ -62,10 +62,12 @@ Gemini API ile çalıştırmak için `.env` dosyasını doldur:
 AI_PROVIDER=gemini
 GEMINI_API_KEY="AIza..."
 GEMINI_MODEL=gemini-2.5-flash
+AI_DEBUG=true
 node server.js
 ```
 
 `.env.example` dosyası örnek ayarları içerir. `GEMINI_API_KEY` yoksa sistem otomatik olarak kural tabanlı Demo AI fallback akışını kullanır. OpenAI hattı yedek/provider seçeneği olarak korunur.
+AI sorunlarını key göstermeden incelemek için `GET /api/ai/debug` endpoint'i son AI denemelerini, HTTP status ve fallback sebebini döndürür.
 
 Ardından tarayıcıda:
 
@@ -79,6 +81,7 @@ Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `da
 
 - `GET /api/state`
 - `GET /api/ai/status`
+- `GET /api/ai/debug`
 - `POST /api/auth/login`
 - `POST /api/auth/register`
 - `POST /api/dues/bulk`

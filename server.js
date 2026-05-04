@@ -15,6 +15,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-nano";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const AI_PROVIDER = (process.env.AI_PROVIDER || (GEMINI_API_KEY ? "gemini" : "openai")).toLocaleLowerCase("en-US");
+const AI_DEBUG = ["1", "true", "yes"].includes(String(process.env.AI_DEBUG || "").toLocaleLowerCase("en-US"));
+const MAX_AI_DEBUG_EVENTS = 20;
+const aiDebugEvents = [];
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -107,6 +110,33 @@ function aiStatus() {
     provider: AI_PROVIDER,
     model: AI_PROVIDER === "gemini" ? GEMINI_MODEL : OPENAI_MODEL,
     fallbackAvailable: true,
+  };
+}
+
+function recordAiAttempt(event) {
+  const safeEvent = {
+    time: new Date().toISOString(),
+    ...event,
+  };
+  aiDebugEvents.unshift(safeEvent);
+  aiDebugEvents.splice(MAX_AI_DEBUG_EVENTS);
+  if (AI_DEBUG) {
+    console.log(`[ai-debug] ${JSON.stringify(safeEvent)}`);
+  }
+}
+
+function aiDebugSnapshot() {
+  return {
+    status: aiStatus(),
+    env: {
+      aiProvider: AI_PROVIDER,
+      geminiModel: GEMINI_MODEL,
+      geminiKeyPresent: Boolean(GEMINI_API_KEY),
+      openaiModel: OPENAI_MODEL,
+      openaiKeyPresent: Boolean(OPENAI_API_KEY),
+      aiDebug: AI_DEBUG,
+    },
+    lastAttempts: aiDebugEvents,
   };
 }
 
@@ -210,10 +240,21 @@ function fallbackPaymentReminder({ resident, due }) {
   return greeting + " " + due.period + " dönemine ait " + due.amount + " TL tutarındaki aidat borcunuz " + statusNote + " ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.";
 }
 
-async function callOpenAIJson({ instructions, input, fallback }) {
-  if (!OPENAI_API_KEY) return withAiMeta(fallback, true);
+async function callOpenAIJson({ instructions, input, fallback, operation = "unknown" }) {
+  if (!OPENAI_API_KEY) {
+    recordAiAttempt({
+      operation,
+      provider: "openai",
+      model: OPENAI_MODEL,
+      ok: false,
+      fallbackUsed: true,
+      fallbackReason: "missing_api_key",
+    });
+    return withAiMeta(fallback, true);
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
+  let recordedFailure = false;
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -231,24 +272,67 @@ async function callOpenAIJson({ instructions, input, fallback }) {
       }),
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`OpenAI ${response.status}`);
+    if (!response.ok) {
+      recordAiAttempt({
+        operation,
+        provider: "openai",
+        model: OPENAI_MODEL,
+        ok: false,
+        httpStatus: response.status,
+        fallbackUsed: true,
+        fallbackReason: "http_error",
+      });
+      recordedFailure = true;
+      throw new Error(`OpenAI ${response.status}`);
+    }
     const payload = await response.json();
     const outputText =
       payload.output_text ||
       payload.output?.flatMap((item) => item.content || [])?.find((item) => item.type === "output_text")?.text;
     const parsed = JSON.parse(outputText || "{}");
+    recordAiAttempt({
+      operation,
+      provider: "openai",
+      model: OPENAI_MODEL,
+      ok: true,
+      httpStatus: response.status,
+      fallbackUsed: false,
+    });
     return withAiMeta({ ...fallback, ...parsed }, false, "openai", OPENAI_MODEL);
-  } catch {
+  } catch (error) {
+    if (!recordedFailure) {
+      recordAiAttempt({
+        operation,
+        provider: "openai",
+        model: OPENAI_MODEL,
+        ok: false,
+        fallbackUsed: true,
+        fallbackReason: error.name === "AbortError" ? "timeout" : "parse_or_network_error",
+        errorName: error.name,
+        errorMessage: error.message,
+      });
+    }
     return withAiMeta(fallback, true);
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function callGeminiJson({ instructions, input, fallback }) {
-  if (!GEMINI_API_KEY) return withAiMeta(fallback, true);
+async function callGeminiJson({ instructions, input, fallback, operation = "unknown" }) {
+  if (!GEMINI_API_KEY) {
+    recordAiAttempt({
+      operation,
+      provider: "gemini",
+      model: GEMINI_MODEL,
+      ok: false,
+      fallbackUsed: true,
+      fallbackReason: "missing_api_key",
+    });
+    return withAiMeta(fallback, true);
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
+  let recordedFailure = false;
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
       method: "POST",
@@ -271,12 +355,52 @@ async function callGeminiJson({ instructions, input, fallback }) {
       }),
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Gemini ${response.status}`);
+    if (!response.ok) {
+      let errorBody = "";
+      try {
+        errorBody = (await response.text()).slice(0, 500);
+      } catch {
+        errorBody = "";
+      }
+      recordAiAttempt({
+        operation,
+        provider: "gemini",
+        model: GEMINI_MODEL,
+        ok: false,
+        httpStatus: response.status,
+        fallbackUsed: true,
+        fallbackReason: "http_error",
+        errorBody,
+      });
+      recordedFailure = true;
+      throw new Error(`Gemini ${response.status}`);
+    }
     const payload = await response.json();
     const outputText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
     const parsed = JSON.parse(outputText || "{}");
+    recordAiAttempt({
+      operation,
+      provider: "gemini",
+      model: GEMINI_MODEL,
+      ok: true,
+      httpStatus: response.status,
+      fallbackUsed: false,
+      outputPreview: outputText ? outputText.slice(0, 180) : "",
+    });
     return withAiMeta({ ...fallback, ...parsed }, false, "gemini", GEMINI_MODEL);
-  } catch {
+  } catch (error) {
+    if (!recordedFailure) {
+      recordAiAttempt({
+        operation,
+        provider: "gemini",
+        model: GEMINI_MODEL,
+        ok: false,
+        fallbackUsed: true,
+        fallbackReason: error.name === "AbortError" ? "timeout" : "parse_or_network_error",
+        errorName: error.name,
+        errorMessage: error.message,
+      });
+    }
     return withAiMeta(fallback, true);
   } finally {
     clearTimeout(timeout);
@@ -291,6 +415,7 @@ async function callAIJson(options) {
 async function analyzeComplaintWithAI({ data, title, description }) {
   const fallback = analyzeComplaint(data, `${title}. ${description}`);
   return callAIJson({
+    operation: "analyze_complaint",
     fallback,
     instructions:
       "ApartAI için Türkçe apartman/site talebini analiz et. Sadece JSON döndür. Alanlar: category, urgency, location, summary, action. category şu değerlerden biri olmalı: Temizlik, Güvenlik, Asansör, Su ve tesisat, Elektrik, Otopark, Gürültü, Peyzaj, Diğer. urgency: Düşük, Orta veya Yüksek. summary kısa olsun. action yöneticiye uygulanabilir aksiyon olsun.",
@@ -305,6 +430,7 @@ async function analyzeComplaintWithAI({ data, title, description }) {
 
 async function improveAnnouncementWithAI({ content, tone }) {
   return callAIJson({
+    operation: "improve_announcement",
     fallback: { content: improveAnnouncement(content, tone) },
     instructions:
       "ApartAI yöneticisinin duyuru metnini Türkçe olarak iyileştir. Sadece JSON döndür. Alan: content. Ton isteğine uy; metin sakin, profesyonel ve apartman/site sakinlerine uygun olsun.",
@@ -314,6 +440,7 @@ async function improveAnnouncementWithAI({ content, tone }) {
 
 async function draftPaymentReminderWithAI({ resident, apartment, due }) {
   return callAIJson({
+    operation: "draft_payment_reminder",
     fallback: { content: fallbackPaymentReminder({ resident, apartment, due }) },
     instructions:
       "ApartAI için Türkçe, kibar ve net aidat ödeme hatırlatma metni yaz. Sadece JSON döndür. Alan: content. Yasal tehdit veya sert ifade kullanma.",
@@ -389,6 +516,11 @@ async function routeApi(req, res, url) {
 
   if (method === "GET" && url.pathname === "/api/ai/status") {
     json(res, 200, aiStatus());
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/ai/debug") {
+    json(res, 200, aiDebugSnapshot());
     return;
   }
 
