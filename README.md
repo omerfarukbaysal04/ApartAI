@@ -9,8 +9,8 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - Aidat oluşturma ve manuel ödeme takibi
 - Arıza/şikayet talep yönetimi
 - Sakin mobil web ekranı
-- AI şikayet analizi simülasyonu
-- AI duyuru metni iyileştirme simülasyonu
+- Gemini/OpenAI destekli AI şikayet analizi ve kural tabanlı fallback
+- Gemini/OpenAI destekli AI duyuru metni iyileştirme ve aidat hatırlatma taslağı
 - Aylık yönetici özeti
 
 ## Yapılanlar
@@ -30,6 +30,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] Kural tabanlı AI simülasyonları eklendi.
 - [x] OpenAI API entegrasyonu için gerçek AI/fallback servis katmanı eklendi.
 - [x] Gemini 2.5 Flash provider ayarları ve marka logoları eklendi.
+- [x] AI debug endpoint'i, terminal logları ve Gemini geçici hata retry akışı eklendi.
 - [x] Rapor ekranı aylık özet, blok yoğunluğu ve pilot metrikleriyle geliştirildi.
 - [x] PostgreSQL geçiş şeması taslağı eklendi.
 
