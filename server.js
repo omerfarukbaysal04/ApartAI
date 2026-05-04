@@ -1,14 +1,20 @@
 const http = require("node:http");
+const fsSync = require("node:fs");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
+const ENV_FILE = path.join(ROOT, ".env");
 const DATA_DIR = path.join(ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
 const SEED_FILE = path.join(DATA_DIR, "seed.json");
+loadEnvFile();
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-nano";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const AI_PROVIDER = (process.env.AI_PROVIDER || (GEMINI_API_KEY ? "gemini" : "openai")).toLocaleLowerCase("en-US");
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -16,6 +22,23 @@ const contentTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
 };
+
+function loadEnvFile() {
+  if (!fsSync.existsSync(ENV_FILE)) return;
+  const lines = fsSync.readFileSync(ENV_FILE, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const rawValue = trimmed.slice(separator + 1).trim();
+    const value = rawValue.replace(/^['"]|['"]$/g, "");
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
 
 async function ensureDataFile() {
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -78,9 +101,11 @@ function today() {
 }
 
 function aiStatus() {
+  const enabled = AI_PROVIDER === "gemini" ? Boolean(GEMINI_API_KEY) : Boolean(OPENAI_API_KEY);
   return {
-    enabled: Boolean(OPENAI_API_KEY),
-    model: OPENAI_MODEL,
+    enabled,
+    provider: AI_PROVIDER,
+    model: AI_PROVIDER === "gemini" ? GEMINI_MODEL : OPENAI_MODEL,
     fallbackAvailable: true,
   };
 }
@@ -149,8 +174,8 @@ function analyzeComplaint(data, text) {
     category,
     urgency,
     location,
-    summary: text.length > 120 ? `${text.slice(0, 117)}...` : text,
-    action: `${category} konusu için ilgili kontrol/servis kaydı açılmalı.`,
+    summary: text.length > 120 ? text.slice(0, 117) + "..." : text,
+    action: category + " konusu için ilgili kontrol/servis kaydı açılmalı.",
     similar,
   };
 }
@@ -167,22 +192,22 @@ function improveAnnouncement(content, tone) {
     "UyarÄ± niteliÄŸinde": "Önemli hatırlatma:",
   };
   const closing = tone === "Kısa" || tone === "KÄ±sa" ? "" : " Anlayışınız ve iş birliğiniz için teşekkür ederiz.";
-  return `${openings[tone] ?? openings.Kibar} ${clean(content)}${closing}`;
+  return (openings[tone] ?? openings.Kibar) + " " + clean(content) + closing;
 }
 
-function withAiMeta(result, fallbackUsed) {
+function withAiMeta(result, fallbackUsed, provider = "rules", model = "fallback") {
   return {
     ...result,
-    provider: fallbackUsed ? "rules" : "openai",
-    model: fallbackUsed ? "fallback" : OPENAI_MODEL,
+    provider: fallbackUsed ? "rules" : provider,
+    model: fallbackUsed ? "fallback" : model,
     fallbackUsed,
   };
 }
 
 function fallbackPaymentReminder({ resident, due }) {
-  const greeting = resident?.name ? `Sayın ${resident.name},` : "Değerli sakinimiz,";
+  const greeting = resident?.name ? "Sayın " + resident.name + "," : "Değerli sakinimiz,";
   const statusNote = due.status === "overdue" ? "son ödeme tarihi geçtiği için" : "son ödeme tarihi yaklaşan";
-  return `${greeting} ${due.period} dönemine ait ${due.amount} TL tutarındaki aidat borcunuz ${statusNote} ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.`;
+  return greeting + " " + due.period + " dönemine ait " + due.amount + " TL tutarındaki aidat borcunuz " + statusNote + " ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.";
 }
 
 async function callOpenAIJson({ instructions, input, fallback }) {
@@ -212,7 +237,7 @@ async function callOpenAIJson({ instructions, input, fallback }) {
       payload.output_text ||
       payload.output?.flatMap((item) => item.content || [])?.find((item) => item.type === "output_text")?.text;
     const parsed = JSON.parse(outputText || "{}");
-    return withAiMeta({ ...fallback, ...parsed }, false);
+    return withAiMeta({ ...fallback, ...parsed }, false, "openai", OPENAI_MODEL);
   } catch {
     return withAiMeta(fallback, true);
   } finally {
@@ -220,9 +245,52 @@ async function callOpenAIJson({ instructions, input, fallback }) {
   }
 }
 
+async function callGeminiJson({ instructions, input, fallback }) {
+  if (!GEMINI_API_KEY) return withAiMeta(fallback, true);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: instructions }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: JSON.stringify(input) }],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Gemini ${response.status}`);
+    const payload = await response.json();
+    const outputText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
+    const parsed = JSON.parse(outputText || "{}");
+    return withAiMeta({ ...fallback, ...parsed }, false, "gemini", GEMINI_MODEL);
+  } catch {
+    return withAiMeta(fallback, true);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callAIJson(options) {
+  if (AI_PROVIDER === "gemini") return callGeminiJson(options);
+  return callOpenAIJson(options);
+}
+
 async function analyzeComplaintWithAI({ data, title, description }) {
   const fallback = analyzeComplaint(data, `${title}. ${description}`);
-  return callOpenAIJson({
+  return callAIJson({
     fallback,
     instructions:
       "ApartAI için Türkçe apartman/site talebini analiz et. Sadece JSON döndür. Alanlar: category, urgency, location, summary, action. category şu değerlerden biri olmalı: Temizlik, Güvenlik, Asansör, Su ve tesisat, Elektrik, Otopark, Gürültü, Peyzaj, Diğer. urgency: Düşük, Orta veya Yüksek. summary kısa olsun. action yöneticiye uygulanabilir aksiyon olsun.",
@@ -236,7 +304,7 @@ async function analyzeComplaintWithAI({ data, title, description }) {
 }
 
 async function improveAnnouncementWithAI({ content, tone }) {
-  return callOpenAIJson({
+  return callAIJson({
     fallback: { content: improveAnnouncement(content, tone) },
     instructions:
       "ApartAI yöneticisinin duyuru metnini Türkçe olarak iyileştir. Sadece JSON döndür. Alan: content. Ton isteğine uy; metin sakin, profesyonel ve apartman/site sakinlerine uygun olsun.",
@@ -245,7 +313,7 @@ async function improveAnnouncementWithAI({ content, tone }) {
 }
 
 async function draftPaymentReminderWithAI({ resident, apartment, due }) {
-  return callOpenAIJson({
+  return callAIJson({
     fallback: { content: fallbackPaymentReminder({ resident, apartment, due }) },
     instructions:
       "ApartAI için Türkçe, kibar ve net aidat ödeme hatırlatma metni yaz. Sadece JSON döndür. Alan: content. Yasal tehdit veya sert ifade kullanma.",

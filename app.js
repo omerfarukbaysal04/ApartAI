@@ -314,6 +314,10 @@ function aiBadge(item) {
     : `<span class="status warn">Demo AI</span>`;
 }
 
+function brandLogo(className = "brand-logo") {
+  return `<img class="${className}" src="assets/apartai-logo-transparent.png" alt="ApartAI" />`;
+}
+
 function requestStatusText(status) {
   return {
     yeni: "Yeni",
@@ -496,7 +500,7 @@ function render() {
     <div class="shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="mark">A</div>
+          ${brandLogo()}
           <div>
             <strong>ApartAI</strong>
             <span>AI destekli site yönetimi</span>
@@ -529,7 +533,7 @@ function authView() {
       <section class="auth-hero">
         <nav class="landing-nav">
           <div class="landing-brand">
-            <div class="mark">A</div>
+            ${brandLogo("landing-logo")}
             <div>
               <strong>ApartAI</strong>
               <span>AI destekli site yönetimi</span>
@@ -550,6 +554,7 @@ function authView() {
           </div>
         </div>
         <div class="auth-scene" aria-hidden="true">
+          <img class="hero-logo" src="assets/apartai-logo-wide.png" alt="" />
           <svg viewBox="0 0 620 430" role="img">
             <defs>
               <linearGradient id="towerGradient" x1="0" y1="0" x2="1" y2="1">
@@ -621,7 +626,7 @@ function authModalView(isLogin) {
       <section class="auth-card" onclick="event.stopPropagation()">
         <button class="modal-close" onclick="authModalOpen = false; render()" aria-label="Kapat">×</button>
         <div class="auth-card-head">
-          <div class="mark">A</div>
+          ${brandLogo("modal-logo")}
           <div>
             <strong>ApartAI'ye Hoş Geldin</strong>
             <span>Pilot paneline giriş yap veya yeni sakin hesabı oluştur.</span>

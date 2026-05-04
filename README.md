@@ -29,6 +29,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] Talep detay modalı, yönetici notu, durum güncelleme ve silme eklendi.
 - [x] Kural tabanlı AI simülasyonları eklendi.
 - [x] OpenAI API entegrasyonu için gerçek AI/fallback servis katmanı eklendi.
+- [x] Gemini 2.5 Flash provider ayarları ve marka logoları eklendi.
 - [x] Rapor ekranı aylık özet, blok yoğunluğu ve pilot metrikleriyle geliştirildi.
 - [x] PostgreSQL geçiş şeması taslağı eklendi.
 
@@ -55,15 +56,16 @@ Backend bağlantılı çalışma için:
 node server.js
 ```
 
-OpenAI API ile çalıştırmak için:
+Gemini API ile çalıştırmak için `.env` dosyasını doldur:
 
 ```powershell
-$env:OPENAI_API_KEY="sk-..."
-$env:OPENAI_MODEL="gpt-5.4-nano"
+AI_PROVIDER=gemini
+GEMINI_API_KEY="AIza..."
+GEMINI_MODEL=gemini-2.5-flash
 node server.js
 ```
 
-`OPENAI_API_KEY` yoksa sistem otomatik olarak kural tabanlı Demo AI fallback akışını kullanır.
+`.env.example` dosyası örnek ayarları içerir. `GEMINI_API_KEY` yoksa sistem otomatik olarak kural tabanlı Demo AI fallback akışını kullanır. OpenAI hattı yedek/provider seçeneği olarak korunur.
 
 Ardından tarayıcıda:
 
