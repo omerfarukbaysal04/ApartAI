@@ -103,6 +103,10 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function aiStatus() {
   const enabled = AI_PROVIDER === "gemini" ? Boolean(GEMINI_API_KEY) : Boolean(OPENAI_API_KEY);
   return {
@@ -331,63 +335,81 @@ async function callGeminiJson({ instructions, input, fallback, operation = "unkn
     return withAiMeta(fallback, true);
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 18000);
   let recordedFailure = false;
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
+    const requestBody = JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: instructions }],
       },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: instructions }],
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: JSON.stringify(input) }],
         },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: JSON.stringify(input) }],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-        },
-      }),
-      signal: controller.signal,
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
     });
-    if (!response.ok) {
-      let errorBody = "";
-      try {
-        errorBody = (await response.text()).slice(0, 500);
-      } catch {
-        errorBody = "";
+    const retryableStatuses = new Set([429, 500, 502, 503, 504]);
+    let lastHttpError = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: requestBody,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let errorBody = "";
+        try {
+          errorBody = (await response.text()).slice(0, 500);
+        } catch {
+          errorBody = "";
+        }
+        lastHttpError = new Error(`Gemini ${response.status}`);
+        const willRetry = retryableStatuses.has(response.status) && attempt < 3;
+        recordAiAttempt({
+          operation,
+          provider: "gemini",
+          model: GEMINI_MODEL,
+          ok: false,
+          attempt,
+          httpStatus: response.status,
+          fallbackUsed: !willRetry,
+          retrying: willRetry,
+          fallbackReason: willRetry ? "retryable_http_error" : "http_error",
+          errorBody,
+        });
+        if (willRetry) {
+          await delay(450 * attempt);
+          continue;
+        }
+        recordedFailure = true;
+        throw lastHttpError;
       }
+      const payload = await response.json();
+      const outputText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
+      const parsed = JSON.parse(outputText || "{}");
       recordAiAttempt({
         operation,
         provider: "gemini",
         model: GEMINI_MODEL,
-        ok: false,
+        ok: true,
+        attempt,
         httpStatus: response.status,
-        fallbackUsed: true,
-        fallbackReason: "http_error",
-        errorBody,
+        fallbackUsed: false,
+        outputPreview: outputText ? outputText.slice(0, 180) : "",
       });
-      recordedFailure = true;
-      throw new Error(`Gemini ${response.status}`);
+      return withAiMeta({ ...fallback, ...parsed }, false, "gemini", GEMINI_MODEL);
     }
-    const payload = await response.json();
-    const outputText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
-    const parsed = JSON.parse(outputText || "{}");
-    recordAiAttempt({
-      operation,
-      provider: "gemini",
-      model: GEMINI_MODEL,
-      ok: true,
-      httpStatus: response.status,
-      fallbackUsed: false,
-      outputPreview: outputText ? outputText.slice(0, 180) : "",
-    });
-    return withAiMeta({ ...fallback, ...parsed }, false, "gemini", GEMINI_MODEL);
+
+    recordedFailure = true;
+    throw lastHttpError || new Error("Gemini retry loop ended without response");
   } catch (error) {
     if (!recordedFailure) {
       recordAiAttempt({

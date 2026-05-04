@@ -68,6 +68,7 @@ node server.js
 
 `.env.example` dosyası örnek ayarları içerir. `GEMINI_API_KEY` yoksa sistem otomatik olarak kural tabanlı Demo AI fallback akışını kullanır. OpenAI hattı yedek/provider seçeneği olarak korunur.
 AI sorunlarını key göstermeden incelemek için `GET /api/ai/debug` endpoint'i son AI denemelerini, HTTP status ve fallback sebebini döndürür.
+Gemini tarafında `429/500/502/503/504` gibi geçici hatalar alınırsa istek kısa aralıklarla 3 kez denenir.
 
 Ardından tarayıcıda:
 
