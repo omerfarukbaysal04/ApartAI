@@ -2,14 +2,18 @@ const http = require("node:http");
 const fsSync = require("node:fs");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const crypto = require("node:crypto");
+const { createRepository } = require("./db/repository");
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
 const ENV_FILE = path.join(ROOT, ".env");
 const DATA_DIR = path.join(ROOT, "data");
-const DATA_FILE = path.join(DATA_DIR, "db.json");
-const SEED_FILE = path.join(DATA_DIR, "seed.json");
+const SECRET_FILE = path.join(DATA_DIR, ".auth_secret");
 loadEnvFile();
+const repository = createRepository();
+const AUTH_SECRET = resolveAuthSecret();
+const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL || 60 * 60 * 24 * 7);
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-nano";
@@ -43,23 +47,100 @@ function loadEnvFile() {
   }
 }
 
-async function ensureDataFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+function resolveAuthSecret() {
+  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
   try {
-    await fs.access(DATA_FILE);
+    if (fsSync.existsSync(SECRET_FILE)) {
+      const stored = fsSync.readFileSync(SECRET_FILE, "utf8").trim();
+      if (stored) return stored;
+    }
+    const generated = crypto.randomBytes(32).toString("hex");
+    fsSync.mkdirSync(DATA_DIR, { recursive: true });
+    fsSync.writeFileSync(SECRET_FILE, generated, { mode: 0o600 });
+    return generated;
   } catch {
-    const seed = await fs.readFile(SEED_FILE, "utf8");
-    await fs.writeFile(DATA_FILE, seed);
+    // Fallback to an ephemeral secret; tokens won't survive restarts.
+    return crypto.randomBytes(32).toString("hex");
   }
 }
 
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return `scrypt$${salt}$${derived}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored || typeof stored !== "string" || !stored.startsWith("scrypt$")) return false;
+  const [, salt, expected] = stored.split("$");
+  if (!salt || !expected) return false;
+  const derived = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  const derivedBuffer = Buffer.from(derived, "hex");
+  if (expectedBuffer.length !== derivedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, derivedBuffer);
+}
+
+function base64url(input) {
+  return Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function signToken(payload) {
+  const body = base64url(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }));
+  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(body).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${body}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== "string" || !token.includes(".")) return null;
+  const [body, signature] = token.split(".");
+  if (!body || !signature) return null;
+  const expected = crypto.createHmac("sha256", AUTH_SECRET).update(body).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const sigBuffer = Buffer.from(signature);
+  const expBuffer = Buffer.from(expected);
+  if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function bearerToken(req) {
+  const header = req.headers.authorization || "";
+  return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+}
+
+function authUserFromRequest(req, data) {
+  const payload = verifyToken(bearerToken(req));
+  if (!payload?.sub) return null;
+  return data.users.find((user) => user.id === payload.sub) || null;
+}
+
 async function readData() {
-  await ensureDataFile();
-  return normalizeData(JSON.parse(await fs.readFile(DATA_FILE, "utf8")));
+  const data = await repository.getState();
+  if (migratePasswords(data)) {
+    await writeData(data);
+  }
+  return data;
+}
+
+function migratePasswords(data) {
+  let changed = false;
+  for (const user of data.users) {
+    if (user.password) {
+      user.passwordHash = hashPassword(user.password);
+      delete user.password;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 async function writeData(data) {
-  await fs.writeFile(DATA_FILE, `${JSON.stringify(data, null, 2)}\n`);
+  await repository.saveState(data);
 }
 
 function uid(prefix) {
@@ -73,30 +154,56 @@ function json(res, status, payload) {
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let body = "";
+    const chunks = [];
+    let size = 0;
     req.on("data", (chunk) => {
-      body += chunk;
-      if (body.length > 3_000_000) {
+      chunks.push(chunk);
+      size += chunk.length;
+      if (size > 3_000_000) {
         req.destroy();
         reject(new Error("Request body too large"));
       }
     });
     req.on("end", () => {
-      if (!body) {
+      if (!size) {
         resolve({});
         return;
       }
+      // Buffer'ları birleştirip tek seferde UTF-8 olarak çöz; aksi halde çok
+      // baytlı karakterler chunk sınırında bölünüp bozulur (mojibake).
+      const body = Buffer.concat(chunks).toString("utf8");
       try {
         resolve(JSON.parse(body));
       } catch {
         reject(new Error("Invalid JSON"));
       }
     });
+    req.on("error", () => reject(new Error("Request stream error")));
   });
 }
 
 function clean(value) {
   return String(value ?? "").trim();
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isEmail(value) {
+  return EMAIL_RE.test(clean(value));
+}
+
+// Doğrulama hatası taşıyan, route'ların yakalayıp 400 döndürdüğü hata tipi.
+class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+function ensure(condition, message) {
+  if (!condition) throw new ValidationError(message);
 }
 
 function today() {
@@ -144,34 +251,9 @@ function aiDebugSnapshot() {
   };
 }
 
-function normalizeData(data) {
-  if (!Array.isArray(data.users)) {
-    data.users = [
-      {
-        id: "user-admin-1",
-        name: "Ömer Faruk Baysal",
-        email: "admin@apartai.local",
-        phone: "05xx 000 00 00",
-        role: "admin",
-        password: "demo123",
-      },
-      ...data.residents.slice(0, 2).map((resident, index) => ({
-        id: `user-resident-${index + 1}`,
-        name: resident.name,
-        email: resident.email,
-        phone: resident.phone,
-        role: "resident",
-        residentId: resident.id,
-        password: "demo123",
-      })),
-    ];
-  }
-  return data;
-}
-
 function publicUser(user) {
   if (!user) return null;
-  const { password, ...safeUser } = user;
+  const { password, passwordHash, ...safeUser } = user;
   return safeUser;
 }
 
@@ -185,23 +267,23 @@ function publicData(data) {
 function analyzeComplaint(data, text) {
   const lower = clean(text).toLocaleLowerCase("tr-TR");
   const rules = [
-    ["Asansör", ["asansör", "asansÃ¶r", "kabin", "bakım", "bakÄ±m"]],
-    ["Temizlik", ["çöp", "Ã§Ã¶p", "temizlik", "koku", "kirli", "pas pas"]],
-    ["Güvenlik", ["güvenlik", "gÃ¼venlik", "kapı", "kapÄ±", "kamera", "yabancı", "yabancÄ±"]],
-    ["Su ve tesisat", ["su", "tesisat", "kaçak", "kaÃ§ak", "gider", "musluk"]],
-    ["Elektrik", ["elektrik", "lamba", "ışık", "Ä±ÅŸÄ±k", "sigorta"]],
-    ["Otopark", ["otopark", "araç", "araÃ§", "park"]],
-    ["Gürültü", ["gürültü", "gÃ¼rÃ¼ltÃ¼", "ses", "rahatsız", "rahatsÄ±z"]],
-    ["Peyzaj", ["bahçe", "bahÃ§e", "peyzaj", "ağaç", "aÄŸaÃ§", "çim", "Ã§im"]],
+    ["Asansör", ["asansör", "kabin", "bakım"]],
+    ["Temizlik", ["çöp", "temizlik", "koku", "kirli", "pas pas"]],
+    ["Güvenlik", ["güvenlik", "kapı", "kamera", "yabancı"]],
+    ["Su ve tesisat", ["su", "tesisat", "kaçak", "gider", "musluk"]],
+    ["Elektrik", ["elektrik", "lamba", "ışık", "sigorta"]],
+    ["Otopark", ["otopark", "araç", "park"]],
+    ["Gürültü", ["gürültü", "ses", "rahatsız"]],
+    ["Peyzaj", ["bahçe", "peyzaj", "ağaç", "çim"]],
   ];
   const category = rules.find(([, words]) => words.some((word) => lower.includes(word)))?.[0] ?? "Diğer";
-  const urgency = ["acil", "tehlike", "patladı", "patladÄ±", "yangın", "yangÄ±n", "mahsur"].some((word) => lower.includes(word))
+  const urgency = ["acil", "tehlike", "patladı", "yangın", "mahsur"].some((word) => lower.includes(word))
     ? "Yüksek"
-    : ["iki gündür", "iki gÃ¼ndÃ¼r", "koku", "çalışmıyor", "Ã§alÄ±ÅŸmÄ±yor", "kaçak", "kaÃ§ak"].some((word) => lower.includes(word))
+    : ["iki gündür", "koku", "çalışmıyor", "kaçak"].some((word) => lower.includes(word))
       ? "Orta"
       : "Düşük";
   const block = data.blocks.find((item) => lower.includes(item.name.toLocaleLowerCase("tr-TR").replace(" blok", "")));
-  const location = block ? block.name : lower.includes("giriş") || lower.includes("giriÅŸ") ? "Giriş alanı" : "Belirtilmedi";
+  const location = block ? block.name : lower.includes("giriş") ? "Giriş alanı" : "Belirtilmedi";
   const similar = data.requests.filter((request) => request.category === category && request.location.includes(block?.name ?? "")).length;
 
   return {
@@ -219,13 +301,10 @@ function improveAnnouncement(content, tone) {
     "Resmi": "Değerli sakinlerimiz,",
     "Kibar": "Değerli komşularımız,",
     "Kısa": "Bilgilendirme:",
-    "KÄ±sa": "Bilgilendirme:",
     "Detaylı": "Değerli sakinlerimiz, aşağıdaki konu hakkında bilginize başvururuz:",
-    "DetaylÄ±": "Değerli sakinlerimiz, aşağıdaki konu hakkında bilginize başvururuz:",
     "Uyarı niteliğinde": "Önemli hatırlatma:",
-    "UyarÄ± niteliÄŸinde": "Önemli hatırlatma:",
   };
-  const closing = tone === "Kısa" || tone === "KÄ±sa" ? "" : " Anlayışınız ve iş birliğiniz için teşekkür ederiz.";
+  const closing = tone === "Kısa" ? "" : " Anlayışınız ve iş birliğiniz için teşekkür ederiz.";
   return (openings[tone] ?? openings.Kibar) + " " + clean(content) + closing;
 }
 
@@ -477,26 +556,60 @@ async function draftPaymentReminderWithAI({ resident, apartment, due }) {
   });
 }
 
+function routeAccess(method, pathname) {
+  const publicRoutes = [
+    ["POST", "/api/auth/login"],
+    ["POST", "/api/auth/register"],
+    ["GET", "/api/state"],
+    ["GET", "/api/ai/status"],
+  ];
+  if (publicRoutes.some(([m, p]) => m === method && p === pathname)) return "public";
+  // Any authenticated user (resident or admin) may open a request.
+  if (method === "POST" && pathname === "/api/requests") return "auth";
+  // Everything else that mutates data or exposes internals requires an admin.
+  return "admin";
+}
+
 async function routeApi(req, res, url) {
   const data = await readData();
   const method = req.method;
+
+  const access = routeAccess(method, url.pathname);
+  if (access !== "public") {
+    const authUser = authUserFromRequest(req, data);
+    if (!authUser) {
+      json(res, 401, { error: "Oturum gerekli, lütfen tekrar giriş yapın." });
+      return;
+    }
+    if (access === "admin" && authUser.role !== "admin") {
+      json(res, 403, { error: "Bu işlem için yönetici yetkisi gerekli." });
+      return;
+    }
+  }
 
   if (method === "POST" && url.pathname === "/api/auth/login") {
     const body = await readBody(req);
     const email = clean(body.email).toLocaleLowerCase("tr-TR");
     const password = clean(body.password);
-    const user = data.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email && item.password === password);
-    if (!user) {
+    ensure(email && password, "E-posta ve şifre zorunludur.");
+    const user = data.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email);
+    if (!user || !verifyPassword(password, user.passwordHash)) {
       json(res, 401, { error: "E-posta veya şifre hatalı" });
       return;
     }
-    json(res, 200, { user: publicUser(user), data: publicData(data) });
+    const token = signToken({ sub: user.id, role: user.role });
+    json(res, 200, { user: publicUser(user), token, data: publicData(data) });
     return;
   }
 
   if (method === "POST" && url.pathname === "/api/auth/register") {
     const body = await readBody(req);
     const email = clean(body.email).toLocaleLowerCase("tr-TR");
+    ensure(clean(body.name), "Ad soyad zorunludur.");
+    ensure(isEmail(email), "Geçerli bir e-posta adresi girin.");
+    ensure(clean(body.apartmentNo), "Daire numarası zorunludur.");
+    const password = clean(body.password) || "demo123";
+    ensure(password.length >= 6, "Şifre en az 6 karakter olmalıdır.");
     if (data.users.some((item) => item.email.toLocaleLowerCase("tr-TR") === email)) {
       json(res, 409, { error: "Bu e-posta ile kayıtlı kullanıcı var" });
       return;
@@ -521,13 +634,14 @@ async function routeApi(req, res, url) {
       phone: resident.phone,
       role: "resident",
       residentId: resident.id,
-      password: clean(body.password || "demo123"),
+      passwordHash: hashPassword(password),
     };
     data.residents.push(resident);
     data.apartments.push(apartment);
     data.users.push(user);
     await writeData(data);
-    json(res, 201, { user: publicUser(user), data: publicData(data) });
+    const token = signToken({ sub: user.id, role: user.role });
+    json(res, 201, { user: publicUser(user), token, data: publicData(data) });
     return;
   }
 
@@ -551,6 +665,9 @@ async function routeApi(req, res, url) {
     const period = clean(body.period);
     const amount = Number(body.amount);
     const dueDate = clean(body.dueDate);
+    ensure(PERIOD_RE.test(period), "Dönem YYYY-AA biçiminde olmalıdır (örn. 2026-06).");
+    ensure(Number.isFinite(amount) && amount > 0, "Aidat tutarı sıfırdan büyük olmalıdır.");
+    ensure(DATE_RE.test(dueDate), "Son ödeme tarihi YYYY-AA-GG biçiminde olmalıdır.");
     const existing = new Set(data.dues.filter((due) => due.period === period).map((due) => due.apartmentId));
     const newDues = data.apartments
       .filter((apartment) => !existing.has(apartment.id))
@@ -631,10 +748,14 @@ async function routeApi(req, res, url) {
     const body = await readBody(req);
     const title = clean(body.title);
     const description = clean(body.description);
+    const apartmentId = clean(body.apartmentId);
+    ensure(title, "Talep başlığı zorunludur.");
+    ensure(description, "Talep açıklaması zorunludur.");
+    ensure(data.apartments.some((apartment) => apartment.id === apartmentId), "Geçerli bir daire seçilmelidir.");
     const analysis = await analyzeComplaintWithAI({ data, title, description });
     const request = {
       id: uid("req"),
-      apartmentId: clean(body.apartmentId),
+      apartmentId,
       category: analysis.category,
       title,
       description,
@@ -704,6 +825,8 @@ async function routeApi(req, res, url) {
   if (method === "POST" && url.pathname === "/api/announcements") {
     const body = await readBody(req);
     const content = clean(body.content);
+    ensure(clean(body.title), "Duyuru başlığı zorunludur.");
+    ensure(content, "Duyuru içeriği zorunludur.");
     const improved = await improveAnnouncementWithAI({ content, tone: clean(body.tone) });
     const announcement = {
       id: uid("ann"),
@@ -724,17 +847,23 @@ async function routeApi(req, res, url) {
 
   if (method === "POST" && url.pathname === "/api/apartments") {
     const body = await readBody(req);
+    const blockId = clean(body.blockId);
+    const email = clean(body.email);
+    ensure(clean(body.residentName), "Sakin adı zorunludur.");
+    ensure(clean(body.no), "Daire numarası zorunludur.");
+    ensure(data.blocks.some((block) => block.id === blockId), "Geçerli bir blok seçilmelidir.");
+    ensure(!email || isEmail(email), "Geçerli bir e-posta adresi girin.");
     const resident = {
       id: uid("resident"),
       name: clean(body.residentName),
       phone: clean(body.phone),
-      email: clean(body.email),
+      email,
     };
     const apartment = {
       id: uid("apt"),
-      blockId: clean(body.blockId),
+      blockId,
       no: clean(body.no),
-      floor: Number(body.floor),
+      floor: Number(body.floor) || 1,
       residentId: resident.id,
     };
     data.users.push({
@@ -744,7 +873,7 @@ async function routeApi(req, res, url) {
       email: resident.email,
       role: "resident",
       residentId: resident.id,
-      password: "demo123",
+      passwordHash: hashPassword(clean(body.password) || "demo123"),
     });
     data.residents.push(resident);
     data.apartments.push(apartment);
@@ -754,7 +883,7 @@ async function routeApi(req, res, url) {
   }
 
   if (method === "POST" && url.pathname === "/api/reset") {
-    await fs.copyFile(SEED_FILE, DATA_FILE);
+    await repository.reset();
     json(res, 200, publicData(await readData()));
     return;
   }
@@ -792,10 +921,26 @@ const server = http.createServer(async (req, res) => {
     }
     await serveStatic(res, url);
   } catch (error) {
+    if (error instanceof ValidationError || error.message === "Invalid JSON") {
+      json(res, 400, { error: error.message });
+      return;
+    }
     json(res, 500, { error: error.message });
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`ApartAI MVP server: http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`ApartAI MVP server: http://localhost:${PORT}`);
+  });
+}
+
+module.exports = {
+  server,
+  hashPassword,
+  verifyPassword,
+  signToken,
+  verifyToken,
+  analyzeComplaint,
+  improveAnnouncement,
+};

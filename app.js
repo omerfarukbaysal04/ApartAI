@@ -1,6 +1,19 @@
 const STORAGE_KEY = "apartai-mvp-state-v1";
 const SESSION_KEY = "apartai-session-v1";
+const TOKEN_KEY = "apartai-token-v1";
 const API_BASE = location.protocol === "file:" ? "" : "/api";
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || "";
+}
+
+function setToken(token) {
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
 
 const seedState = {
   view: "dashboard",
@@ -165,10 +178,22 @@ function saveSession(user) {
 
 async function apiRequest(path, options = {}) {
   if (!API_BASE) return null;
+  const token = getToken();
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
     ...options,
   });
+  if (response.status === 401) {
+    setToken(null);
+    saveSession(null);
+    state.sessionUser = null;
+    render();
+    throw new Error("Oturum süresi doldu, lütfen tekrar giriş yapın.");
+  }
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "İstek başarısız oldu" }));
     throw new Error(error.error || "İstek başarısız oldu");
@@ -1359,10 +1384,13 @@ function loginUser(event) {
   const email = safeText(form.get("email"));
   const password = safeText(form.get("password"));
   if (API_BASE) {
-    apiRequest("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }).then((result) => {
-      state = { ...state, ...result.data };
-      applyLoggedInUser(result.user);
-    });
+    apiRequest("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) })
+      .then((result) => {
+        setToken(result.token);
+        state = { ...state, ...result.data };
+        applyLoggedInUser(result.user);
+      })
+      .catch((error) => alert(error.message));
     return;
   }
   const user = state.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email.toLocaleLowerCase("tr-TR"));
@@ -1388,10 +1416,13 @@ function registerResident(event) {
     password: safeText(form.get("password")),
   };
   if (API_BASE) {
-    apiRequest("/auth/register", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
-      state = { ...state, ...result.data };
-      applyLoggedInUser(result.user);
-    });
+    apiRequest("/auth/register", { method: "POST", body: JSON.stringify(payload) })
+      .then((result) => {
+        setToken(result.token);
+        state = { ...state, ...result.data };
+        applyLoggedInUser(result.user);
+      })
+      .catch((error) => alert(error.message));
     return;
   }
   const residentId = id("resident");
@@ -1404,6 +1435,7 @@ function registerResident(event) {
 }
 
 function logoutUser() {
+  setToken(null);
   saveSession(null);
   state.sessionUser = null;
   render();

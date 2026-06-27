@@ -33,19 +33,38 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] AI debug endpoint'i, terminal logları ve Gemini geçici hata retry akışı eklendi.
 - [x] Rapor ekranı aylık özet, blok yoğunluğu ve pilot metrikleriyle geliştirildi.
 - [x] PostgreSQL geçiş şeması taslağı eklendi.
+- [x] Gerçek auth: scrypt parola hash, imzalı token ve rol bazlı endpoint koruması eklendi.
+- [x] Veri erişimi repository katmanına alındı (JSON varsayılan, Postgres'e hazır).
+- [x] Encoding kök nedeni (chunk sınırı UTF-8 bozulması) düzeltildi ve input validasyonu eklendi.
+- [x] `node:test` ile sıfır bağımlılıklı API/birim test paketi eklendi.
 
-## Yapılacaklar
+## Yol Haritası
 
-- [ ] JSON dosya deposunu PostgreSQL repository katmanıyla değiştir.
-- [ ] Demo auth akışını gerçek session/JWT ve parola hash altyapısına taşı.
-- [ ] Fotoğraf analizini multimodal AI akışına taşı.
+### Faz 0 — Sağlamlaştırma (pilot öncesi şart)
+
+- [x] Demo auth akışını gerçek parola hash (scrypt) ve token/session altyapısına taşı, API uçlarını koru.
+- [x] Veri erişimini repository katmanına taşı (JSON varsayılan, `DB_DRIVER=postgres` ile Postgres'e hazır).
+- [x] Encoding (mojibake) kök nedenini çöz ve temel input validasyonu ekle.
+- [x] Test altyapısı ve kritik API uçları için smoke/regresyon testleri ekle.
+
+### Faz 1 — MVP'yi pilota hazırlama
+
+- [ ] Fotoğraf analizini multimodal AI (görsel + metin) akışına taşı.
 - [ ] MVP fotoğraf saklamasını S3 uyumlu dosya saklama altyapısına taşı.
-- [ ] Pilot siteler için Excel içeri aktarma ekle.
+- [ ] Pilot siteler için Excel içeri aktarma (toplu daire/sakin) ekle.
+- [ ] Site Sağlık Skoru'nu sunucuda hesaplayıp `site_health_scores` tablosuna kaydet (zaman serisi).
+
+### Faz 2 — Operasyonel derinlik
+
 - [ ] Duyuru okunma takibi ve bildirim geçmişi ekle.
 - [ ] SMS/e-posta bildirim entegrasyonu ekle.
+- [ ] Talep atama ve firma/taşeron takibi + çözüm süresi performansı ekle.
+
+### Faz 3+ — Entegrasyon ve akıllı yönetim katmanı
+
+- [ ] Yönetim firmaları için çoklu site görünümü ekle (`siteId` filtrelemesi).
 - [ ] Online ödeme veya banka hareketi içeri aktarma altyapısını planla.
-- [ ] Yönetim firmaları için çoklu site görünümü ekle.
-- [ ] Test altyapısı ve temel API/UI regresyon testleri ekle.
+- [ ] Karşılaştırmalı site skorları, tedarikçi performansı ve tahsilat tahmini ekle.
 
 ## Çalıştırma
 
@@ -79,38 +98,46 @@ http://localhost:4173
 
 Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `data/seed.json` üzerinden oluşturulur.
 
+## Test
+
+Sıfır bağımlılıklı test paketi Node'un yerleşik test çalıştırıcısını kullanır:
+
+```bash
+npm test
+# veya
+node --test
+```
+
+## Kimlik Doğrulama
+
+Parolalar `scrypt` ile hash'lenir; eski düz-metin parolalar ilk okumada otomatik migrate edilir. `POST /api/auth/login` ve `register` imzalı bir token döndürür; istemci bunu saklayıp her istekte `Authorization: Bearer <token>` başlığıyla gönderir. Mutasyon uçları token ister; yönetici işlemleri `admin` rolü gerektirir. Token imza anahtarı `AUTH_SECRET` env değişkeninden okunur; yoksa `data/.auth_secret` dosyasına üretilip kaydedilir.
+
 ## API
 
-- `GET /api/state`
-- `GET /api/ai/status`
-- `GET /api/ai/debug`
-- `POST /api/auth/login`
-- `POST /api/auth/register`
-- `POST /api/dues/bulk`
-- `POST /api/dues/:id/pay`
-- `POST /api/dues/:id/reminder-draft`
-- `POST /api/dues/:id/reminder`
-- `POST /api/requests`
-- `PATCH /api/requests/:id`
-- `DELETE /api/requests/:id`
-- `PATCH /api/requests/:id/status`
-- `POST /api/announcements`
-- `POST /api/apartments`
-- `POST /api/reset`
+Erişim: (genel) kimlik gerektirmez, (oturum) geçerli token gerekir, (admin) yönetici rolü gerekir.
+
+- `GET /api/state` (genel)
+- `GET /api/ai/status` (genel)
+- `GET /api/ai/debug` (admin)
+- `POST /api/auth/login` (genel)
+- `POST /api/auth/register` (genel)
+- `POST /api/dues/bulk` (admin)
+- `POST /api/dues/:id/pay` (admin)
+- `POST /api/dues/:id/reminder-draft` (admin)
+- `POST /api/dues/:id/reminder` (admin)
+- `POST /api/requests` (oturum)
+- `PATCH /api/requests/:id` (admin)
+- `DELETE /api/requests/:id` (admin)
+- `PATCH /api/requests/:id/status` (admin)
+- `POST /api/announcements` (admin)
+- `POST /api/apartments` (admin)
+- `POST /api/reset` (admin)
 
 ## Veritabanı
 
-PostgreSQL geçiş şeması `db/schema.sql` dosyasındadır.
+Veri erişimi `db/repository.js` içindeki repository katmanı arkasındadır. Varsayılan sürücü JSON dosyasıdır (`data/db.json`). PostgreSQL'e geçmek için `PostgresRepository` aynı arayüzle doldurulur ve `DB_DRIVER=postgres` ile devreye alınır. Geçiş şeması `db/schema.sql` dosyasındadır.
 
 ## Demo Kullanıcıları
 
 - Yönetici: `admin@apartai.local` / `demo123`
 - Sakin: `ayse@example.com` / `demo123`
-
-## Sonraki Teknik Adımlar
-
-1. JSON dosya deposunu PostgreSQL repository katmanıyla değiştir.
-2. Demo auth akışını gerçek session/JWT ve parola hash altyapısına taşı.
-3. Fotoğraf analizini gerçek model çağrılarına taşı.
-4. Pilot siteler için Excel içeri aktarma ekle.
-5. Fotoğraf yükleme için S3 uyumlu storage bağla.

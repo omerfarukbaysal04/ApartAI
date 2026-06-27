@@ -1,0 +1,13 @@
+{
+  "name": "apartai-mvp",
+  "version": "0.1.0",
+  "description": "ApartAI - AI destekli site yönetim asistanı MVP",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
