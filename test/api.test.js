@@ -10,8 +10,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 // Server modülü yüklenmeden ÖNCE ortam değişkenlerini ayarla.
-const TMP_DB = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "apartai-test-")), "db.json");
+const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "apartai-test-"));
+const TMP_DB = path.join(TMP_ROOT, "db.json");
 process.env.APARTAI_DB_FILE = TMP_DB;
+process.env.APARTAI_UPLOADS_DIR = path.join(TMP_ROOT, "uploads");
 process.env.AUTH_SECRET = "test-secret-do-not-use-in-prod";
 process.env.AI_PROVIDER = "rules";
 process.env.GEMINI_API_KEY = "";
@@ -29,7 +31,7 @@ test.before(async () => {
 test.after(() => {
   app.server.close();
   try {
-    fs.rmSync(path.dirname(TMP_DB), { recursive: true, force: true });
+    fs.rmSync(TMP_ROOT, { recursive: true, force: true });
   } catch {
     /* yok say */
   }
@@ -91,6 +93,20 @@ test("analyzeComplaint kategoriyi metinden çıkarır", () => {
   const data = { blocks: [{ name: "C Blok" }], requests: [] };
   const result = app.analyzeComplaint(data, "C blok girişinde çöp kokusu var");
   assert.equal(result.category, "Temizlik");
+});
+
+// --- Birim testleri: data URL ayrıştırma (multimodal) ---
+
+test("parseDataUrl geçerli görsel data URL'sini çözer", () => {
+  const parsed = app.parseDataUrl("data:image/png;base64,AAAA");
+  assert.equal(parsed.mimeType, "image/png");
+  assert.equal(parsed.base64, "AAAA");
+});
+
+test("parseDataUrl geçersiz girdide null döner", () => {
+  assert.equal(app.parseDataUrl(""), null);
+  assert.equal(app.parseDataUrl("https://example.com/a.png"), null);
+  assert.equal(app.parseDataUrl(undefined), null);
 });
 
 // --- Entegrasyon: kimlik doğrulama ---
@@ -171,4 +187,141 @@ test("Türkçe karakterli talep bozulmadan saklanır", async () => {
   assert.equal(res.status, 201);
   assert.equal(res.body.request.title, "Çöp ve gürültü şikayeti");
   assert.equal(res.body.request.category, "Temizlik");
+});
+
+test("fotoğraflı talep anahtar yokken fallback ile çalışır", async () => {
+  const login = await api("POST", "/api/auth/login", {
+    body: { email: "ayse@example.com", password: "demo123" },
+  });
+  const res = await api("POST", "/api/requests", {
+    token: login.body.token,
+    body: {
+      apartmentId: "apt-1",
+      title: "Asansör arızası",
+      description: "Asansör kabini katta takılı kaldı.",
+      photoDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.request.category, "Asansör");
+  // AI anahtarı yokken görsel analiz edilemez; bayrak false olmalı.
+  assert.equal(res.body.request.aiImageAnalyzed, false);
+});
+
+// --- Entegrasyon: dosya saklama (storage seam) ---
+
+test("fotoğraf storage'a yazılır ve /uploads üzerinden servis edilir", async () => {
+  const login = await api("POST", "/api/auth/login", {
+    body: { email: "ayse@example.com", password: "demo123" },
+  });
+  const res = await api("POST", "/api/requests", {
+    token: login.body.token,
+    body: {
+      apartmentId: "apt-1",
+      title: "Su kaçağı",
+      description: "Banyoda su kaçağı var.",
+      photoDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.match(res.body.request.photoUrl, /^\/uploads\/.+\.png$/);
+  // Yazılan görsel base64 olarak db'ye gömülmemeli.
+  assert.equal(res.body.request.photoDataUrl, undefined);
+  // Dosya gerçekten servis edilebilmeli.
+  const file = await fetch(`${baseUrl}${res.body.request.photoUrl}`);
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get("content-type"), "image/png");
+});
+
+test("veri dizinine statik erişim engellenir", async () => {
+  const res = await fetch(`${baseUrl}/data/db.json`);
+  assert.equal(res.status, 403);
+});
+
+// --- Site Sağlık Skoru (sunucu tarafı) ---
+
+test("calculateHealthScore 0-100 arası skor ve durum üretir", () => {
+  const data = {
+    dues: [{ status: "paid" }, { status: "overdue" }],
+    requests: [],
+    apartments: [{ id: "apt-1", blockId: "b1" }],
+    blocks: [{ id: "b1", name: "A Blok" }],
+    announcements: [],
+  };
+  const result = app.calculateHealthScore(data);
+  assert.ok(result.score >= 0 && result.score <= 100);
+  assert.ok(typeof result.status === "string");
+  assert.ok(Array.isArray(result.reasons) && result.reasons.length > 0);
+});
+
+test("GET /api/health-score mevcut skor ve geçmiş döndürür", async () => {
+  const token = await adminToken();
+  const res = await api("GET", "/api/health-score", { token });
+  assert.equal(res.status, 200);
+  assert.ok(Number.isInteger(res.body.current.score));
+  assert.ok(Array.isArray(res.body.history));
+});
+
+test("snapshot skor geçmişine kayıt ekler", async () => {
+  const token = await adminToken();
+  const before = await api("GET", "/api/health-score", { token });
+  const snap = await api("POST", "/api/health-score/snapshot", { token });
+  assert.equal(snap.status, 201);
+  assert.equal(snap.body.history.length, before.body.history.length + 1);
+  assert.equal(snap.body.snapshot.score, snap.body.current.score);
+});
+
+test("sakin snapshot oluşturamaz (403)", async () => {
+  const login = await api("POST", "/api/auth/login", {
+    body: { email: "ayse@example.com", password: "demo123" },
+  });
+  const res = await api("POST", "/api/health-score/snapshot", { token: login.body.token });
+  assert.equal(res.status, 403);
+});
+
+// --- CSV içeri aktarma ---
+
+test("parseApartmentCsv başlıkları kanonik alanlara eşler", () => {
+  const records = app.parseApartmentCsv("Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta\nD Blok,3,2,Ali Veli,0555,ali@example.com");
+  assert.equal(records.length, 1);
+  assert.equal(records[0].block, "D Blok");
+  assert.equal(records[0].no, "3");
+  assert.equal(records[0].name, "Ali Veli");
+  assert.equal(records[0].email, "ali@example.com");
+});
+
+test("parseCsvRows tırnaklı/gömülü virgüllü alanı çözer", () => {
+  const rows = app.parseCsvRows('a,"b,c",d');
+  assert.deepEqual(rows[0], ["a", "b,c", "d"]);
+});
+
+test("CSV import yeni blok ve daireleri oluşturur, mükerrer atlar", async () => {
+  const token = await adminToken();
+  const csv = [
+    "Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta",
+    "Z Blok,1,1,Zeynep Ak,0555 111,zeynep@example.com",
+    "Z Blok,2,1,Kaan Su,0555 222,kaan@example.com",
+    "A Blok,1,1,Mevcut Daire,0555,x@example.com", // A Blok/1 seed'de var -> atlanır
+  ].join("\n");
+  const res = await api("POST", "/api/apartments/import", { token, body: { csv } });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created, 2);
+  assert.equal(res.body.skipped, 1);
+  assert.equal(res.body.blocksCreated, 1);
+  assert.ok(res.body.data.blocks.some((b) => b.name === "Z Blok"));
+});
+
+test("CSV import geçersiz e-postayı hata olarak raporlar", async () => {
+  const token = await adminToken();
+  const csv = "Blok,Daire No,Ad Soyad,E-posta\nY Blok,5,Hatalı,bozuk-eposta";
+  const res = await api("POST", "/api/apartments/import", { token, body: { csv } });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created, 0);
+  assert.equal(res.body.errors.length, 1);
+});
+
+test("boş CSV 400 döndürür", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/apartments/import", { token, body: { csv: "" } });
+  assert.equal(res.status, 400);
 });

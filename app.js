@@ -332,6 +332,12 @@ function reminderTextForDue(due) {
   return `${greeting} ${due.period} dönemine ait ${money(due.amount)} tutarındaki aidat borcunuz ${statusNote} ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.`;
 }
 
+function requestPhotoSrc(request) {
+  // Yeni kayıtlar dosya URL'si (photoUrl), eski kayıtlar/localStorage modu
+  // gömülü base64 (photoDataUrl) tutabilir.
+  return request?.photoUrl || request?.photoDataUrl || "";
+}
+
 function aiBadge(item) {
   if (!item) return `<span class="status warn">Demo AI</span>`;
   return item.aiFallbackUsed === false || item.fallbackUsed === false
@@ -1038,7 +1044,7 @@ function requestsView() {
                 <td>${apartmentLabel(request.apartmentId)}</td>
                 <td>${request.category}</td>
                 <td><span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span></td>
-                <td>${request.aiSummary}<br>${aiBadge(request)}${request.photoDataUrl ? ` <span class="status info">Fotoğraflı</span>` : ""}</td>
+                <td>${request.aiSummary}<br>${aiBadge(request)}${requestPhotoSrc(request) ? ` <span class="status info">Fotoğraflı</span>` : ""}</td>
                 <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span></td>
                 <td>
                   <button class="btn" onclick="setState({ selectedRequestId: '${request.id}' })">Detay</button>
@@ -1073,8 +1079,8 @@ function requestDetailModal(request) {
               <p>${request.description}</p>
             </div>
             ${
-              request.photoDataUrl
-                ? `<figure class="attachment-preview"><img src="${request.photoDataUrl}" alt="Talep fotoğrafı" /><figcaption>Sakin tarafından eklenen fotoğraf</figcaption></figure>`
+              requestPhotoSrc(request)
+                ? `<figure class="attachment-preview"><img src="${requestPhotoSrc(request)}" alt="Talep fotoğrafı" /><figcaption>Sakin tarafından eklenen fotoğraf${request.aiImageAnalyzed ? ` <span class="status info">Görsel AI ile analiz edildi</span>` : ""}</figcaption></figure>`
                 : ""
             }
             <div class="ai-panel">
@@ -1164,6 +1170,17 @@ function setupView() {
           <label>E-posta<input name="email" type="email" /></label>
           <button class="btn primary" type="submit">Kaydı Ekle</button>
         </form>
+        ${
+          API_BASE
+            ? `<div class="section-header" style="margin-top:1.5rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
+              <p class="muted">Başlık: <code>Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta</code>. Olmayan bloklar otomatik oluşturulur, mevcut daireler atlanır.</p>
+              <form class="form-grid wide" onsubmit="importApartmentsCsv(event)">
+                <label class="full">CSV içeriği<textarea name="csv" rows="5" placeholder="Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta&#10;D Blok,3,2,Ali Veli,05xx,ali@example.com"></textarea></label>
+                <label>veya dosya seç<input name="csvFile" type="file" accept=".csv,text/csv" onchange="loadCsvFileIntoTextarea(this)" /></label>
+                <button class="btn primary" type="submit">İçeri Aktar</button>
+              </form>`
+            : ""
+        }
       </section>
       <section class="section">
         <div class="section-header"><h2>Mevcut Daireler</h2></div>
@@ -1258,7 +1275,30 @@ function reportsView() {
         </ul>
       </section>
     </div>
+    <section class="section">
+      <div class="section-header">
+        <h2>Site Sağlık Skoru Geçmişi</h2>
+        ${API_BASE ? `<button class="btn-primary" onclick="saveHealthSnapshot()">Skoru kaydet</button>` : ""}
+      </div>
+      ${
+        (state.healthScores || []).length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>Tarih</th><th>Skor</th><th>Durum</th></tr></thead>
+              <tbody>${state.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td>${item.score}</td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
+            </table></div>`
+          : `<p>Henüz kayıtlı skor anlık görüntüsü yok. "Skoru kaydet" ile bugünün skorunu geçmişe ekleyebilirsin.</p>`
+      }
+    </section>
   `;
+}
+
+function saveHealthSnapshot() {
+  if (!API_BASE) return;
+  apiRequest("/health-score/snapshot", { method: "POST" })
+    .then((result) => {
+      setState({ healthScores: result.history });
+    })
+    .catch((error) => alert(error.message));
 }
 
 function currentResident() {
@@ -1610,10 +1650,12 @@ function createApartment(event) {
     email: safeText(form.get("email")),
   };
   if (API_BASE) {
-    apiRequest("/apartments", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
-      event.target.reset();
-      applyServerData(result.data);
-    });
+    apiRequest("/apartments", { method: "POST", body: JSON.stringify(payload) })
+      .then((result) => {
+        event.target.reset();
+        applyServerData(result.data);
+      })
+      .catch((error) => alert(error.message));
     return;
   }
   const residentId = id("resident");
@@ -1629,6 +1671,36 @@ function createApartment(event) {
   saveState();
   event.target.reset();
   render();
+}
+
+function loadCsvFileIntoTextarea(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const textarea = input.closest("form")?.querySelector('textarea[name="csv"]');
+    if (textarea) textarea.value = String(reader.result || "");
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function importApartmentsCsv(event) {
+  event.preventDefault();
+  if (!API_BASE) return;
+  const form = new FormData(event.target);
+  const csv = String(form.get("csv") || "");
+  if (!csv.trim()) {
+    alert("Lütfen CSV içeriği yapıştırın veya bir dosya seçin.");
+    return;
+  }
+  apiRequest("/apartments/import", { method: "POST", body: JSON.stringify({ csv }) })
+    .then((result) => {
+      event.target.reset();
+      const errorNote = result.errors?.length ? `\nHatalar:\n- ${result.errors.join("\n- ")}` : "";
+      alert(`${result.created} kayıt eklendi, ${result.skipped} mükerrer atlandı, ${result.blocksCreated} yeni blok oluşturuldu.${errorNote}`);
+      applyServerData(result.data);
+    })
+    .catch((error) => alert(error.message));
 }
 
 async function createResidentRequest(event) {

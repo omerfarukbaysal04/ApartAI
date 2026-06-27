@@ -4,6 +4,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { createRepository } = require("./db/repository");
+const { createStorage } = require("./db/storage");
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
@@ -12,6 +13,7 @@ const DATA_DIR = path.join(ROOT, "data");
 const SECRET_FILE = path.join(DATA_DIR, ".auth_secret");
 loadEnvFile();
 const repository = createRepository();
+const storage = createStorage();
 const AUTH_SECRET = resolveAuthSecret();
 const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL || 60 * 60 * 24 * 7);
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -28,6 +30,12 @@ const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
 };
 
 function loadEnvFile() {
@@ -214,6 +222,87 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// "data:image/jpeg;base64,...." biçimindeki bir data URL'yi mimeType + base64
+// parçalarına ayırır. Geçersizse null döner (görselsiz akışa düşülür).
+function parseDataUrl(dataUrl) {
+  const match = /^data:([^;,]+);base64,(.+)$/s.exec(String(dataUrl || ""));
+  if (!match) return null;
+  return { mimeType: match[1], base64: match[2] };
+}
+
+// Bağımlılıksız CSV ayrıştırıcı: tırnaklı alan, gömülü virgül/yeni satır ve
+// "" ile kaçırılmış tırnak destekler. Satır dizisi (alan dizileri) döndürür.
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  const src = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== "" || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((cell) => clean(cell) !== ""));
+}
+
+// Başlık adını Türkçe/İngilizce eşanlamlılardan kanonik alana eşler.
+function mapCsvHeader(header) {
+  const key = clean(header).toLocaleLowerCase("tr-TR");
+  const aliases = {
+    block: ["blok", "block", "blok adı", "blok adi"],
+    no: ["daire", "daire_no", "daire no", "no", "kapı no", "kapi no"],
+    floor: ["kat", "floor"],
+    name: ["ad", "ad soyad", "sakin", "sakin_adi", "sakin adı", "isim", "name", "ad_soyad"],
+    phone: ["telefon", "tel", "phone", "gsm"],
+    email: ["eposta", "e-posta", "email", "mail", "e_posta"],
+  };
+  for (const [canonical, list] of Object.entries(aliases)) {
+    if (list.includes(key)) return canonical;
+  }
+  return null;
+}
+
+// CSV metnini { block, no, floor, name, phone, email } satır nesnelerine çevirir.
+function parseApartmentCsv(text) {
+  const rows = parseCsvRows(text);
+  if (!rows.length) return [];
+  const headers = rows[0].map(mapCsvHeader);
+  return rows.slice(1).map((cells) => {
+    const record = {};
+    headers.forEach((canonical, index) => {
+      if (canonical) record[canonical] = clean(cells[index]);
+    });
+    return record;
+  });
+}
+
 function aiStatus() {
   const enabled = AI_PROVIDER === "gemini" ? Boolean(GEMINI_API_KEY) : Boolean(OPENAI_API_KEY);
   return {
@@ -261,6 +350,72 @@ function publicData(data) {
   return {
     ...data,
     users: data.users.map(publicUser),
+  };
+}
+
+function daysBetween(start, end) {
+  return Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000));
+}
+
+function recurringIssues(data) {
+  const groups = {};
+  data.requests.forEach((request) => {
+    const apt = data.apartments.find((item) => item.id === request.apartmentId);
+    const block = data.blocks.find((item) => item.id === apt?.blockId);
+    const key = `${block?.name ?? "Genel"}-${request.category}`;
+    groups[key] = (groups[key] ?? 0) + 1;
+  });
+  return Object.entries(groups)
+    .filter(([, count]) => count > 1)
+    .map(([label, count]) => ({ label: label.replace("-", " / "), count }));
+}
+
+// Site Sağlık Skoru: dokümandaki ağırlıklar (ödeme %35, çözüm %25, şikayet %20,
+// tekrar %10, iletişim %10). İstemci ve sunucu aynı formülü kullanır.
+function calculateHealthScore(data) {
+  const totalDues = data.dues.length || 1;
+  const paidRatio = data.dues.filter((due) => due.status === "paid").length / totalDues;
+  const openRequests = data.requests.filter((request) => request.status !== "cozuldu" && request.status !== "reddedildi");
+  const resolved = data.requests.filter((request) => request.resolvedAt);
+  const avgResolutionDays = resolved.length
+    ? resolved.reduce((sum, request) => sum + daysBetween(request.createdAt, request.resolvedAt), 0) / resolved.length
+    : 2.5;
+  const complaintDensity = Math.min(data.requests.length / Math.max(data.apartments.length, 1), 1.4);
+  const recurring = recurringIssues(data);
+  const recurringRatio = recurring.length ? 0.35 : 0.08;
+  const communicationScore = Math.min(data.announcements.length / 4, 1);
+
+  const paymentScore = paidRatio * 35;
+  const resolutionScore = Math.max(0, 1 - avgResolutionDays / 10) * 25;
+  const complaintScore = Math.max(0, 1 - complaintDensity / 1.4) * 20;
+  const recurringScore = Math.max(0, 1 - recurringRatio) * 10;
+  const commScore = communicationScore * 10;
+  const score = Math.round(paymentScore + resolutionScore + complaintScore + recurringScore + commScore);
+
+  const reasons = [];
+  const actions = [];
+  if (paidRatio < 0.85) {
+    reasons.push(`Tahsilat oranı %${Math.round(paidRatio * 100)} seviyesinde.`);
+    actions.push("Gecikmedeki dairelere kibar ödeme hatırlatması gönder.");
+  }
+  if (openRequests.length > 0) {
+    reasons.push(`${openRequests.length} açık talep çözüm bekliyor.`);
+    actions.push("Yüksek aciliyetli talepleri bugün içinde durumlandır.");
+  }
+  if (recurring.length) {
+    reasons.push("Aynı blok ve kategoride tekrar eden talepler var.");
+    actions.push(`${recurring[0].label} için kalıcı çözüm kontrolü planla.`);
+  }
+  if (data.announcements.length < 2) {
+    reasons.push("Duyuru trafiği düşük, sakin bilgilendirmesi sınırlı.");
+    actions.push("Haftalık kısa yönetim bilgilendirmesi yayınla.");
+  }
+
+  return {
+    score,
+    status: score >= 90 ? "Çok iyi" : score >= 75 ? "İyi" : score >= 60 ? "Dikkat edilmeli" : score >= 40 ? "Riskli" : "Kritik",
+    reasons: reasons.length ? reasons : ["Operasyonel göstergeler dengeli ilerliyor."],
+    actions: actions.length ? actions : ["Mevcut takip ritmini koru ve ay sonunda raporu paylaş."],
   };
 }
 
@@ -323,13 +478,15 @@ function fallbackPaymentReminder({ resident, due }) {
   return greeting + " " + due.period + " dönemine ait " + due.amount + " TL tutarındaki aidat borcunuz " + statusNote + " ödeme beklemektedir. Uygun olduğunuzda ödemenizi tamamlamanızı rica ederiz. Teşekkürler.";
 }
 
-async function callOpenAIJson({ instructions, input, fallback, operation = "unknown" }) {
+async function callOpenAIJson({ instructions, input, fallback, operation = "unknown", image }) {
+  const photo = parseDataUrl(image);
   if (!OPENAI_API_KEY) {
     recordAiAttempt({
       operation,
       provider: "openai",
       model: OPENAI_MODEL,
       ok: false,
+      hasImage: Boolean(photo),
       fallbackUsed: true,
       fallbackReason: "missing_api_key",
     });
@@ -339,6 +496,12 @@ async function callOpenAIJson({ instructions, input, fallback, operation = "unkn
   const timeout = setTimeout(() => controller.abort(), 12000);
   let recordedFailure = false;
   try {
+    const userContent = photo
+      ? [
+          { type: "input_text", text: JSON.stringify(input) },
+          { type: "input_image", image_url: image },
+        ]
+      : JSON.stringify(input);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -349,7 +512,7 @@ async function callOpenAIJson({ instructions, input, fallback, operation = "unkn
         model: OPENAI_MODEL,
         input: [
           { role: "system", content: instructions },
-          { role: "user", content: JSON.stringify(input) },
+          { role: "user", content: userContent },
         ],
         text: { format: { type: "json_object" } },
       }),
@@ -379,6 +542,7 @@ async function callOpenAIJson({ instructions, input, fallback, operation = "unkn
       model: OPENAI_MODEL,
       ok: true,
       httpStatus: response.status,
+      hasImage: Boolean(photo),
       fallbackUsed: false,
     });
     return withAiMeta({ ...fallback, ...parsed }, false, "openai", OPENAI_MODEL);
@@ -401,13 +565,15 @@ async function callOpenAIJson({ instructions, input, fallback, operation = "unkn
   }
 }
 
-async function callGeminiJson({ instructions, input, fallback, operation = "unknown" }) {
+async function callGeminiJson({ instructions, input, fallback, operation = "unknown", image }) {
+  const photo = parseDataUrl(image);
   if (!GEMINI_API_KEY) {
     recordAiAttempt({
       operation,
       provider: "gemini",
       model: GEMINI_MODEL,
       ok: false,
+      hasImage: Boolean(photo),
       fallbackUsed: true,
       fallbackReason: "missing_api_key",
     });
@@ -417,6 +583,10 @@ async function callGeminiJson({ instructions, input, fallback, operation = "unkn
   const timeout = setTimeout(() => controller.abort(), 18000);
   let recordedFailure = false;
   try {
+    const userParts = [{ text: JSON.stringify(input) }];
+    if (photo) {
+      userParts.push({ inlineData: { mimeType: photo.mimeType, data: photo.base64 } });
+    }
     const requestBody = JSON.stringify({
       systemInstruction: {
         parts: [{ text: instructions }],
@@ -424,7 +594,7 @@ async function callGeminiJson({ instructions, input, fallback, operation = "unkn
       contents: [
         {
           role: "user",
-          parts: [{ text: JSON.stringify(input) }],
+          parts: userParts,
         },
       ],
       generationConfig: {
@@ -481,6 +651,7 @@ async function callGeminiJson({ instructions, input, fallback, operation = "unkn
         ok: true,
         attempt,
         httpStatus: response.status,
+        hasImage: Boolean(photo),
         fallbackUsed: false,
         outputPreview: outputText ? outputText.slice(0, 180) : "",
       });
@@ -513,13 +684,19 @@ async function callAIJson(options) {
   return callOpenAIJson(options);
 }
 
-async function analyzeComplaintWithAI({ data, title, description }) {
+async function analyzeComplaintWithAI({ data, title, description, photoDataUrl }) {
   const fallback = analyzeComplaint(data, `${title}. ${description}`);
+  const hasPhoto = Boolean(parseDataUrl(photoDataUrl));
+  const photoInstruction = hasPhoto
+    ? " Talebe bir fotoğraf eklendi; görseldeki arıza/durumu da değerlendirip kategori, aciliyet ve özeti buna göre belirle."
+    : "";
   return callAIJson({
     operation: "analyze_complaint",
     fallback,
+    image: hasPhoto ? photoDataUrl : undefined,
     instructions:
-      "ApartAI için Türkçe apartman/site talebini analiz et. Sadece JSON döndür. Alanlar: category, urgency, location, summary, action. category şu değerlerden biri olmalı: Temizlik, Güvenlik, Asansör, Su ve tesisat, Elektrik, Otopark, Gürültü, Peyzaj, Diğer. urgency: Düşük, Orta veya Yüksek. summary kısa olsun. action yöneticiye uygulanabilir aksiyon olsun.",
+      "ApartAI için Türkçe apartman/site talebini analiz et. Sadece JSON döndür. Alanlar: category, urgency, location, summary, action. category şu değerlerden biri olmalı: Temizlik, Güvenlik, Asansör, Su ve tesisat, Elektrik, Otopark, Gürültü, Peyzaj, Diğer. urgency: Düşük, Orta veya Yüksek. summary kısa olsun. action yöneticiye uygulanabilir aksiyon olsun." +
+      photoInstruction,
     input: {
       title,
       description,
@@ -752,14 +929,17 @@ async function routeApi(req, res, url) {
     ensure(title, "Talep başlığı zorunludur.");
     ensure(description, "Talep açıklaması zorunludur.");
     ensure(data.apartments.some((apartment) => apartment.id === apartmentId), "Geçerli bir daire seçilmelidir.");
-    const analysis = await analyzeComplaintWithAI({ data, title, description });
+    const photoDataUrl = clean(body.photoDataUrl);
+    const analysis = await analyzeComplaintWithAI({ data, title, description, photoDataUrl });
+    // Görseli AI'a verdikten sonra dosyaya yaz; db.json'da base64 tutma.
+    const stored = await storage.saveDataUrl(photoDataUrl, "req");
     const request = {
       id: uid("req"),
       apartmentId,
       category: analysis.category,
       title,
       description,
-      photoDataUrl: clean(body.photoDataUrl),
+      photoUrl: stored?.url || "",
       urgency: analysis.urgency,
       status: "yeni",
       adminNote: "",
@@ -768,6 +948,7 @@ async function routeApi(req, res, url) {
       aiProvider: analysis.provider,
       aiModel: analysis.model,
       aiFallbackUsed: analysis.fallbackUsed,
+      aiImageAnalyzed: Boolean(parseDataUrl(photoDataUrl)) && analysis.fallbackUsed === false,
       location: analysis.location,
       createdAt: today(),
       resolvedAt: "",
@@ -800,7 +981,8 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Request not found" });
       return;
     }
-    data.requests.splice(index, 1);
+    const [removed] = data.requests.splice(index, 1);
+    if (removed?.photoUrl) await storage.remove(removed.photoUrl);
     await writeData(data);
     json(res, 200, publicData(data));
     return;
@@ -882,6 +1064,83 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (method === "POST" && url.pathname === "/api/apartments/import") {
+    const body = await readBody(req);
+    const records = parseApartmentCsv(body.csv);
+    ensure(records.length > 0, "İçeri aktarılacak satır bulunamadı. Başlık satırı ve en az bir kayıt gerekir.");
+    const result = { created: 0, skipped: 0, blocksCreated: 0, errors: [] };
+    records.forEach((record, index) => {
+      const rowNo = index + 2; // başlık + 1 tabanlı
+      const blockName = clean(record.block);
+      const no = clean(record.no);
+      if (!blockName || !no) {
+        result.errors.push(`Satır ${rowNo}: blok ve daire no zorunludur.`);
+        return;
+      }
+      const email = clean(record.email);
+      if (email && !isEmail(email)) {
+        result.errors.push(`Satır ${rowNo}: geçersiz e-posta (${email}).`);
+        return;
+      }
+      let block = data.blocks.find((item) => item.name.toLocaleLowerCase("tr-TR") === blockName.toLocaleLowerCase("tr-TR"));
+      if (!block) {
+        block = { id: uid("block"), name: blockName };
+        data.blocks.push(block);
+        result.blocksCreated += 1;
+      }
+      const exists = data.apartments.some(
+        (apt) => apt.blockId === block.id && clean(apt.no).toLocaleLowerCase("tr-TR") === no.toLocaleLowerCase("tr-TR")
+      );
+      if (exists) {
+        result.skipped += 1;
+        return;
+      }
+      const resident = { id: uid("resident"), name: clean(record.name), phone: clean(record.phone), email };
+      data.residents.push(resident);
+      data.apartments.push({ id: uid("apt"), blockId: block.id, no, floor: Number(record.floor) || 1, residentId: resident.id });
+      if (email) {
+        const userExists = data.users.some((u) => clean(u.email).toLocaleLowerCase("tr-TR") === email.toLocaleLowerCase("tr-TR"));
+        if (!userExists) {
+          data.users.push({
+            id: uid("user"),
+            name: resident.name,
+            phone: resident.phone,
+            email,
+            role: "resident",
+            residentId: resident.id,
+            passwordHash: hashPassword("demo123"),
+          });
+        }
+      }
+      result.created += 1;
+    });
+    await writeData(data);
+    json(res, 201, { ...result, data: publicData(data) });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/health-score") {
+    json(res, 200, { current: calculateHealthScore(data), history: data.healthScores || [] });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/health-score/snapshot") {
+    const current = calculateHealthScore(data);
+    const snapshot = {
+      id: uid("hs"),
+      date: today(),
+      score: current.score,
+      status: current.status,
+      reasons: current.reasons,
+      actions: current.actions,
+    };
+    if (!Array.isArray(data.healthScores)) data.healthScores = [];
+    data.healthScores.push(snapshot);
+    await writeData(data);
+    json(res, 201, { snapshot, current, history: data.healthScores });
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/reset") {
     await repository.reset();
     json(res, 200, publicData(await readData()));
@@ -892,17 +1151,22 @@ async function routeApi(req, res, url) {
 }
 
 async function serveStatic(res, url) {
-  const requested = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
-  const filePath = path.normalize(path.join(ROOT, requested));
+  // Yüklenen dosyalar storage katmanından servis edilir.
+  const uploadPath = storage.resolvePublicUrl?.(url.pathname);
+  const filePath = uploadPath
+    ? path.normalize(uploadPath)
+    : path.normalize(path.join(ROOT, url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname)));
 
-  if (!filePath.startsWith(ROOT)) {
+  // Veri dizinine (db.json, seed.json, .auth_secret) ve .env'e statik erişimi engelle.
+  const blocked = filePath.startsWith(DATA_DIR) || path.basename(filePath) === ".env";
+  if (!uploadPath && (blocked || !filePath.startsWith(ROOT))) {
     res.writeHead(403);
     res.end("Forbidden");
     return;
   }
 
   try {
-    const ext = path.extname(filePath);
+    const ext = path.extname(filePath).toLowerCase();
     const content = await fs.readFile(filePath);
     res.writeHead(200, { "content-type": contentTypes[ext] || "application/octet-stream" });
     res.end(content);
@@ -943,4 +1207,8 @@ module.exports = {
   verifyToken,
   analyzeComplaint,
   improveAnnouncement,
+  parseDataUrl,
+  calculateHealthScore,
+  parseCsvRows,
+  parseApartmentCsv,
 };
