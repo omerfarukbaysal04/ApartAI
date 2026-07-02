@@ -3,6 +3,25 @@ const SESSION_KEY = "apartai-session-v1";
 const TOKEN_KEY = "apartai-token-v1";
 const API_BASE = location.protocol === "file:" ? "" : "/api";
 
+// Sosyal medya yapılandırması (küratörlü). Buradaki handle/url alanlarını
+// kendi hesaplarınla değiştir. `featured` alanı öne çıkan içeriği belirler:
+//   - youtube: video URL'si ya da video ID'si
+//   - instagram/tiktok/x: gönderi (post/tweet) URL'si
+// `featured` boş bırakılırsa o platform için sadece kart gösterilir.
+const SOCIAL = {
+  youtube: { handle: "@ApartAI", url: "https://www.youtube.com/@ApartAI", featured: "" },
+  instagram: { handle: "@apartai", url: "https://www.instagram.com/apartai", featured: "" },
+  tiktok: { handle: "@apartai", url: "https://www.tiktok.com/@apartai", featured: "" },
+  x: { handle: "@apartai", url: "https://x.com/apartai", featured: "" },
+};
+
+const SOCIAL_META = {
+  youtube: { label: "YouTube", color: "#ff0000", icon: "M23 12s0-3.2-.4-4.6a2.4 2.4 0 0 0-1.7-1.7C19.4 5.3 12 5.3 12 5.3s-7.4 0-8.9.4A2.4 2.4 0 0 0 1.4 7.4C1 8.8 1 12 1 12s0 3.2.4 4.6a2.4 2.4 0 0 0 1.7 1.7c1.5.4 8.9.4 8.9.4s7.4 0 8.9-.4a2.4 2.4 0 0 0 1.7-1.7C23 15.2 23 12 23 12ZM9.8 15.3V8.7l5.7 3.3-5.7 3.3Z" },
+  instagram: { label: "Instagram", color: "#e1306c", icon: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.3 2.2.4.6.2 1 .4 1.4.9.5.4.7.8.9 1.4.1.4.3 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.8-.4 2.2-.2.6-.4 1-.9 1.4-.4.5-.8.7-1.4.9-.4.1-1 .3-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.3-2.2-.4a3.7 3.7 0 0 1-1.4-.9 3.7 3.7 0 0 1-.9-1.4c-.1-.4-.3-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.8.4-2.2.2-.6.4-1 .9-1.4.4-.5.8-.7 1.4-.9.4-.1 1-.3 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5Z" },
+  tiktok: { label: "TikTok", color: "#010101", icon: "M16.6 5.8a4.8 4.8 0 0 1-3-2.7h-2.9v12.4a2.6 2.6 0 1 1-2-2.5V9.9a5.4 5.4 0 1 0 4.9 5.4V9.2a7.7 7.7 0 0 0 4.4 1.4V7.7a4.8 4.8 0 0 1-1.4-1.9Z" },
+  x: { label: "X", color: "#000000", icon: "M18.2 2.5h3.3l-7.2 8.2 8.5 11.3h-6.6l-5.2-6.8-6 6.8H1.7l7.7-8.8L1.3 2.5H8l4.7 6.2 5.5-6.2Zm-1.2 17.8h1.8L7.1 4.3H5.2L17 20.3Z" },
+};
+
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) || "";
 }
@@ -557,6 +576,118 @@ function render() {
   `;
 }
 
+function youtubeId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
+  const match = raw.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : "";
+}
+
+function socialIcon(platform) {
+  const meta = SOCIAL_META[platform];
+  return `<svg class="social-icon" viewBox="0 0 24 24" aria-hidden="true" style="--brand:${meta.color}"><path d="${meta.icon}" /></svg>`;
+}
+
+function socialFeaturedSlot(platform) {
+  const conf = SOCIAL[platform];
+  if (!conf?.featured) {
+    return `<div class="social-featured empty"><span>Öne çıkan içerik eklenmedi</span></div>`;
+  }
+  // YouTube gizlilik dostu iframe ile doğrudan gömülür (çerez yükü düşük).
+  if (platform === "youtube") {
+    const vid = youtubeId(conf.featured);
+    if (!vid) return `<div class="social-featured empty"><span>Geçersiz YouTube bağlantısı</span></div>`;
+    return `<div class="social-featured"><iframe src="https://www.youtube-nocookie.com/embed/${vid}" title="YouTube önizleme" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+  }
+  // Instagram / TikTok / X: dış scriptler yalnızca kullanıcı tıklayınca yüklenir
+  // (KVKK/gizlilik ve performans için tıkla-yükle önizleme).
+  return `
+    <div class="social-featured facade" id="social-facade-${platform}">
+      <button type="button" class="social-load" onclick="loadSocialEmbed('${platform}')">
+        ${socialIcon(platform)}
+        <span>Önizlemeyi yükle</span>
+        <small>İçerik ${SOCIAL_META[platform].label}'dan yüklenir</small>
+      </button>
+    </div>`;
+}
+
+function socialCard(platform) {
+  const conf = SOCIAL[platform];
+  const meta = SOCIAL_META[platform];
+  return `
+    <article class="social-card" style="--brand:${meta.color}">
+      <header class="social-card-head">
+        ${socialIcon(platform)}
+        <div>
+          <strong>${meta.label}</strong>
+          <span>${safeText(conf.handle)}</span>
+        </div>
+        <a class="social-follow" href="${conf.url}" target="_blank" rel="noopener noreferrer">Takip et</a>
+      </header>
+      ${socialFeaturedSlot(platform)}
+    </article>`;
+}
+
+function socialSection() {
+  const platforms = Object.keys(SOCIAL);
+  return `
+    <section class="social-section" id="sosyal-medya">
+      <div class="social-head">
+        <div class="auth-kicker"><span></span>Sosyal Medya</div>
+        <h2>Bizi takip et, içeriklerimizi sitenin içinden gör</h2>
+        <p>Hesaplarımızı tek tıkla aç ya da öne çıkan içeriklerimizi buradan önizle.</p>
+      </div>
+      <div class="social-grid">
+        ${platforms.map((platform) => socialCard(platform)).join("")}
+      </div>
+    </section>`;
+}
+
+// Resmi gömme scriptini bir kez yükler ve widget'ı işler.
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-social="${src}"]`);
+    if (existing) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.dataset.social = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Önizleme yüklenemedi."));
+    document.head.appendChild(script);
+  });
+}
+
+function loadSocialEmbed(platform) {
+  const conf = SOCIAL[platform];
+  const slot = document.querySelector(`#social-facade-${platform}`);
+  if (!conf?.featured || !slot) return;
+  const url = conf.featured;
+  if (platform === "instagram") {
+    slot.classList.remove("facade");
+    slot.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14"></blockquote>`;
+    loadScriptOnce("https://www.instagram.com/embed.js")
+      .then(() => window.instgrm?.Embeds?.process())
+      .catch((error) => (slot.innerHTML = `<div class="social-featured empty"><span>${safeText(error.message)}</span></div>`));
+  } else if (platform === "tiktok") {
+    slot.classList.remove("facade");
+    slot.innerHTML = `<blockquote class="tiktok-embed" cite="${url}"><a href="${url}"></a></blockquote>`;
+    loadScriptOnce("https://www.tiktok.com/embed.js").catch(
+      (error) => (slot.innerHTML = `<div class="social-featured empty"><span>${safeText(error.message)}</span></div>`)
+    );
+  } else if (platform === "x") {
+    slot.classList.remove("facade");
+    slot.innerHTML = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>`;
+    loadScriptOnce("https://platform.twitter.com/widgets.js")
+      .then(() => window.twttr?.widgets?.load(slot))
+      .catch((error) => (slot.innerHTML = `<div class="social-featured empty"><span>${safeText(error.message)}</span></div>`));
+  }
+}
+
 function authView() {
   const isLogin = authMode === "login";
   return `
@@ -646,6 +777,7 @@ function authView() {
           <article><strong>Mobil Sakin Ekranı</strong><span>Borç, duyuru ve talep durumu için sade web deneyimi.</span></article>
         </div>
       </section>
+      ${socialSection()}
       ${authModalOpen ? authModalView(isLogin) : ""}
     </main>
   `;
