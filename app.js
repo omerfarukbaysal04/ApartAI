@@ -1248,7 +1248,35 @@ function requestDetailModal(request) {
   `;
 }
 
+function announcementReadStats(item) {
+  const readCount = (item.readBy || []).length;
+  const residentCount = state.users.filter((user) => user.role === "resident").length;
+  return { readCount, residentCount };
+}
+
+function notificationHistory() {
+  const reminders = state.payments
+    .filter((payment) => payment.method === "Hatırlatma")
+    .map((payment) => ({
+      type: "Hatırlatma",
+      date: payment.date,
+      target: apartmentLabel(payment.apartmentId),
+      detail: payment.note || "Aidat hatırlatması",
+    }));
+  const announcements = state.announcements.map((item) => {
+    const stats = announcementReadStats(item);
+    return {
+      type: "Duyuru",
+      date: item.date,
+      target: item.audience || "Tüm site",
+      detail: `${item.title} — ${stats.readCount}/${stats.residentCount} okundu`,
+    };
+  });
+  return [...reminders, ...announcements].sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
 function announcementsView() {
+  const history = notificationHistory();
   return `
     <div class="split">
       <section class="section">
@@ -1272,17 +1300,32 @@ function announcementsView() {
       <section class="section">
         <div class="section-header"><h2>Yayınlanan Duyurular</h2></div>
         <div class="grid">
-          ${state.announcements.slice().reverse().map((item) => `
+          ${state.announcements.slice().reverse().map((item) => {
+            const stats = announcementReadStats(item);
+            return `
             <article class="notice">
               <strong>${item.title}</strong>
               <span class="status info">${item.audience}</span> ${aiBadge(item)}
+              <span class="status ${stats.readCount ? "ok" : "warn"}">${stats.readCount}/${stats.residentCount} okundu</span>
               <p>${item.aiContent || item.content}</p>
               <small>${dateText(item.date)}</small>
             </article>
-          `).join("")}
+          `;
+          }).join("")}
         </div>
       </section>
     </div>
+    <section class="section">
+      <div class="section-header"><h2>Bildirim Geçmişi</h2></div>
+      ${
+        history.length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>Tarih</th><th>Tür</th><th>Hedef</th><th>Detay</th></tr></thead>
+              <tbody>${history.map((item) => `<tr><td>${dateText(item.date)}</td><td><span class="status ${item.type === "Duyuru" ? "info" : "warn"}">${item.type}</span></td><td>${safeText(item.target)}</td><td>${safeText(item.detail)}</td></tr>`).join("")}</tbody>
+            </table></div>`
+          : `<p>Henüz gönderilen bildirim yok.</p>`
+      }
+    </section>
   `;
 }
 
@@ -1493,13 +1536,58 @@ function residentRequestView() {
   `;
 }
 
+let markingAnnouncementsRead = false;
+
+function unreadAnnouncementsForSession() {
+  const userId = state.sessionUser?.id;
+  if (!userId) return [];
+  return state.announcements.filter((item) => !(item.readBy || []).some((entry) => entry.userId === userId));
+}
+
+// Sakin duyuru ekranını açtığında okunmamışları sunucuda okundu işaretler.
+// İşaretleme idempotent olduğundan tekrar render'lar yeni istek üretmez.
+function markAnnouncementsRead() {
+  if (markingAnnouncementsRead) return;
+  const unread = unreadAnnouncementsForSession();
+  if (!unread.length) return;
+  markingAnnouncementsRead = true;
+  if (!API_BASE) {
+    const userId = state.sessionUser.id;
+    state.announcements = state.announcements.map((item) =>
+      unread.includes(item)
+        ? { ...item, readBy: [...(item.readBy || []), { userId, name: state.sessionUser.name, date: new Date().toISOString().slice(0, 10) }] }
+        : item
+    );
+    saveState();
+    markingAnnouncementsRead = false;
+    render();
+    return;
+  }
+  unread
+    .reduce((chain, item) => chain.then(() => apiRequest(`/announcements/${item.id}/read`, { method: "POST" })), Promise.resolve(null))
+    .then((finalData) => {
+      if (finalData) applyServerData(finalData);
+    })
+    .catch(() => {})
+    .finally(() => {
+      markingAnnouncementsRead = false;
+    });
+}
+
 function residentAnnouncementsView() {
+  const userId = state.sessionUser?.id;
+  if (unreadAnnouncementsForSession().length) {
+    setTimeout(markAnnouncementsRead, 60);
+  }
   return `
     <div class="resident-shell">
       <section class="section">
         <div class="section-header"><h2>Duyurular</h2></div>
         <div class="grid">
-          ${state.announcements.slice().reverse().map((item) => `<article class="notice"><strong>${item.title}</strong>${aiBadge(item)}<p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`).join("")}
+          ${state.announcements.slice().reverse().map((item) => {
+            const isNew = userId && !(item.readBy || []).some((entry) => entry.userId === userId);
+            return `<article class="notice"><strong>${item.title}</strong>${isNew ? `<span class="status warn">Yeni</span>` : ""}${aiBadge(item)}<p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`;
+          }).join("")}
         </div>
       </section>
     </div>

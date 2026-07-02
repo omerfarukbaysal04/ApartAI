@@ -325,3 +325,45 @@ test("boş CSV 400 döndürür", async () => {
   const res = await api("POST", "/api/apartments/import", { token, body: { csv: "" } });
   assert.equal(res.status, 400);
 });
+
+// --- Duyuru okunma takibi ---
+
+test("sakin duyuruyu okundu işaretler ve tekrar işaretleme idempotenttir", async () => {
+  const login = await api("POST", "/api/auth/login", {
+    body: { email: "ayse@example.com", password: "demo123" },
+  });
+  const token = login.body.token;
+  const annId = login.body.data.announcements[0].id;
+  const first = await api("POST", `/api/announcements/${annId}/read`, { token });
+  assert.equal(first.status, 200);
+  const ann1 = first.body.announcements.find((a) => a.id === annId);
+  assert.equal(ann1.readBy.length, 1);
+  assert.equal(ann1.readBy[0].userId, login.body.user.id);
+  // İkinci işaretleme kaydı çoğaltmamalı.
+  const second = await api("POST", `/api/announcements/${annId}/read`, { token });
+  const ann2 = second.body.announcements.find((a) => a.id === annId);
+  assert.equal(ann2.readBy.length, 1);
+});
+
+test("token olmadan okundu işaretleme 401 döndürür", async () => {
+  const res = await api("POST", "/api/announcements/ann-1/read", {});
+  assert.equal(res.status, 401);
+});
+
+test("olmayan duyuru için okundu işaretleme 404 döndürür", async () => {
+  const login = await api("POST", "/api/auth/login", {
+    body: { email: "ayse@example.com", password: "demo123" },
+  });
+  const res = await api("POST", "/api/announcements/yok-boyle-duyuru/read", { token: login.body.token });
+  assert.equal(res.status, 404);
+});
+
+test("yeni duyuru boş readBy listesiyle oluşturulur", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/announcements", {
+    token,
+    body: { title: "Okunma testi", content: "Bildirim geçmişi testi içeriği.", tone: "Kısa" },
+  });
+  assert.equal(res.status, 201);
+  assert.deepEqual(res.body.announcement.readBy, []);
+});

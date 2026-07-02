@@ -743,6 +743,8 @@ function routeAccess(method, pathname) {
   if (publicRoutes.some(([m, p]) => m === method && p === pathname)) return "public";
   // Any authenticated user (resident or admin) may open a request.
   if (method === "POST" && pathname === "/api/requests") return "auth";
+  // Any authenticated user may mark an announcement as read.
+  if (method === "POST" && /^\/api\/announcements\/[^/]+\/read$/.test(pathname)) return "auth";
   // Everything else that mutates data or exposes internals requires an admin.
   return "admin";
 }
@@ -752,8 +754,8 @@ async function routeApi(req, res, url) {
   const method = req.method;
 
   const access = routeAccess(method, url.pathname);
+  const authUser = authUserFromRequest(req, data);
   if (access !== "public") {
-    const authUser = authUserFromRequest(req, data);
     if (!authUser) {
       json(res, 401, { error: "Oturum gerekli, lütfen tekrar giriş yapın." });
       return;
@@ -1020,10 +1022,28 @@ async function routeApi(req, res, url) {
       aiFallbackUsed: improved.fallbackUsed,
       audience: clean(body.audience || "Tüm site"),
       date: today(),
+      readBy: [],
     };
     data.announcements.push(announcement);
     await writeData(data);
     json(res, 201, { announcement, data: publicData(data) });
+    return;
+  }
+
+  const announcementReadMatch = url.pathname.match(/^\/api\/announcements\/([^/]+)\/read$/);
+  if (method === "POST" && announcementReadMatch) {
+    const announcement = data.announcements.find((item) => item.id === announcementReadMatch[1]);
+    if (!announcement) {
+      json(res, 404, { error: "Announcement not found" });
+      return;
+    }
+    if (!Array.isArray(announcement.readBy)) announcement.readBy = [];
+    // Aynı kullanıcı için tekrarlanan işaretlemeler yok sayılır (idempotent).
+    if (!announcement.readBy.some((entry) => entry.userId === authUser.id)) {
+      announcement.readBy.push({ userId: authUser.id, name: authUser.name, date: today() });
+      await writeData(data);
+    }
+    json(res, 200, publicData(data));
     return;
   }
 
