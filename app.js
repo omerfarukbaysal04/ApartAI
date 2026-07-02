@@ -449,6 +449,33 @@ function requestStats() {
   return { open, resolved, resolutionRate };
 }
 
+function knownAssignees() {
+  return [...new Set(state.requests.map((request) => request.assignee).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr-TR"));
+}
+
+// Firma/taşeron performansı: atanmış taleplerden toplam/açık/çözülen sayısı
+// ve ortalama çözüm süresi (gün) çıkarılır.
+function vendorPerformance() {
+  const groups = {};
+  state.requests
+    .filter((request) => request.assignee)
+    .forEach((request) => {
+      const key = request.assignee;
+      if (!groups[key]) groups[key] = { assignee: key, total: 0, open: 0, resolved: 0, totalDays: 0 };
+      const group = groups[key];
+      group.total += 1;
+      if (request.status === "cozuldu" && request.resolvedAt) {
+        group.resolved += 1;
+        group.totalDays += daysBetween(request.assignedAt || request.createdAt, request.resolvedAt);
+      } else if (!["cozuldu", "reddedildi"].includes(request.status)) {
+        group.open += 1;
+      }
+    });
+  return Object.values(groups)
+    .map((group) => ({ ...group, avgDays: group.resolved ? Math.round((group.totalDays / group.resolved) * 10) / 10 : null }))
+    .sort((a, b) => b.total - a.total);
+}
+
 function blockIssueDensity() {
   const counts = state.blocks.map((block) => {
     const apartmentIds = state.apartments.filter((apartment) => apartment.blockId === block.id).map((apartment) => apartment.id);
@@ -1177,7 +1204,7 @@ function requestsView() {
                 <td>${request.category}</td>
                 <td><span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span></td>
                 <td>${request.aiSummary}<br>${aiBadge(request)}${requestPhotoSrc(request) ? ` <span class="status info">Fotoğraflı</span>` : ""}</td>
-                <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span></td>
+                <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span>${request.assignee ? `<br><small>${safeText(request.assignee)}</small>` : ""}</td>
                 <td>
                   <button class="btn" onclick="setState({ selectedRequestId: '${request.id}' })">Detay</button>
                 </td>
@@ -1236,6 +1263,13 @@ function requestDetailModal(request) {
                 ${["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"].map((status) => `<option value="${status}" ${request.status === status ? "selected" : ""}>${requestStatusText(status)}</option>`).join("")}
               </select>
             </label>
+            <label>Atanan firma/kişi
+              <input name="assignee" list="assignee-options" placeholder="Örn. Yılmaz Asansör" value="${safeText(request.assignee || "")}" />
+              <datalist id="assignee-options">
+                ${knownAssignees().map((name) => `<option value="${safeText(name)}"></option>`).join("")}
+              </datalist>
+            </label>
+            ${request.assignee && request.assignedAt ? `<small class="muted">Atama tarihi: ${dateText(request.assignedAt)}</small>` : ""}
             <label>Yönetici notu
               <textarea name="adminNote" placeholder="Firma, aksiyon veya sakin iletişimi notu">${safeText(request.adminNote || "")}</textarea>
             </label>
@@ -1458,6 +1492,17 @@ function reportsView() {
         </ul>
       </section>
     </div>
+    <section class="section">
+      <div class="section-header"><h2>Firma / Taşeron Performansı</h2></div>
+      ${
+        vendorPerformance().length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>Firma/Kişi</th><th>Toplam</th><th>Açık</th><th>Çözülen</th><th>Ort. Çözüm (gün)</th></tr></thead>
+              <tbody>${vendorPerformance().map((v) => `<tr><td>${safeText(v.assignee)}</td><td>${v.total}</td><td>${v.open}</td><td>${v.resolved}</td><td>${v.avgDays ?? "-"}</td></tr>`).join("")}</tbody>
+            </table></div>`
+          : `<p>Henüz atanmış talep yok. Talep detayından firma/kişi atayabilirsin.</p>`
+      }
+    </section>
     <section class="section">
       <div class="section-header">
         <h2>Site Sağlık Skoru Geçmişi</h2>
@@ -1790,6 +1835,7 @@ function saveRequestDetail(event, requestId) {
   const payload = {
     status: safeText(form.get("status")),
     adminNote: safeText(form.get("adminNote")),
+    assignee: safeText(form.get("assignee")),
   };
   if (API_BASE) {
     apiRequest(`/requests/${requestId}`, { method: "PATCH", body: JSON.stringify(payload) }).then((result) => {
@@ -1803,6 +1849,8 @@ function saveRequestDetail(event, requestId) {
           ...request,
           status: payload.status,
           adminNote: payload.adminNote,
+          assignee: payload.assignee,
+          assignedAt: payload.assignee && payload.assignee !== request.assignee ? new Date().toISOString().slice(0, 10) : request.assignedAt,
           resolvedAt: payload.status === "cozuldu" ? new Date().toISOString().slice(0, 10) : request.resolvedAt,
         }
       : request,

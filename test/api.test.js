@@ -405,3 +405,40 @@ test("webhook sürücüsü URL tanımlı değilse hatayı raporlar", async () =>
   assert.equal(result.ok, false);
   assert.equal(result.driver, "webhook");
 });
+
+// --- Talep atama (firma/taşeron takibi) ---
+
+test("talebe firma atanır ve atama tarihi kaydedilir", async () => {
+  const token = await adminToken();
+  const res = await api("PATCH", "/api/requests/req-1", {
+    token,
+    body: { assignee: "Yılmaz Asansör" },
+  });
+  assert.equal(res.status, 200);
+  const request = res.body.requests.find((r) => r.id === "req-1");
+  assert.equal(request.assignee, "Yılmaz Asansör");
+  assert.ok(request.assignedAt);
+});
+
+test("aynı firma tekrar kaydedilirse atama tarihi değişmez, boş atama temizler", async () => {
+  const token = await adminToken();
+  const first = await api("PATCH", "/api/requests/req-2", { token, body: { assignee: "Temiz A.Ş." } });
+  const assignedAt = first.body.requests.find((r) => r.id === "req-2").assignedAt;
+  const second = await api("PATCH", "/api/requests/req-2", { token, body: { assignee: "Temiz A.Ş.", adminNote: "not" } });
+  assert.equal(second.body.requests.find((r) => r.id === "req-2").assignedAt, assignedAt);
+  const cleared = await api("PATCH", "/api/requests/req-2", { token, body: { assignee: "" } });
+  const request = cleared.body.requests.find((r) => r.id === "req-2");
+  assert.equal(request.assignee, "");
+  assert.equal(request.assignedAt, "");
+});
+
+test("sakin talep ataması yapamaz (403)", async () => {
+  const login = await api("POST", "/api/auth/login", {
+    body: { email: "ayse@example.com", password: "demo123" },
+  });
+  const res = await api("PATCH", "/api/requests/req-1", {
+    token: login.body.token,
+    body: { assignee: "X Firması" },
+  });
+  assert.equal(res.status, 403);
+});

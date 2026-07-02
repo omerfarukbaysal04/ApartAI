@@ -1011,6 +1011,13 @@ async function routeApi(req, res, url) {
     }
     if (body.status !== undefined) request.status = clean(body.status);
     if (body.adminNote !== undefined) request.adminNote = clean(body.adminNote);
+    if (body.assignee !== undefined) {
+      const assignee = clean(body.assignee);
+      // Yeni bir firma/kişi atandığında atama tarihini kaydet (performans ölçümü için).
+      if (assignee && assignee !== request.assignee) request.assignedAt = today();
+      if (!assignee) request.assignedAt = "";
+      request.assignee = assignee;
+    }
     if (request.status === "cozuldu" && !request.resolvedAt) request.resolvedAt = today();
     if (request.status !== "cozuldu") request.resolvedAt = "";
     await writeData(data);
