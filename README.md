@@ -43,6 +43,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] CSV ile toplu daire/sakin içeri aktarma eklendi.
 - [x] Landing ekranına küratörlü sosyal medya bölümü eklendi (YouTube gömme + tıkla-yükle önizlemeler).
 - [x] Duyuru okunma takibi (sakin ekranında otomatik işaretleme) ve yönetici bildirim geçmişi eklendi.
+- [x] Bildirim katmanı eklendi: hatırlatma ve duyurular SMS/e-posta seam'i üzerinden iletiliyor, sonuç geçmişte görünüyor.
 
 ## Yol Haritası
 
@@ -63,7 +64,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 ### Faz 2 — Operasyonel derinlik
 
 - [x] Duyuru okunma takibi ve bildirim geçmişi ekle.
-- [ ] SMS/e-posta bildirim entegrasyonu ekle.
+- [x] SMS/e-posta bildirim seam'i ekle (log varsayılan, `NOTIFY_DRIVER=webhook` ile gerçek ağ geçidine bağlanır).
 - [ ] Talep atama ve firma/taşeron takibi + çözüm süresi performansı ekle.
 
 ### Faz 3+ — Entegrasyon ve akıllı yönetim katmanı

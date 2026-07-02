@@ -5,6 +5,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { createRepository } = require("./db/repository");
 const { createStorage } = require("./db/storage");
+const { createNotifier } = require("./db/notifier");
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
@@ -14,6 +15,7 @@ const SECRET_FILE = path.join(DATA_DIR, ".auth_secret");
 loadEnvFile();
 const repository = createRepository();
 const storage = createStorage();
+const notifier = createNotifier();
 const AUTH_SECRET = resolveAuthSecret();
 const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL || 60 * 60 * 24 * 7);
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -906,6 +908,15 @@ async function routeApi(req, res, url) {
     const reminder = clean(body.note)
       ? { content: clean(body.note), provider: "manual", model: "manual", fallbackUsed: false }
       : await draftPaymentReminderWithAI({ resident, apartment, due });
+    // Hatırlatmayı bildirim katmanı üzerinden sakine ilet (e-posta varsa
+    // e-posta, yoksa telefon üzerinden SMS kanalı hedeflenir).
+    const channel = resident?.email ? "email" : "sms";
+    const delivery = await notifier.send({
+      channel,
+      to: resident?.email || resident?.phone || "",
+      subject: `Aidat hatırlatması - ${due.period}`,
+      message: reminder.content,
+    });
     data.payments.push({
       id: uid("reminder"),
       dueId: due.id,
@@ -917,6 +928,7 @@ async function routeApi(req, res, url) {
       aiProvider: reminder.provider,
       aiModel: reminder.model,
       aiFallbackUsed: reminder.fallbackUsed,
+      delivery,
     });
     await writeData(data);
     json(res, 200, publicData(data));
@@ -1023,6 +1035,24 @@ async function routeApi(req, res, url) {
       audience: clean(body.audience || "Tüm site"),
       date: today(),
       readBy: [],
+    };
+    // Duyuruyu e-postası olan tüm sakinlere bildirim katmanıyla ilet.
+    const recipients = data.users.filter((user) => user.role === "resident" && clean(user.email));
+    const results = await Promise.all(
+      recipients.map((user) =>
+        notifier.send({
+          channel: "email",
+          to: user.email,
+          subject: `Duyuru: ${announcement.title}`,
+          message: announcement.aiContent || announcement.content,
+        })
+      )
+    );
+    announcement.delivery = {
+      driver: results[0]?.driver || "log",
+      simulated: results.every((r) => r.simulated),
+      sent: results.filter((r) => r.ok).length,
+      total: recipients.length,
     };
     data.announcements.push(announcement);
     await writeData(data);

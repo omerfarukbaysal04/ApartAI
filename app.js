@@ -1254,6 +1254,14 @@ function announcementReadStats(item) {
   return { readCount, residentCount };
 }
 
+function deliveryText(delivery) {
+  if (!delivery) return "";
+  const channel = delivery.channel === "sms" ? "SMS" : "e-posta";
+  const sim = delivery.simulated ? ", simülasyon" : "";
+  if (delivery.sent !== undefined) return ` (${delivery.sent}/${delivery.total} ${channel}${sim})`;
+  return delivery.ok ? ` (${channel} iletildi${sim})` : ` (${channel} iletilemedi)`;
+}
+
 function notificationHistory() {
   const reminders = state.payments
     .filter((payment) => payment.method === "Hatırlatma")
@@ -1261,7 +1269,7 @@ function notificationHistory() {
       type: "Hatırlatma",
       date: payment.date,
       target: apartmentLabel(payment.apartmentId),
-      detail: payment.note || "Aidat hatırlatması",
+      detail: (payment.note || "Aidat hatırlatması") + deliveryText(payment.delivery),
     }));
   const announcements = state.announcements.map((item) => {
     const stats = announcementReadStats(item);
@@ -1269,7 +1277,7 @@ function notificationHistory() {
       type: "Duyuru",
       date: item.date,
       target: item.audience || "Tüm site",
-      detail: `${item.title} — ${stats.readCount}/${stats.residentCount} okundu`,
+      detail: `${item.title} — ${stats.readCount}/${stats.residentCount} okundu` + deliveryText(item.delivery),
     };
   });
   return [...reminders, ...announcements].sort((a, b) => new Date(b.date) - new Date(a.date));

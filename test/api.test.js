@@ -15,6 +15,8 @@ const TMP_DB = path.join(TMP_ROOT, "db.json");
 process.env.APARTAI_DB_FILE = TMP_DB;
 process.env.APARTAI_UPLOADS_DIR = path.join(TMP_ROOT, "uploads");
 process.env.AUTH_SECRET = "test-secret-do-not-use-in-prod";
+process.env.NODE_ENV = "test";
+process.env.NOTIFY_DRIVER = "log";
 process.env.AI_PROVIDER = "rules";
 process.env.GEMINI_API_KEY = "";
 process.env.OPENAI_API_KEY = "";
@@ -366,4 +368,40 @@ test("yeni duyuru boş readBy listesiyle oluşturulur", async () => {
   });
   assert.equal(res.status, 201);
   assert.deepEqual(res.body.announcement.readBy, []);
+});
+
+// --- Bildirim katmanı (notifier seam) ---
+
+test("duyuru yayını sakinlere bildirim iletimini kaydeder", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/announcements", {
+    token,
+    body: { title: "Bildirim testi", content: "Sakinlere iletim testi.", tone: "Kısa" },
+  });
+  assert.equal(res.status, 201);
+  const delivery = res.body.announcement.delivery;
+  assert.equal(delivery.driver, "log");
+  assert.equal(delivery.simulated, true);
+  assert.ok(delivery.total >= 2); // seed'de e-postalı en az 2 sakin var
+  assert.equal(delivery.sent, delivery.total);
+});
+
+test("aidat hatırlatması bildirim iletim sonucunu kaydeder", async () => {
+  const token = await adminToken();
+  const state = await api("GET", "/api/state", {});
+  const due = state.body.dues.find((d) => d.status !== "paid");
+  const res = await api("POST", `/api/dues/${due.id}/reminder`, { token, body: {} });
+  assert.equal(res.status, 200);
+  const reminder = res.body.payments.filter((p) => p.method === "Hatırlatma").pop();
+  assert.ok(reminder.delivery);
+  assert.equal(reminder.delivery.simulated, true);
+  assert.ok(["email", "sms"].includes(reminder.delivery.channel));
+});
+
+test("webhook sürücüsü URL tanımlı değilse hatayı raporlar", async () => {
+  const { WebhookNotifier } = require("../db/notifier");
+  const notifier = new WebhookNotifier({ url: "" });
+  const result = await notifier.send({ channel: "email", to: "x@example.com", message: "test" });
+  assert.equal(result.ok, false);
+  assert.equal(result.driver, "webhook");
 });
