@@ -73,13 +73,13 @@ const seedState = {
     { id: "apt-7", siteId: "site-2", blockId: "block-e", no: "9", floor: 4, residentId: "resident-7" },
   ],
   residents: [
-    { id: "resident-1", siteId: "site-1", name: "Ayşe Demir", phone: "05xx 111 22 33", email: "ayse@example.com" },
-    { id: "resident-2", siteId: "site-1", name: "Mert Kaya", phone: "05xx 222 33 44", email: "mert@example.com" },
-    { id: "resident-3", siteId: "site-1", name: "Selin Ak", phone: "05xx 333 44 55", email: "selin@example.com" },
-    { id: "resident-4", siteId: "site-1", name: "Can Öztürk", phone: "05xx 444 55 66", email: "can@example.com" },
-    { id: "resident-5", siteId: "site-2", name: "Deniz Yıldız", phone: "05xx 555 66 77", email: "deniz@example.com" },
-    { id: "resident-6", siteId: "site-2", name: "Burak Şen", phone: "05xx 666 77 88", email: "burak@example.com" },
-    { id: "resident-7", siteId: "site-2", name: "Elif Kara", phone: "05xx 777 88 99", email: "elif@example.com" },
+    { id: "resident-1", siteId: "site-1", name: "Ayşe Demir", phone: "05xx 111 22 33", email: "ayse@example.com", occupancyType: "owner", plateNumber: "34 ABC 123", emergencyContact: "Ahmet Demir (0532 111 00 00)" },
+    { id: "resident-2", siteId: "site-1", name: "Mert Kaya", phone: "05xx 222 33 44", email: "mert@example.com", occupancyType: "tenant", plateNumber: "34 DEF 456", emergencyContact: "Mehmet Kaya (0533 222 00 00)" },
+    { id: "resident-3", siteId: "site-1", name: "Selin Ak", phone: "05xx 333 44 55", email: "selin@example.com", occupancyType: "owner", plateNumber: "34 GHK 789", emergencyContact: "Fatma Ak (0534 333 00 00)" },
+    { id: "resident-4", siteId: "site-1", name: "Can Öztürk", phone: "05xx 444 55 66", email: "can@example.com", occupancyType: "tenant", plateNumber: "34 LMN 012", emergencyContact: "Süleyman Öztürk (0535 444 00 00)" },
+    { id: "resident-5", siteId: "site-2", name: "Deniz Yıldız", phone: "05xx 555 66 77", email: "deniz@example.com", occupancyType: "owner", plateNumber: "34 PRS 345", emergencyContact: "Hakan Yıldız (0536 555 00 00)" },
+    { id: "resident-6", siteId: "site-2", name: "Burak Şen", phone: "05xx 666 77 88", email: "burak@example.com", occupancyType: "tenant", plateNumber: "34 TUV 678", emergencyContact: "Kemal Şen (0537 666 00 00)" },
+    { id: "resident-7", siteId: "site-2", name: "Elif Kara", phone: "05xx 777 88 99", email: "elif@example.com", occupancyType: "owner", plateNumber: "34 YZ 901", emergencyContact: "Zeynep Kara (0538 777 00 00)" },
   ],
   dues: [
     { id: "due-1", siteId: "site-1", apartmentId: "apt-1", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
@@ -186,6 +186,26 @@ const seedState = {
     },
   ],
   healthScores: [],
+  surveys: [
+    {
+      id: "survey-1",
+      siteId: "site-1",
+      title: "Otopark Giriş Düzenlemesi ve Misafir Araç Kuralı",
+      description: "Akşam 22:00'den sonra misafir araçlarının kapalı otoparka girişi sınırlandırılsın mı?",
+      options: [
+        "Evet, sınırlandırılsın (Yalnızca sakinler park etsin)",
+        "Hayır, müsait yer varsa misafir girebilsin",
+        "Çekimser",
+      ],
+      votes: [
+        { userId: "user-resident-1", residentId: "resident-1", apartmentId: "apt-1", optionIndex: 0, date: "2026-05-02" },
+        { userId: "user-resident-2", residentId: "resident-2", apartmentId: "apt-2", optionIndex: 1, date: "2026-05-03" },
+      ],
+      createdAt: "2026-05-01",
+      expiresAt: "2026-05-25",
+      status: "active",
+    },
+  ],
 };
 
 let state = structuredClone(seedState);
@@ -264,6 +284,7 @@ let scoped = {
   requests: [],
   announcements: [],
   healthScores: [],
+  surveys: [],
 };
 
 function rebuildScope() {
@@ -281,6 +302,7 @@ function rebuildScope() {
     requests: pick(state.requests),
     announcements: pick(state.announcements),
     healthScores: pick(state.healthScores),
+    surveys: pick(state.surveys),
   };
 }
 
@@ -571,15 +593,24 @@ function knownAssignees() {
   return [...new Set(scoped.requests.map((request) => request.assignee).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr-TR"));
 }
 
-// Firma/taşeron performansı: atanmış taleplerden toplam/açık/çözülen sayısı
-// ve ortalama çözüm süresi (gün) çıkarılır.
+// Firma/taşeron performansı: atanmış taleplerden toplam/açık/çözülen sayısı,
+// kategori, SLA hedefi ve performans karnesi çıkarılır.
 function vendorPerformance() {
   const groups = {};
   scoped.requests
     .filter((request) => request.assignee)
     .forEach((request) => {
       const key = request.assignee;
-      if (!groups[key]) groups[key] = { assignee: key, total: 0, open: 0, resolved: 0, totalDays: 0 };
+      if (!groups[key]) {
+        groups[key] = {
+          assignee: key,
+          category: request.category || "Genel Bakım",
+          total: 0,
+          open: 0,
+          resolved: 0,
+          totalDays: 0,
+        };
+      }
       const group = groups[key];
       group.total += 1;
       if (request.status === "cozuldu" && request.resolvedAt) {
@@ -589,9 +620,73 @@ function vendorPerformance() {
         group.open += 1;
       }
     });
+
   return Object.values(groups)
-    .map((group) => ({ ...group, avgDays: group.resolved ? Math.round((group.totalDays / group.resolved) * 10) / 10 : null }))
+    .map((group) => {
+      const avg = group.resolved ? Math.round((group.totalDays / group.resolved) * 10) / 10 : null;
+      let scoreText = "⭐⭐⭐⭐⭐ Başarılı (SLA Uygun)";
+      let scoreStatus = "ok";
+      if (avg === null && group.open > 2) {
+        scoreText = "⚠️ Takip Edilmeli";
+        scoreStatus = "warn";
+      } else if (avg !== null && avg > 3) {
+        scoreText = "⚠️ Gecikmeli (>3 Gün)";
+        scoreStatus = "danger";
+      } else if (avg !== null && avg <= 2) {
+        scoreText = "⭐ Hızlı Çözüm (<2 Gün)";
+        scoreStatus = "ok";
+      }
+      return {
+        ...group,
+        avgDays: avg,
+        scoreText,
+        scoreStatus,
+      };
+    })
     .sort((a, b) => b.total - a.total);
+}
+
+// Tahsilat Tahmini & Daire Ödeme Alışkanlık Analizi
+function collectionForecast() {
+  const dues = scoped.dues || [];
+  const total = dues.reduce((sum, d) => sum + Number(d.amount), 0);
+  const paid = dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + Number(d.amount), 0);
+  const overdue = dues.filter((d) => d.status === "overdue");
+  const overdueAmount = overdue.reduce((sum, d) => sum + Number(d.amount), 0);
+
+  const aptStats = scoped.apartments.map((apt) => {
+    const aptDues = dues.filter((d) => d.apartmentId === apt.id);
+    const overdueCount = aptDues.filter((d) => d.status === "overdue").length;
+    let habit = "regular";
+    if (overdueCount > 0) habit = overdueCount >= 2 ? "critical" : "slow";
+    return {
+      apartmentId: apt.id,
+      habit,
+      overdueCount,
+      resident: residentForApartment(apt.id),
+      dueAmount: aptDues[0]?.amount || 1850,
+    };
+  });
+
+  const regularCount = aptStats.filter((a) => a.habit === "regular").length;
+  const slowCount = aptStats.filter((a) => a.habit === "slow").length;
+  const criticalCount = aptStats.filter((a) => a.habit === "critical").length;
+  const totalApts = aptStats.length || 1;
+
+  const estimatedRate = Math.min(100, Math.round(((paid + (total - paid) * 0.78) / Math.max(total, 1)) * 100));
+  const estimatedAmount = Math.round(paid + (total - paid) * 0.78);
+
+  return {
+    total,
+    paid,
+    overdueAmount,
+    estimatedRate,
+    estimatedAmount,
+    regularRate: Math.round((regularCount / totalApts) * 100),
+    slowRate: Math.round((slowCount / totalApts) * 100),
+    criticalRate: Math.round((criticalCount / totalApts) * 100),
+    riskyApartments: aptStats.filter((a) => a.habit !== "regular"),
+  };
 }
 
 function blockIssueDensity() {
@@ -722,6 +817,7 @@ function render() {
         ${state.mode === "manager" ? managerView() : residentView()}
       </main>
     </div>
+    ${printReportModal()}
   `;
 }
 
@@ -1041,6 +1137,7 @@ function managerNav() {
     ["dues", "Aidatlar"],
     ["requests", "Talepler"],
     ["announcements", "Duyurular"],
+    ["surveys", "Anketler"],
     ["setup", "Site Kurulumu"],
     ["reports", "Rapor"],
     ["sites", "Tüm Siteler"],
@@ -1053,6 +1150,7 @@ function residentNav() {
     ["resident-home", "Özet"],
     ["resident-request", "Talep Aç"],
     ["resident-announcements", "Duyurular"],
+    ["resident-surveys", "Anketler"],
   ];
   return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
 }
@@ -1063,12 +1161,14 @@ function pageTitle() {
     dues: "Aidat Takibi",
     requests: "Arıza ve Şikayet Talepleri",
     announcements: "Duyurular",
+    surveys: "Site Anketleri ve Kararlar",
     setup: "Site Kurulumu",
-    reports: "Aylık Rapor",
+    reports: "Aylık Rapor & Faaliyet Özeti",
     sites: "Tüm Siteler",
     "resident-home": "Sakin Ekranı",
     "resident-request": "Talep Aç",
     "resident-announcements": "Duyurular",
+    "resident-surveys": "Site Anketleri",
   };
   return titles[state.view] ?? "ApartAI";
 }
@@ -1076,15 +1176,17 @@ function pageTitle() {
 function pageDescription() {
   const descriptions = {
     dashboard: "Site sağlığı, ödeme durumu, açık talepler ve AI aksiyonları.",
-    dues: "Dönem bazlı borç oluşturma ve manuel ödeme takibi.",
+    dues: "Dönem bazlı borç oluşturma, tahsilat tahmini ve risk analizi.",
     requests: "Sakin taleplerini sınıflandır, önceliklendir ve çözüm süresini izle.",
     announcements: "Duyuru yayınla ve AI ile metni sakin bir tona getir.",
-    setup: "Blok, daire ve sakin kayıtlarını yönet.",
-    reports: "Tahsilat, kategori yoğunluğu ve skor nedenlerini incele.",
+    surveys: "Site geneli oylama ve anketler ile şeffaf karar alma süreci.",
+    setup: "Blok, daire, mülkiyet ve araç plaka kayıtlarını yönet.",
+    reports: "Aylık faaliyet bülteni yazdır, tedarikçi karnesi ve analizleri incele.",
     sites: "Yönettiğin tüm siteleri karşılaştır ve yeni site ekle.",
     "resident-home": "Borcunu, ödeme geçmişini ve açık taleplerini gör.",
     "resident-request": "Arıza veya şikayetini yönetime ilet.",
     "resident-announcements": "Yönetim duyurularını takip et.",
+    "resident-surveys": "Site kararlarına oy vererek görüşünü bildir.",
   };
   return descriptions[state.view] ?? "";
 }
@@ -1095,6 +1197,7 @@ function managerView() {
     dues: duesView,
     requests: requestsView,
     announcements: announcementsView,
+    surveys: surveysView,
     setup: setupView,
     reports: reportsView,
     sites: sitesView,
@@ -1103,11 +1206,12 @@ function managerView() {
 }
 
 function residentView() {
-  return {
+  return ({
     "resident-home": residentHomeView,
     "resident-request": residentRequestView,
     "resident-announcements": residentAnnouncementsView,
-  }[state.view]();
+    "resident-surveys": residentSurveysView,
+  }[state.view] || residentHomeView)();
 }
 
 function dashboardView() {
@@ -1166,6 +1270,7 @@ function dashboardView() {
 
 function duesView() {
   const summary = dueSummary();
+  const forecast = collectionForecast();
   const riskyDues = scoped.dues.filter((due) => due.status !== "paid").sort((a, b) => {
     const riskOrder = { Yüksek: 0, Orta: 1, Düşük: 2 };
     return riskOrder[dueRiskLevel(a).label] - riskOrder[dueRiskLevel(b).label];
@@ -1184,17 +1289,48 @@ function duesView() {
         <small>Toplam: ${money(summary.total)}</small>
       </section>
       <section class="section metric">
-        <span>Bekleyen risk</span>
-        <strong>${money(summary.pending)}</strong>
-        <small>Gecikmiş: ${money(summary.overdue)}</small>
+        <span>Ay Sonu Tahmini</span>
+        <strong>%${forecast.estimatedRate}</strong>
+        <small>Beklenen: ${money(forecast.estimatedAmount)}</small>
       </section>
     </div>
     <div class="split">
       <section class="section">
         <div class="section-header">
           <div>
-            <h2>Tahsilat Risk Listesi</h2>
-            <p>Öncelikli hatırlatma gönderilecek daireler.</p>
+            <h2>Tahsilat Tahmini & Daire Alışkanlıkları</h2>
+            <p>Geçmiş 3 aya dayalı tahsilat olasılığı ve gecikme riski.</p>
+          </div>
+        </div>
+        <div style="display:grid; gap:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(255,255,255,0.7);">
+            <div>
+              <strong style="display:block; font-size:13.5px;">Düzenli Ödeyen Daireler</strong>
+              <small style="color:var(--muted);">Gününde veya erken ödeyenler</small>
+            </div>
+            <span class="status ok">%${forecast.regularRate}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(255,255,255,0.7);">
+            <div>
+              <strong style="display:block; font-size:13.5px;">Gecikme Eğilimli Daireler</strong>
+              <small style="color:var(--muted);">Hatırlatma ile 5-10 gün içinde ödeyenler</small>
+            </div>
+            <span class="status warn">%${forecast.slowRate}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(255,255,255,0.7);">
+            <div>
+              <strong style="display:block; font-size:13.5px;">Yüksek Risk / Takip Gerektiren</strong>
+              <small style="color:var(--muted);">Önceki dönemlerden devir borcu olanlar</small>
+            </div>
+            <span class="status danger">%${forecast.criticalRate}</span>
+          </div>
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Öncelikli Hatırlatma Listesi</h2>
+            <p>Risk analizine göre önce uyarılması gereken daireler.</p>
           </div>
         </div>
         <ul class="mini-list">
@@ -1202,25 +1338,11 @@ function duesView() {
             riskyDues.length
               ? riskyDues.slice(0, 5).map((due) => {
                   const risk = dueRiskLevel(due);
-                  return `<li><span>${risk.label} risk</span>${apartmentLabel(due.apartmentId)} - ${money(due.amount)}<small>${residentForApartment(due.apartmentId)?.name ?? "-"} / ${dateText(due.dueDate)}</small></li>`;
+                  return `<li><span class="status ${risk.label === "Yüksek" ? "danger" : "warn"}">${risk.label} risk</span>${apartmentLabel(due.apartmentId)} - ${money(due.amount)}<small>${residentForApartment(due.apartmentId)?.name ?? "-"} / ${dateText(due.dueDate)}</small></li>`;
                 }).join("")
               : `<li><span>Temiz</span>Bekleyen aidat bulunmuyor.<small>Tahsilat akışı dengeli.</small></li>`
           }
         </ul>
-      </section>
-      <section class="section">
-        <div class="section-header">
-          <div>
-            <h2>AI Tahsilat Yorumu</h2>
-            <p>Bu dönem için kısa yönetici aksiyonu.</p>
-          </div>
-        </div>
-        <div class="ai-panel">
-          <span class="status info">AI önerisi</span>
-          <h3>${summary.collectionRate >= 85 ? "Tahsilat ritmi sağlıklı" : "Hatırlatma aksiyonu gerekli"}</h3>
-          <p>${summary.collectionRate >= 85 ? "Ödeme düzeni iyi görünüyor. Bekleyen küçük tutarlar için dönem kapanışına yakın tek hatırlatma yeterli." : `${riskyDues.length} daire için ödeme takibi gerekiyor. Önce gecikmiş aidatlar, ardından son ödeme tarihi yaklaşan kayıtlar ele alınmalı.`}</p>
-          <strong>${summary.overdue > 0 ? "Gecikmiş dairelere bugün kibar hatırlatma metni gönder." : "Bekleyen kayıtları son ödeme tarihinden 3 gün önce hatırlat."}</strong>
-        </div>
       </section>
     </div>
     <section class="section">
@@ -1528,19 +1650,27 @@ function setupView() {
           <label>Blok
             <select name="blockId">${scoped.blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</select>
           </label>
-          <label>Daire No<input name="no" required /></label>
+          <label>Daire No<input name="no" required placeholder="Örn: 12" /></label>
           <label>Kat<input name="floor" type="number" value="1" required /></label>
-          <label>Sakin Adı<input name="residentName" required /></label>
+          <label>Mülkiyet Durumu
+            <select name="occupancyType">
+              <option value="owner">Ev Sahibi</option>
+              <option value="tenant">Kiracı</option>
+            </select>
+          </label>
+          <label>Sakin Adı<input name="residentName" required placeholder="Ad Soyad" /></label>
           <label>Telefon<input name="phone" placeholder="05xx" /></label>
-          <label>E-posta<input name="email" type="email" /></label>
-          <button class="btn primary" type="submit">Kaydı Ekle</button>
+          <label>E-posta<input name="email" type="email" placeholder="ornek@apartai.com" /></label>
+          <label>Araç Plakası<input name="plateNumber" placeholder="34 ABC 123" /></label>
+          <label class="full">Acil Durum İrtibatı<input name="emergencyContact" placeholder="İsim ve Telefon (Örn: Yakını 0532...)" /></label>
+          <button class="btn primary" type="submit" style="margin-top:8px;">Kaydı Ekle</button>
         </form>
         ${
           API_BASE
-            ? `<div class="section-header" style="margin-top:1.5rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
-              <p class="muted">Başlık: <code>Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta</code>. Olmayan bloklar otomatik oluşturulur, mevcut daireler atlanır.</p>
+            ? `<div class="section-header" style="margin-top:1.8rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
+              <p class="muted" style="font-size:13px; line-height:1.5;">Başlıklar: <code>Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat</code>. Otomatik blok eşleşir, mükerrer daireler atlanır.</p>
               <form class="form-grid wide" onsubmit="importApartmentsCsv(event)">
-                <label class="full">CSV içeriği<textarea name="csv" rows="5" placeholder="Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta&#10;D Blok,3,2,Ali Veli,05xx,ali@example.com"></textarea></label>
+                <label class="full">CSV içeriği<textarea name="csv" rows="5" placeholder="Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat&#10;D Blok,3,2,Ali Veli,05xx,ali@example.com,Ev Sahibi,34 ABC 123,0532 xxx&#10;D Blok,4,2,Ayşe Yılmaz,05xx,ayse@example.com,Kiracı,34 DEF 456,0533 xxx"></textarea></label>
                 <label>veya dosya seç<input name="csvFile" type="file" accept=".csv,text/csv" onchange="loadCsvFileIntoTextarea(this)" /></label>
                 <button class="btn primary" type="submit">İçeri Aktar</button>
               </form>`
@@ -1548,14 +1678,24 @@ function setupView() {
         }
       </section>
       <section class="section">
-        <div class="section-header"><h2>Mevcut Daireler</h2></div>
+        <div class="section-header"><h2>Mevcut Daireler & Sakin Profili</h2></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Daire</th><th>Kat</th><th>Sakin</th><th>Telefon</th></tr></thead>
+            <thead><tr><th>Daire</th><th>Kat</th><th>Mülkiyet</th><th>Sakin</th><th>Plaka</th><th>Acil İrtibat</th></tr></thead>
             <tbody>
               ${scoped.apartments.map((apt) => {
                 const resident = scoped.residents.find((item) => item.id === apt.residentId);
-                return `<tr><td>${apartmentLabel(apt.id)}</td><td>${apt.floor}</td><td>${resident?.name ?? "-"}</td><td>${resident?.phone ?? "-"}</td></tr>`;
+                const isTenant = resident?.occupancyType === "tenant";
+                return `
+                  <tr>
+                    <td><strong>${apartmentLabel(apt.id)}</strong></td>
+                    <td>${apt.floor}</td>
+                    <td><span class="status ${isTenant ? "warn" : "info"}">${isTenant ? "Kiracı" : "Ev Sahibi"}</span></td>
+                    <td>${resident?.name ?? "-"}<br><small style="color:var(--muted);">${resident?.phone ?? ""}</small></td>
+                    <td><code style="font-size:12px; font-weight:700;">${safeText(resident?.plateNumber || "-")}</code></td>
+                    <td><small>${safeText(resident?.emergencyContact || "-")}</small></td>
+                  </tr>
+                `;
               }).join("")}
             </tbody>
           </table>
@@ -1571,6 +1711,7 @@ function reportsView() {
   const requests = requestStats();
   const blocks = blockIssueDensity();
   const pilot = pilotMetrics();
+  const vendors = vendorPerformance();
   const byCategory = scoped.requests.reduce((acc, request) => {
     acc[request.category] = (acc[request.category] ?? 0) + 1;
     return acc;
@@ -1578,6 +1719,14 @@ function reportsView() {
   const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Henüz veri yok";
   const topBlock = blocks[0]?.count ? blocks[0].block : "Henüz veri yok";
   return `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+      <div>
+        <h2 style="margin:0; font-size:22px;">Aylık Site Faaliyet & Sağlık Analizi</h2>
+        <p style="margin:4px 0 0; color:var(--muted); font-size:13.5px;">Tüm operasyonel, finansal ve teknik verilerin konsolide özeti.</p>
+      </div>
+      <button class="btn primary" onclick="openPrintModal()">🖨️ Resmi Faaliyet Bülteni (Pano Çıktısı)</button>
+    </div>
+
     <div class="grid dashboard-grid">
       <section class="section metric">
         <span>Site Sağlık Skoru</span>
@@ -1641,20 +1790,25 @@ function reportsView() {
       </section>
     </div>
     <section class="section">
-      <div class="section-header"><h2>Firma / Taşeron Performansı</h2></div>
+      <div class="section-header">
+        <div>
+          <h2>Tedarikçi & Firma Performans Karnesi</h2>
+          <p>Anlaşmalı bakım firmalarının ortalama çözüm süresi ve SLA hedeflerine uyumu.</p>
+        </div>
+      </div>
       ${
-        vendorPerformance().length
+        vendors.length
           ? `<div class="table-wrap"><table>
-              <thead><tr><th>Firma/Kişi</th><th>Toplam</th><th>Açık</th><th>Çözülen</th><th>Ort. Çözüm (gün)</th></tr></thead>
-              <tbody>${vendorPerformance().map((v) => `<tr><td>${safeText(v.assignee)}</td><td>${v.total}</td><td>${v.open}</td><td>${v.resolved}</td><td>${v.avgDays ?? "-"}</td></tr>`).join("")}</tbody>
+              <thead><tr><th>Firma / Hizmet</th><th>Kategori</th><th>Toplam İş</th><th>Açık</th><th>Çözülen</th><th>Ort. Süre</th><th>SLA Başarı Karnesi</th></tr></thead>
+              <tbody>${vendors.map((v) => `<tr><td><strong>${safeText(v.assignee)}</strong></td><td><span class="status info">${safeText(v.category)}</span></td><td>${v.total}</td><td>${v.open}</td><td>${v.resolved}</td><td><strong>${v.avgDays !== null ? `${v.avgDays} gün` : "-"}</strong></td><td><span class="status ${v.scoreStatus}">${v.scoreText}</span></td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p>Henüz atanmış talep yok. Talep detayından firma/kişi atayabilirsin.</p>`
+          : `<p>Henüz atanmış talep yok. Talep detayından firma/kişi atayarak karnesini takip edebilirsiniz.</p>`
       }
     </section>
     <section class="section">
       <div class="section-header">
         <h2>Site Sağlık Skoru Geçmişi</h2>
-        ${API_BASE ? `<button class="btn-primary" onclick="saveHealthSnapshot()">Skoru kaydet</button>` : ""}
+        ${API_BASE ? `<button class="btn primary" onclick="saveHealthSnapshot()">Skoru kaydet</button>` : ""}
       </div>
       ${
         scoped.healthScores.length
@@ -1662,7 +1816,7 @@ function reportsView() {
               <thead><tr><th>Tarih</th><th>Skor</th><th>Durum</th></tr></thead>
               <tbody>${scoped.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td>${item.score}</td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p>Henüz kayıtlı skor anlık görüntüsü yok. "Skoru kaydet" ile bugünün skorunu geçmişe ekleyebilirsin.</p>`
+          : `<p>Henüz kayıtlı skor anlık görüntüsü yok. "Skoru kaydet" ile bugünün skorunu geçmişe ekleyebilirsiniz.</p>`
       }
     </section>
   `;
@@ -2189,6 +2343,9 @@ function createApartment(event) {
     residentName: safeText(form.get("residentName")),
     phone: safeText(form.get("phone")),
     email: safeText(form.get("email")),
+    occupancyType: safeText(form.get("occupancyType") || "owner"),
+    plateNumber: safeText(form.get("plateNumber") || ""),
+    emergencyContact: safeText(form.get("emergencyContact") || ""),
   };
   if (API_BASE) {
     apiRequest("/apartments", { method: "POST", body: JSON.stringify(payload) })
@@ -2204,7 +2361,16 @@ function createApartment(event) {
   const siteId = (state.blocks || []).find((item) => item.id === payload.blockId)?.siteId || state.activeSiteId;
   state.residents = [
     ...state.residents,
-    { id: residentId, siteId, name: payload.residentName, phone: payload.phone, email: payload.email },
+    {
+      id: residentId,
+      siteId,
+      name: payload.residentName,
+      phone: payload.phone,
+      email: payload.email,
+      occupancyType: payload.occupancyType,
+      plateNumber: payload.plateNumber,
+      emergencyContact: payload.emergencyContact,
+    },
   ];
   state.apartments = [
     ...state.apartments,
@@ -2301,6 +2467,427 @@ async function createResidentRequest(event) {
   saveState();
   event.target.reset();
   setState({ view: "resident-home" });
+}
+
+function openPrintModal() {
+  setState({ showPrintModal: true });
+}
+
+function closePrintModal(event) {
+  if (!event || event.target.classList.contains("modal-backdrop") || event.target.classList.contains("modal-close")) {
+    setState({ showPrintModal: false });
+  }
+}
+
+function printReportModal() {
+  if (!state.showPrintModal) return "";
+  const site = activeSite();
+  const health = calculateHealthScore();
+  const dues = dueSummary();
+  const requests = requestStats();
+  const vendors = vendorPerformance();
+  const dateStr = new Date().toLocaleDateString("tr-TR", { year: "numeric", month: "long", day: "numeric" });
+  const periodStr = new Date().toLocaleDateString("tr-TR", { year: "numeric", month: "long" });
+
+  return `
+    <div class="modal-backdrop" onclick="closePrintModal(event)">
+      <div class="print-modal-container" onclick="event.stopPropagation()">
+        <div class="print-actions-bar no-print">
+          <div>
+            <strong>📋 Resmi Faaliyet & Sağlık Bülteni</strong>
+            <span style="font-size:12px; color:var(--muted); margin-left:8px;">Panoya asmak veya PDF almak için hazır A4 şablonu</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn primary" onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button>
+            <button class="btn modal-close" onclick="closePrintModal()">Kapat</button>
+          </div>
+        </div>
+
+        <div class="print-sheet-paper" id="official-bulletin-sheet">
+          <div class="bulletin-header">
+            <div class="bulletin-brand">
+              <div class="bulletin-logo-badge">ApartAI</div>
+              <div>
+                <h2>${safeText(site?.name || "Apartman & Site Yönetimi")}</h2>
+                <p>${safeText(site?.address || "Merkezi Site Yönetimi")} | Yönetim Kurulu Faaliyet Özeti</p>
+              </div>
+            </div>
+            <div class="bulletin-meta">
+              <div class="bulletin-badge">RESMİ BÜLTEN</div>
+              <strong>Dönem: ${periodStr}</strong>
+              <small>Yayın Tarihi: ${dateStr}</small>
+            </div>
+          </div>
+
+          <div class="bulletin-intro">
+            <strong>Sayın Site Sakinlerimiz ve Kat Maliklerimiz,</strong>
+            <p>Sitemizin şeffaf, huzurlu ve sürdürülebilir yönetimi amacıyla hazırlanan aylık faaliyet, finansal durum ve teknik bakım bültenimiz bilgilerinize sunulmuştur.</p>
+          </div>
+
+          <div class="bulletin-grid-3">
+            <div class="bulletin-box">
+              <span class="bulletin-box-title">Genel Sağlık Puanı</span>
+              <div class="bulletin-score-num">${health.score}<small>/100</small></div>
+              <div class="bulletin-box-sub">${health.status} Operasyon</div>
+            </div>
+            <div class="bulletin-box">
+              <span class="bulletin-box-title">Aidat Tahsilat Oranı</span>
+              <div class="bulletin-score-num">%${dues.collectionRate}</div>
+              <div class="bulletin-box-sub">${money(dues.paid)} / ${money(dues.total)}</div>
+            </div>
+            <div class="bulletin-box">
+              <span class="bulletin-box-title">Arıza & Talep Çözüm Hızı</span>
+              <div class="bulletin-score-num">%${requests.resolutionRate}</div>
+              <div class="bulletin-box-sub">${requests.resolved} Çözüldü / ${requests.total} Talep</div>
+            </div>
+          </div>
+
+          <div class="bulletin-section">
+            <h3 class="bulletin-sec-title">1. Mali Durum & Bütçe İcrası</h3>
+            <div class="bulletin-table-wrap">
+              <table class="bulletin-table">
+                <thead>
+                  <tr><th>Kalem</th><th>Tahakkuk / Bütçe</th><th>Fiili Tahsilat</th><th>Kalan Alacak / Bakiye</th><th>Durum</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Cari Dönem Site Aidatları</td>
+                    <td>${money(dues.total)}</td>
+                    <td>${money(dues.paid)}</td>
+                    <td>${money(dues.pending)}</td>
+                    <td><strong>%${dues.collectionRate} Tahsil</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Geciken Aidatlar (Takipte)</td>
+                    <td>${money(dues.overdue)}</td>
+                    <td>-</td>
+                    <td>${money(dues.overdue)}</td>
+                    <td><span style="color:#b91c1c;">Hukuki İhtar Süreci</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bulletin-section">
+            <h3 class="bulletin-sec-title">2. Teknik Bakım & Çözülen Operasyonlar</h3>
+            <p style="font-size:12.5px; color:#475569; margin-bottom:8px;">Bu ay sakinlerimizce iletilen toplam <strong>${requests.total}</strong> talebin <strong>${requests.resolved}</strong> adedi incelenip giderilmiştir. Devam eden <strong>${requests.open}</strong> talep anlaşmalı teknik firmalarımızın takibindedir.</p>
+            <div class="bulletin-table-wrap">
+              <table class="bulletin-table">
+                <thead>
+                  <tr><th>Firma / Tedarikçi</th><th>Hizmet Alanı</th><th>İş Sayısı</th><th>Ort. Çözüm Süresi</th><th>Performans / SLA</th></tr>
+                </thead>
+                <tbody>
+                  ${vendors.map(v => `
+                    <tr>
+                      <td><strong>${safeText(v.name)}</strong></td>
+                      <td>${v.categories.join(", ") || "Genel"}</td>
+                      <td>${v.total} iş (${v.resolved} çözüldü)</td>
+                      <td>${v.avgDays} gün</td>
+                      <td>${v.badge}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bulletin-section">
+            <h3 class="bulletin-sec-title">3. Önemli Yönetim Kararları & Hatırlatmalar</h3>
+            <ul class="bulletin-list">
+              <li><strong>Aidat Ödeme Takvimi:</strong> Aidatların her ayın 15'ine kadar sitemiz banka hesabına daire numarası belirtilerek yatırılması rica olunur.</li>
+              <li><strong>Ortak Alan & Otopark Düzeni:</strong> Lütfen araçlarınızı sadece tahsisli daire numaralı otopark alanlarına nizami şekilde park ediniz.</li>
+              <li><strong>Acil Durum & İletişim:</strong> Bina tesisatı ve asansör acil durumlarında 7/24 apartman görevlimiz ve sistem üzerinden talep oluşturabilirsiniz.</li>
+            </ul>
+          </div>
+
+          <div class="bulletin-footer">
+            <div>
+              <p>ApartAI Akıllı Yönetim Sistemi Tarafından Dijital Olarak Doğrulanmıştır.</p>
+              <small>Belge Doğrulama Kodu: APT-${Date.now().toString(36).toUpperCase()}</small>
+            </div>
+            <div class="bulletin-signatures">
+              <div class="signature-box">
+                <span>Site Yöneticisi</span>
+                <div class="sig-line"></div>
+                <small>İmza & Kaşe</small>
+              </div>
+              <div class="signature-box">
+                <span>Denetçi Üye</span>
+                <div class="sig-line"></div>
+                <small>İmza</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function surveysView() {
+  const surveys = scoped.surveys || [];
+  const totalApartments = scoped.apartments.length || 1;
+
+  return `
+    <div class="split">
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Yeni Karar / İstişare Anketi Başlat</h2>
+            <p>Sakinlerin görüşünü almak ve kararları şeffaflaştırmak için anket açın.</p>
+          </div>
+        </div>
+        <form class="grid" onsubmit="createSurvey(event)">
+          <label>Anket Başlığı
+            <input name="title" required placeholder="Örn. Güvenlik kamerası sisteminin yenilenmesi" />
+          </label>
+          <label>Açıklama / Gerekçe
+            <textarea name="description" rows="3" required placeholder="Neden bu kararı alıyoruz, bütçe ve alternatifler nedir?"></textarea>
+          </label>
+          <label>Son Oy Verme Tarihi
+            <input type="date" name="deadline" required value="${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}" />
+          </label>
+          <label>Seçenekler (Her satıra bir seçenek veya virgülle ayırın)
+            <textarea name="options" rows="3" required placeholder="Evet, yenilensin (Teklif 1)&#10;Evet, yenilensin (Teklif 2)&#10;Hayır, ertelensin"></textarea>
+          </label>
+          <button class="btn primary" type="submit">Anketi Yayınla</button>
+        </form>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Site Anketleri & Katılım Sonuçları</h2>
+            <p>Toplam ${surveys.length} anket mevcut.</p>
+          </div>
+        </div>
+        <div class="survey-list">
+          ${surveys.map(survey => {
+            const totalVotes = survey.votes?.length || 0;
+            const participationRate = Math.min(100, Math.round((totalVotes / totalApartments) * 100));
+            const isClosed = survey.status === "closed";
+
+            const optionCounts = (survey.options || []).map(opt => {
+              const count = (survey.votes || []).filter(v => v.option === opt).length;
+              const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+              return { option: opt, count, pct };
+            });
+
+            return `
+              <div class="survey-card ${isClosed ? 'closed' : 'active'}">
+                <div class="survey-card-header">
+                  <div>
+                    <span class="status ${isClosed ? 'info' : 'success'}">${isClosed ? 'Sonuçlandı' : 'Oy Vermeye Açık'}</span>
+                    <h3 style="margin:6px 0 2px;">${safeText(survey.title)}</h3>
+                    <small style="color:var(--muted);">Son Tarih: ${dateText(survey.deadline)} | Katılım: %${participationRate} (${totalVotes}/${totalApartments} daire)</small>
+                  </div>
+                  <button class="btn ${isClosed ? '' : 'warn'}" onclick="toggleSurveyStatus('${survey.id}')">
+                    ${isClosed ? 'Tekrar Aç' : 'Anketi Kapat'}
+                  </button>
+                </div>
+                <p style="margin:10px 0 14px; font-size:13.5px; color:var(--text-sub);">${safeText(survey.description)}</p>
+                
+                <div class="survey-results">
+                  ${optionCounts.map(item => `
+                    <div class="survey-option-bar">
+                      <div class="survey-bar-meta">
+                        <span><strong>${safeText(item.option)}</strong></span>
+                        <span>${item.count} oy (%${item.pct})</span>
+                      </div>
+                      <div class="survey-progress-bg">
+                        <div class="survey-progress-fill" style="width: ${item.pct}%"></div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }).join('') || '<p style="color:var(--muted); padding:20px; text-align:center;">Henüz açılmış bir anket bulunmuyor.</p>'}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function residentSurveysView() {
+  const surveys = scoped.surveys || [];
+  const currentUserId = state.sessionUser?.id;
+  const currentApartment = residentApartment();
+
+  return `
+    <div class="resident-shell-content">
+      <div class="section-header" style="margin-bottom:16px;">
+        <div>
+          <h2>Site Karar & İstişare Anketleri</h2>
+          <p>Yönetim tarafından sitemiz için açılan anketlere oy verin, kararlara doğrudan katılın.</p>
+        </div>
+      </div>
+
+      <div class="survey-list">
+        ${surveys.map(survey => {
+          const votes = survey.votes || [];
+          const userVote = votes.find(v => v.userId === currentUserId || (currentApartment && v.apartmentId === currentApartment.id));
+          const hasVoted = Boolean(userVote);
+          const isClosed = survey.status === "closed";
+          const totalVotes = votes.length;
+
+          const optionCounts = (survey.options || []).map(opt => {
+            const count = votes.filter(v => v.option === opt).length;
+            const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+            return { option: opt, count, pct, isVoted: userVote?.option === opt };
+          });
+
+          return `
+            <div class="survey-card ${isClosed ? 'closed' : 'active'}">
+              <div class="survey-card-header">
+                <div>
+                  <span class="status ${isClosed ? 'info' : (hasVoted ? 'success' : 'warn')}">
+                    ${isClosed ? 'Sonuçlandı' : (hasVoted ? '✓ Oyunuz Alındı' : 'Oyunuzu Bekliyor')}
+                  </span>
+                  <h3 style="margin:6px 0 2px;">${safeText(survey.title)}</h3>
+                  <small style="color:var(--muted);">Son Tarih: ${dateText(survey.deadline)} | Toplam ${totalVotes} kişi oy verdi</small>
+                </div>
+              </div>
+              <p style="margin:10px 0 16px; font-size:14px; color:var(--text-sub);">${safeText(survey.description)}</p>
+
+              ${!isClosed && !hasVoted ? `
+                <form onsubmit="castVote(event, '${survey.id}')">
+                  <div class="survey-vote-options">
+                    ${survey.options.map((opt, idx) => `
+                      <label class="survey-vote-label">
+                        <input type="radio" name="option" value="${safeText(opt)}" required ${idx === 0 ? 'checked' : ''} />
+                        <span>${safeText(opt)}</span>
+                      </label>
+                    `).join('')}
+                  </div>
+                  <button class="btn primary" type="submit" style="margin-top:14px;">Oyu Kaydet</button>
+                </form>
+              ` : `
+                <div class="survey-results">
+                  ${userVote ? `<div style="font-size:13px; font-weight:600; color:var(--primary); margin-bottom:10px;">Sizin Tercihiniz: "${safeText(userVote.option)}"</div>` : ''}
+                  ${optionCounts.map(item => `
+                    <div class="survey-option-bar ${item.isVoted ? 'highlight-vote' : ''}">
+                      <div class="survey-bar-meta">
+                        <span>${item.isVoted ? '👉 ' : ''}<strong>${safeText(item.option)}</strong></span>
+                        <span>${item.count} oy (%${item.pct})</span>
+                      </div>
+                      <div class="survey-progress-bg">
+                        <div class="survey-progress-fill" style="width: ${item.pct}%"></div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          `;
+        }).join('') || '<div class="section"><p style="color:var(--muted); text-align:center; padding:24px;">Şu anda aktif bir anket bulunmuyor.</p></div>'}
+      </div>
+    </div>
+  `;
+}
+
+function createSurvey(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const optionsRaw = String(form.get("options") || "");
+  const options = optionsRaw
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (options.length < 2) {
+    alert("Lütfen en az 2 seçenek giriniz.");
+    return;
+  }
+
+  const payload = {
+    title: safeText(form.get("title")),
+    description: safeText(form.get("description")),
+    deadline: safeText(form.get("deadline")),
+    options,
+  };
+
+  if (API_BASE) {
+    apiRequest(`/surveys?siteId=${encodeURIComponent(state.activeSiteId)}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+      .then((result) => {
+        event.target.reset();
+        applyServerData(result.data);
+      })
+      .catch((error) => alert(error.message));
+    return;
+  }
+
+  const newSurvey = {
+    id: id("surv"),
+    siteId: state.activeSiteId,
+    title: payload.title,
+    description: payload.description,
+    deadline: payload.deadline,
+    options: payload.options,
+    status: "active",
+    createdAt: new Date().toISOString().slice(0, 10),
+    votes: [],
+  };
+  state.surveys = [...(state.surveys || []), newSurvey];
+  saveState();
+  event.target.reset();
+  render();
+}
+
+function castVote(event, surveyId) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const option = safeText(form.get("option"));
+  if (!option) return;
+
+  if (API_BASE) {
+    apiRequest(`/surveys/${encodeURIComponent(surveyId)}/vote`, {
+      method: "POST",
+      body: JSON.stringify({ option }),
+    })
+      .then((result) => {
+        applyServerData(result.data);
+      })
+      .catch((error) => alert(error.message));
+    return;
+  }
+
+  const currentApartment = residentApartment();
+  const survey = (state.surveys || []).find((s) => s.id === surveyId);
+  if (!survey) return;
+
+  survey.votes = survey.votes || [];
+  survey.votes.push({
+    userId: state.sessionUser?.id || "guest",
+    apartmentId: currentApartment?.id || "apt-unknown",
+    option,
+    date: new Date().toISOString().slice(0, 10),
+  });
+  saveState();
+  render();
+}
+
+function toggleSurveyStatus(surveyId) {
+  if (API_BASE) {
+    apiRequest(`/surveys/${encodeURIComponent(surveyId)}/close`, {
+      method: "PATCH",
+    })
+      .then((result) => {
+        applyServerData(result.data);
+      })
+      .catch((error) => alert(error.message));
+    return;
+  }
+
+  const survey = (state.surveys || []).find((s) => s.id === surveyId);
+  if (!survey) return;
+  survey.status = survey.status === "closed" ? "active" : "closed";
+  saveState();
+  render();
 }
 
 loadRemoteState();

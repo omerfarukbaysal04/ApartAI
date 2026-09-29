@@ -26,13 +26,13 @@
     { "id": "apt-7", "siteId": "site-2", "blockId": "block-e", "no": "9", "floor": 4, "residentId": "resident-7" }
   ],
   "residents": [
-    { "id": "resident-1", "siteId": "site-1", "name": "Ayşe Demir", "phone": "05xx 111 22 33", "email": "ayse@example.com" },
-    { "id": "resident-2", "siteId": "site-1", "name": "Mert Kaya", "phone": "05xx 222 33 44", "email": "mert@example.com" },
-    { "id": "resident-3", "siteId": "site-1", "name": "Selin Ak", "phone": "05xx 333 44 55", "email": "selin@example.com" },
-    { "id": "resident-4", "siteId": "site-1", "name": "Can Öztürk", "phone": "05xx 444 55 66", "email": "can@example.com" },
-    { "id": "resident-5", "siteId": "site-2", "name": "Deniz Yıldız", "phone": "05xx 555 66 77", "email": "deniz@example.com" },
-    { "id": "resident-6", "siteId": "site-2", "name": "Burak Şen", "phone": "05xx 666 77 88", "email": "burak@example.com" },
-    { "id": "resident-7", "siteId": "site-2", "name": "Elif Kara", "phone": "05xx 777 88 99", "email": "elif@example.com" }
+    { "id": "resident-1", "siteId": "site-1", "name": "Ayşe Demir", "phone": "05xx 111 22 33", "email": "ayse@example.com", "occupancyType": "owner", "plateNumber": "34 ABC 123", "emergencyContact": "Ahmet Demir (0532 111 00 00)" },
+    { "id": "resident-2", "siteId": "site-1", "name": "Mert Kaya", "phone": "05xx 222 33 44", "email": "mert@example.com", "occupancyType": "tenant", "plateNumber": "34 DEF 456", "emergencyContact": "Mehmet Kaya (0533 222 00 00)" },
+    { "id": "resident-3", "siteId": "site-1", "name": "Selin Ak", "phone": "05xx 333 44 55", "email": "selin@example.com", "occupancyType": "owner", "plateNumber": "34 GHK 789", "emergencyContact": "Fatma Ak (0534 333 00 00)" },
+    { "id": "resident-4", "siteId": "site-1", "name": "Can Öztürk", "phone": "05xx 444 55 66", "email": "can@example.com", "occupancyType": "tenant", "plateNumber": "34 LMN 012", "emergencyContact": "Süleyman Öztürk (0535 444 00 00)" },
+    { "id": "resident-5", "siteId": "site-2", "name": "Deniz Yıldız", "phone": "05xx 555 66 77", "email": "deniz@example.com", "occupancyType": "owner", "plateNumber": "34 PRS 345", "emergencyContact": "Hakan Yıldız (0536 555 00 00)" },
+    { "id": "resident-6", "siteId": "site-2", "name": "Burak Şen", "phone": "05xx 666 77 88", "email": "burak@example.com", "occupancyType": "tenant", "plateNumber": "34 TUV 678", "emergencyContact": "Kemal Şen (0537 666 00 00)" },
+    { "id": "resident-7", "siteId": "site-2", "name": "Elif Kara", "phone": "05xx 777 88 99", "email": "elif@example.com", "occupancyType": "owner", "plateNumber": "34 YZ 901", "emergencyContact": "Zeynep Kara (0538 777 00 00)" }
   ],
   "dues": [
     { "id": "due-1", "siteId": "site-1", "apartmentId": "apt-1", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "paid" },
@@ -138,5 +138,25 @@
       "readBy": []
     }
   ],
-  "healthScores": []
+  "healthScores": [],
+  "surveys": [
+    {
+      "id": "survey-1",
+      "siteId": "site-1",
+      "title": "Otopark Giriş Düzenlemesi ve Misafir Araç Kuralı",
+      "description": "Akşam 22:00'den sonra misafir araçlarının kapalı otoparka girişi sınırlandırılsın mı?",
+      "options": [
+        "Evet, sınırlandırılsın (Yalnızca sakinler park etsin)",
+        "Hayır, müsait yer varsa misafir girebilsin",
+        "Çekimser"
+      ],
+      "votes": [
+        { "userId": "user-resident-1", "residentId": "resident-1", "apartmentId": "apt-1", "optionIndex": 0, "date": "2026-05-02" },
+        { "userId": "user-resident-2", "residentId": "resident-2", "apartmentId": "apt-2", "optionIndex": 1, "date": "2026-05-03" }
+      ],
+      "createdAt": "2026-05-01",
+      "expiresAt": "2026-05-25",
+      "status": "active"
+    }
+  ]
 }

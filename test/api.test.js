@@ -590,3 +590,36 @@ test("adsız site oluşturma 400 döndürür", async () => {
   const res = await api("POST", "/api/sites", { token, body: { name: "" } });
   assert.equal(res.status, 400);
 });
+
+test("yönetici anket oluşturur ve sakin oy kullanabilir", async () => {
+  const admin = await adminToken();
+  const res = await api("POST", "/api/surveys?siteId=site-1", {
+    token: admin,
+    body: {
+      title: "Güvenlik Kamera Sayısı Artırılsın mı?",
+      description: "Blok girişlerine ek kamera takılması için görüşünüzü belirtin.",
+      options: ["Evet", "Hayır"],
+    },
+  });
+  assert.equal(res.status, 201);
+  const surveyId = res.body.survey.id;
+  assert.equal(res.body.survey.title, "Güvenlik Kamera Sayısı Artırılsın mı?");
+
+  // Sakin oy kullanır
+  const resident = await residentToken("ayse@example.com");
+  const voteRes = await api("POST", `/api/surveys/${surveyId}/vote`, {
+    token: resident,
+    body: { optionIndex: 0 },
+  });
+  assert.equal(voteRes.status, 200);
+  const updatedSurvey = voteRes.body.surveys.find((s) => s.id === surveyId);
+  assert.equal(updatedSurvey.votes.length, 1);
+  assert.equal(updatedSurvey.votes[0].optionIndex, 0);
+
+  // Yönetici anketi kapatır
+  const closeRes = await api("PATCH", `/api/surveys/${surveyId}/close`, { token: admin });
+  assert.equal(closeRes.status, 200);
+  const closedSurvey = closeRes.body.surveys.find((s) => s.id === surveyId);
+  assert.equal(closedSurvey.status, "closed");
+});
+

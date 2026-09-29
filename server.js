@@ -284,6 +284,9 @@ function mapCsvHeader(header) {
     name: ["ad", "ad soyad", "sakin", "sakin_adi", "sakin adı", "isim", "name", "ad_soyad"],
     phone: ["telefon", "tel", "phone", "gsm"],
     email: ["eposta", "e-posta", "email", "mail", "e_posta"],
+    occupancyType: ["mulkiyet", "mülkiyet", "durum", "tip", "ev_sahibi_kiraci", "ev sahibi / kiracı", "occupancy", "type"],
+    plateNumber: ["plaka", "araç plakası", "arac_plakasi", "arac plakasi", "plaka no", "plate"],
+    emergencyContact: ["acil durum", "acil irtibat", "acil_iletisim", "acil iletisim", "acil_irtibat", "emergency"],
   };
   for (const [canonical, list] of Object.entries(aliases)) {
     if (list.includes(key)) return canonical;
@@ -355,7 +358,7 @@ function publicData(data) {
   };
 }
 
-const SITE_COLLECTIONS = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores"];
+const SITE_COLLECTIONS = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores", "surveys"];
 
 // Kullanıcının erişebildiği site id'leri. Yönetici birden çok site yönetebilir;
 // sakin yalnızca kendi sitesini görür.
@@ -386,7 +389,7 @@ function siteScope(data, siteId) {
 // ihtiyaç duyduğu site/blok listesini görür; sakin yalnızca kendi kayıtlarını;
 // yönetici ise yönettiği sitelerin tamamını.
 function stateForUser(data, user) {
-  const empty = { users: [], blocks: [], residents: [], apartments: [], dues: [], payments: [], requests: [], announcements: [], healthScores: [] };
+  const empty = { users: [], blocks: [], residents: [], apartments: [], dues: [], payments: [], requests: [], announcements: [], healthScores: [], surveys: [] };
   if (!user) {
     return { ...empty, sites: data.sites, blocks: data.blocks };
   }
@@ -404,6 +407,7 @@ function stateForUser(data, user) {
       payments: data.payments.filter((item) => apartmentIds.has(item.apartmentId)),
       requests: data.requests.filter((item) => apartmentIds.has(item.apartmentId)),
       announcements: data.announcements.filter((item) => item.siteId === user.siteId),
+      surveys: (data.surveys || []).filter((item) => item.siteId === user.siteId),
     };
   }
   const allowed = userSiteIds(user, data);
@@ -828,6 +832,8 @@ function routeAccess(method, pathname) {
   if (method === "POST" && pathname === "/api/requests") return "auth";
   // Any authenticated user may mark an announcement as read.
   if (method === "POST" && /^\/api\/announcements\/[^/]+\/read$/.test(pathname)) return "auth";
+  // Any authenticated user may vote on a survey.
+  if (method === "POST" && /^\/api\/surveys\/[^/]+\/vote$/.test(pathname)) return "auth";
   // Everything else that mutates data or exposes internals requires an admin.
   return "admin";
 }
@@ -1249,6 +1255,9 @@ async function routeApi(req, res, url) {
       name: clean(body.residentName),
       phone: clean(body.phone),
       email,
+      occupancyType: clean(body.occupancyType) === "tenant" ? "tenant" : "owner",
+      plateNumber: clean(body.plateNumber) || "",
+      emergencyContact: clean(body.emergencyContact) || "",
     };
     const apartment = {
       id: uid("apt"),
@@ -1310,7 +1319,18 @@ async function routeApi(req, res, url) {
         result.skipped += 1;
         return;
       }
-      const resident = { id: uid("resident"), siteId, name: clean(record.name), phone: clean(record.phone), email };
+      const occRaw = clean(record.occupancyType).toLocaleLowerCase("tr-TR");
+      const occupancyType = occRaw.includes("kiraci") || occRaw.includes("tenant") ? "tenant" : "owner";
+      const resident = {
+        id: uid("resident"),
+        siteId,
+        name: clean(record.name),
+        phone: clean(record.phone),
+        email,
+        occupancyType,
+        plateNumber: clean(record.plateNumber) || "",
+        emergencyContact: clean(record.emergencyContact) || "",
+      };
       data.residents.push(resident);
       data.apartments.push({ id: uid("apt"), siteId, blockId: block.id, no, floor: Number(record.floor) || 1, residentId: resident.id });
       if (email) {
@@ -1332,6 +1352,86 @@ async function routeApi(req, res, url) {
     });
     await writeData(data);
     json(res, 201, { ...result, data: stateForUser(data, authUser) });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/surveys") {
+    const body = await readBody(req);
+    ensure(clean(body.title), "Anket başlığı zorunludur.");
+    const rawOptions = Array.isArray(body.options)
+      ? body.options
+      : (body.options || "").split("\n");
+    const options = rawOptions.map(clean).filter(Boolean);
+    ensure(options.length >= 2, "Anket için en az 2 seçenek gereklidir.");
+    const siteId = resolveSiteId(url, authUser, data);
+    const survey = {
+      id: uid("survey"),
+      siteId,
+      title: clean(body.title),
+      description: clean(body.description),
+      options,
+      votes: [],
+      createdAt: today(),
+      expiresAt: clean(body.expiresAt) || "",
+      status: "active",
+    };
+    if (!Array.isArray(data.surveys)) data.surveys = [];
+    data.surveys.push(survey);
+    await writeData(data);
+    json(res, 201, { survey, data: stateForUser(data, authUser) });
+    return;
+  }
+
+  const surveyVoteMatch = url.pathname.match(/^\/api\/surveys\/([^/]+)\/vote$/);
+  if (method === "POST" && surveyVoteMatch) {
+    if (!authUser) {
+      json(res, 401, { error: "Authentication required" });
+      return;
+    }
+    const body = await readBody(req);
+    const survey = (data.surveys || []).find((item) => item.id === surveyVoteMatch[1]);
+    if (!survey) {
+      json(res, 404, { error: "Survey not found" });
+      return;
+    }
+    const accessible = authUser.role === "resident" ? [authUser.siteId] : userSiteIds(authUser, data);
+    ensure(accessible.includes(survey.siteId), "Bu ankete erişim yetkiniz yok.");
+    ensure(survey.status === "active", "Bu anket oylamaya kapatılmıştır.");
+    const optionIndex = Number(body.optionIndex);
+    ensure(Number.isInteger(optionIndex) && optionIndex >= 0 && optionIndex < survey.options.length, "Geçerli bir seçenek seçiniz.");
+    if (!Array.isArray(survey.votes)) survey.votes = [];
+    const userApartment = data.apartments.find((apt) => apt.residentId === authUser.residentId);
+    const existingIndex = survey.votes.findIndex((v) =>
+      v.userId === authUser.id || (userApartment && v.apartmentId === userApartment.id)
+    );
+    const voteRecord = {
+      userId: authUser.id,
+      residentId: authUser.residentId || "",
+      apartmentId: userApartment?.id || "",
+      optionIndex,
+      date: today(),
+    };
+    if (existingIndex >= 0) {
+      survey.votes[existingIndex] = voteRecord;
+    } else {
+      survey.votes.push(voteRecord);
+    }
+    await writeData(data);
+    json(res, 200, stateForUser(data, authUser));
+    return;
+  }
+
+  const surveyCloseMatch = url.pathname.match(/^\/api\/surveys\/([^/]+)\/close$/);
+  if (method === "PATCH" && surveyCloseMatch) {
+    const survey = (data.surveys || []).find((item) => item.id === surveyCloseMatch[1]);
+    if (!survey) {
+      json(res, 404, { error: "Survey not found" });
+      return;
+    }
+    requireSiteAccess(survey.siteId, authUser, data);
+    survey.status = survey.status === "closed" ? "active" : "closed";
+    await writeData(data);
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
