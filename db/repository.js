@@ -40,6 +40,36 @@ function normalizeData(data) {
       })),
     ];
   }
+  return migrateToMultiSite(data);
+}
+
+// Tek siteli eski kayıtları çoklu site modeline taşır: `site` -> `sites[]` ve
+// tüm varlıklara `siteId` damgalanır. Zaten taşınmış veride etkisizdir.
+function migrateToMultiSite(data) {
+  if (!Array.isArray(data.sites)) {
+    data.sites = data.site ? [data.site] : [{ id: "site-1", name: "Site", address: "" }];
+    delete data.site;
+  }
+  if (!data.sites.length) {
+    data.sites = [{ id: "site-1", name: "Site", address: "" }];
+  }
+  const defaultSiteId = data.sites[0].id;
+  const collections = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores"];
+  for (const name of collections) {
+    if (!Array.isArray(data[name])) data[name] = [];
+    for (const row of data[name]) {
+      if (!row.siteId) row.siteId = defaultSiteId;
+    }
+  }
+  for (const user of data.users) {
+    if (user.role === "admin") {
+      // Yönetici birden çok site yönetebilir; eski kayıtlar tüm sitelere erişir.
+      if (!Array.isArray(user.siteIds)) user.siteIds = data.sites.map((site) => site.id);
+    } else if (!user.siteId) {
+      const resident = data.residents.find((item) => item.id === user.residentId);
+      user.siteId = resident?.siteId || defaultSiteId;
+    }
+  }
   return data;
 }
 

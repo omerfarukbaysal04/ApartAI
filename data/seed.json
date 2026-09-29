@@ -1,52 +1,67 @@
 {
-  "site": {
-    "id": "site-1",
-    "name": "Çınar Apartmanı",
-    "address": "Kadıköy, İstanbul"
-  },
+  "sites": [
+    { "id": "site-1", "name": "Çınar Apartmanı", "address": "Kadıköy, İstanbul" },
+    { "id": "site-2", "name": "Meltem Sitesi", "address": "Ataşehir, İstanbul" }
+  ],
   "users": [
-    { "id": "user-admin-1", "name": "Ömer Faruk Baysal", "email": "admin@apartai.local", "phone": "05xx 000 00 00", "role": "admin", "password": "demo123" },
-    { "id": "user-resident-1", "name": "Ayşe Demir", "email": "ayse@example.com", "phone": "05xx 111 22 33", "role": "resident", "residentId": "resident-1", "password": "demo123" },
-    { "id": "user-resident-2", "name": "Mert Kaya", "email": "mert@example.com", "phone": "05xx 222 33 44", "role": "resident", "residentId": "resident-2", "password": "demo123" }
+    { "id": "user-admin-1", "name": "Ömer Faruk Baysal", "email": "admin@apartai.local", "phone": "05xx 000 00 00", "role": "admin", "siteIds": ["site-1", "site-2"], "password": "demo123" },
+    { "id": "user-resident-1", "name": "Ayşe Demir", "email": "ayse@example.com", "phone": "05xx 111 22 33", "role": "resident", "residentId": "resident-1", "siteId": "site-1", "password": "demo123" },
+    { "id": "user-resident-2", "name": "Mert Kaya", "email": "mert@example.com", "phone": "05xx 222 33 44", "role": "resident", "residentId": "resident-2", "siteId": "site-1", "password": "demo123" },
+    { "id": "user-resident-3", "name": "Deniz Yıldız", "email": "deniz@example.com", "phone": "05xx 555 66 77", "role": "resident", "residentId": "resident-5", "siteId": "site-2", "password": "demo123" }
   ],
   "blocks": [
-    { "id": "block-a", "name": "A Blok" },
-    { "id": "block-b", "name": "B Blok" },
-    { "id": "block-c", "name": "C Blok" }
+    { "id": "block-a", "siteId": "site-1", "name": "A Blok" },
+    { "id": "block-b", "siteId": "site-1", "name": "B Blok" },
+    { "id": "block-c", "siteId": "site-1", "name": "C Blok" },
+    { "id": "block-d", "siteId": "site-2", "name": "D Blok" },
+    { "id": "block-e", "siteId": "site-2", "name": "E Blok" }
   ],
   "apartments": [
-    { "id": "apt-1", "blockId": "block-a", "no": "1", "floor": 1, "residentId": "resident-1" },
-    { "id": "apt-2", "blockId": "block-a", "no": "2", "floor": 1, "residentId": "resident-2" },
-    { "id": "apt-3", "blockId": "block-b", "no": "7", "floor": 3, "residentId": "resident-3" },
-    { "id": "apt-4", "blockId": "block-c", "no": "11", "floor": 5, "residentId": "resident-4" }
+    { "id": "apt-1", "siteId": "site-1", "blockId": "block-a", "no": "1", "floor": 1, "residentId": "resident-1" },
+    { "id": "apt-2", "siteId": "site-1", "blockId": "block-a", "no": "2", "floor": 1, "residentId": "resident-2" },
+    { "id": "apt-3", "siteId": "site-1", "blockId": "block-b", "no": "7", "floor": 3, "residentId": "resident-3" },
+    { "id": "apt-4", "siteId": "site-1", "blockId": "block-c", "no": "11", "floor": 5, "residentId": "resident-4" },
+    { "id": "apt-5", "siteId": "site-2", "blockId": "block-d", "no": "3", "floor": 2, "residentId": "resident-5" },
+    { "id": "apt-6", "siteId": "site-2", "blockId": "block-d", "no": "4", "floor": 2, "residentId": "resident-6" },
+    { "id": "apt-7", "siteId": "site-2", "blockId": "block-e", "no": "9", "floor": 4, "residentId": "resident-7" }
   ],
   "residents": [
-    { "id": "resident-1", "name": "Ayşe Demir", "phone": "05xx 111 22 33", "email": "ayse@example.com" },
-    { "id": "resident-2", "name": "Mert Kaya", "phone": "05xx 222 33 44", "email": "mert@example.com" },
-    { "id": "resident-3", "name": "Selin Ak", "phone": "05xx 333 44 55", "email": "selin@example.com" },
-    { "id": "resident-4", "name": "Can Öztürk", "phone": "05xx 444 55 66", "email": "can@example.com" }
+    { "id": "resident-1", "siteId": "site-1", "name": "Ayşe Demir", "phone": "05xx 111 22 33", "email": "ayse@example.com" },
+    { "id": "resident-2", "siteId": "site-1", "name": "Mert Kaya", "phone": "05xx 222 33 44", "email": "mert@example.com" },
+    { "id": "resident-3", "siteId": "site-1", "name": "Selin Ak", "phone": "05xx 333 44 55", "email": "selin@example.com" },
+    { "id": "resident-4", "siteId": "site-1", "name": "Can Öztürk", "phone": "05xx 444 55 66", "email": "can@example.com" },
+    { "id": "resident-5", "siteId": "site-2", "name": "Deniz Yıldız", "phone": "05xx 555 66 77", "email": "deniz@example.com" },
+    { "id": "resident-6", "siteId": "site-2", "name": "Burak Şen", "phone": "05xx 666 77 88", "email": "burak@example.com" },
+    { "id": "resident-7", "siteId": "site-2", "name": "Elif Kara", "phone": "05xx 777 88 99", "email": "elif@example.com" }
   ],
   "dues": [
-    { "id": "due-1", "apartmentId": "apt-1", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "paid" },
-    { "id": "due-2", "apartmentId": "apt-2", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "pending" },
-    { "id": "due-3", "apartmentId": "apt-3", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "overdue" },
-    { "id": "due-4", "apartmentId": "apt-4", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "paid" }
+    { "id": "due-1", "siteId": "site-1", "apartmentId": "apt-1", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "paid" },
+    { "id": "due-2", "siteId": "site-1", "apartmentId": "apt-2", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "pending" },
+    { "id": "due-3", "siteId": "site-1", "apartmentId": "apt-3", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "overdue" },
+    { "id": "due-4", "siteId": "site-1", "apartmentId": "apt-4", "period": "2026-05", "amount": 1850, "dueDate": "2026-05-10", "status": "paid" },
+    { "id": "due-5", "siteId": "site-2", "apartmentId": "apt-5", "period": "2026-05", "amount": 2400, "dueDate": "2026-05-10", "status": "paid" },
+    { "id": "due-6", "siteId": "site-2", "apartmentId": "apt-6", "period": "2026-05", "amount": 2400, "dueDate": "2026-05-10", "status": "overdue" },
+    { "id": "due-7", "siteId": "site-2", "apartmentId": "apt-7", "period": "2026-05", "amount": 2400, "dueDate": "2026-05-10", "status": "overdue" }
   ],
   "payments": [
-    { "id": "pay-1", "dueId": "due-1", "apartmentId": "apt-1", "amount": 1850, "date": "2026-05-02", "method": "Havale", "note": "Mayıs aidatı" },
-    { "id": "pay-2", "dueId": "due-4", "apartmentId": "apt-4", "amount": 1850, "date": "2026-05-03", "method": "Nakit", "note": "Makbuz kesildi" }
+    { "id": "pay-1", "siteId": "site-1", "dueId": "due-1", "apartmentId": "apt-1", "amount": 1850, "date": "2026-05-02", "method": "Havale", "note": "Mayıs aidatı" },
+    { "id": "pay-2", "siteId": "site-1", "dueId": "due-4", "apartmentId": "apt-4", "amount": 1850, "date": "2026-05-03", "method": "Nakit", "note": "Makbuz kesildi" },
+    { "id": "pay-3", "siteId": "site-2", "dueId": "due-5", "apartmentId": "apt-5", "amount": 2400, "date": "2026-05-04", "method": "Havale", "note": "Mayıs aidatı" }
   ],
   "requests": [
     {
       "id": "req-1",
+      "siteId": "site-1",
       "apartmentId": "apt-4",
       "category": "Temizlik",
       "title": "C blok girişinde çöp kokusu",
       "description": "C blok girişinde iki gündür çöpler alınmıyor, koku oluştu.",
-      "photoDataUrl": "",
+      "photoUrl": "",
       "urgency": "Orta",
       "status": "inceleniyor",
       "adminNote": "Temizlik firması aranacak.",
+      "assignee": "",
+      "assignedAt": "",
       "aiSummary": "C blok girişinde çöp toplama aksaması bildirildi.",
       "aiSuggestedAction": "Temizlik firmasıyla aynı gün kontrol planla ve ilgili blokta takip notu oluştur.",
       "aiProvider": "rules",
@@ -58,14 +73,17 @@
     },
     {
       "id": "req-2",
+      "siteId": "site-1",
       "apartmentId": "apt-3",
       "category": "Asansör",
       "title": "B blok asansör ses yapıyor",
       "description": "B blok asansörü kalkışta sert ses çıkarıyor.",
-      "photoDataUrl": "",
+      "photoUrl": "",
       "urgency": "Yüksek",
       "status": "firmaya_iletildi",
       "adminNote": "Bakım firması bugün gelecek.",
+      "assignee": "Yılmaz Asansör",
+      "assignedAt": "2026-04-30",
       "aiSummary": "B blok asansörü için teknik kontrol gerekli.",
       "aiSuggestedAction": "Bakım firmasına servis kaydı aç, çözüm saatini sakinlerle duyuru olarak paylaş.",
       "aiProvider": "rules",
@@ -74,16 +92,51 @@
       "location": "B blok",
       "createdAt": "2026-04-29",
       "resolvedAt": ""
+    },
+    {
+      "id": "req-3",
+      "siteId": "site-2",
+      "apartmentId": "apt-6",
+      "category": "Elektrik",
+      "title": "D blok ortak alan aydınlatması yanmıyor",
+      "description": "D blok merdiven boşluğundaki lambalar iki gündür yanmıyor.",
+      "photoUrl": "",
+      "urgency": "Orta",
+      "status": "yeni",
+      "adminNote": "",
+      "assignee": "",
+      "assignedAt": "",
+      "aiSummary": "D blok merdiven aydınlatmasında elektrik arızası bildirildi.",
+      "aiSuggestedAction": "Elektrik ekibine kontrol kaydı aç, ortak alan güvenliğini önceliklendir.",
+      "aiProvider": "rules",
+      "aiModel": "fallback",
+      "aiFallbackUsed": true,
+      "location": "D Blok",
+      "createdAt": "2026-05-02",
+      "resolvedAt": ""
     }
   ],
   "announcements": [
     {
       "id": "ann-1",
+      "siteId": "site-1",
       "title": "Mayıs aidat dönemi",
       "content": "Mayıs ayı aidat ödemeleri 10 Mayıs tarihine kadar yapılmalıdır.",
       "aiContent": "Değerli sakinlerimiz, Mayıs ayı aidat ödemelerinizi 10 Mayıs tarihine kadar tamamlamanızı rica ederiz.",
       "audience": "Tüm site",
-      "date": "2026-05-01"
+      "date": "2026-05-01",
+      "readBy": []
+    },
+    {
+      "id": "ann-2",
+      "siteId": "site-2",
+      "title": "Otopark çizgi yenileme çalışması",
+      "content": "Cumartesi günü otopark çizgileri yenilenecek, araçlar sokağa alınmalı.",
+      "aiContent": "Değerli komşularımız, Cumartesi günü otopark çizgi yenileme çalışması yapılacaktır. Araçlarınızı geçici olarak site dışına almanızı rica ederiz.",
+      "audience": "Tüm site",
+      "date": "2026-05-03",
+      "readBy": []
     }
-  ]
+  ],
+  "healthScores": []
 }

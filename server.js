@@ -355,6 +355,85 @@ function publicData(data) {
   };
 }
 
+const SITE_COLLECTIONS = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores"];
+
+// Kullanıcının erişebildiği site id'leri. Yönetici birden çok site yönetebilir;
+// sakin yalnızca kendi sitesini görür.
+function userSiteIds(user, data) {
+  if (!user) return [];
+  if (user.role === "admin") {
+    const ids = Array.isArray(user.siteIds) && user.siteIds.length ? user.siteIds : data.sites.map((site) => site.id);
+    return ids.filter((id) => data.sites.some((site) => site.id === id));
+  }
+  return user.siteId ? [user.siteId] : [];
+}
+
+function scopeToSites(data, siteIds) {
+  const allow = new Set(siteIds);
+  const scoped = { ...data, sites: data.sites.filter((site) => allow.has(site.id)) };
+  for (const name of SITE_COLLECTIONS) {
+    scoped[name] = (data[name] || []).filter((row) => allow.has(row.siteId));
+  }
+  return scoped;
+}
+
+// Tek bir sitenin verisi; skor/rapor hesapları bunun üzerinden çalışır.
+function siteScope(data, siteId) {
+  return scopeToSites(data, [siteId]);
+}
+
+// İstemciye dönen durum: oturum açmamış kullanıcı yalnızca kayıt formunun
+// ihtiyaç duyduğu site/blok listesini görür; sakin yalnızca kendi kayıtlarını;
+// yönetici ise yönettiği sitelerin tamamını.
+function stateForUser(data, user) {
+  const empty = { users: [], blocks: [], residents: [], apartments: [], dues: [], payments: [], requests: [], announcements: [], healthScores: [] };
+  if (!user) {
+    return { ...empty, sites: data.sites, blocks: data.blocks };
+  }
+  if (user.role === "resident") {
+    const apartments = data.apartments.filter((item) => item.residentId === user.residentId);
+    const apartmentIds = new Set(apartments.map((item) => item.id));
+    return {
+      ...empty,
+      sites: data.sites.filter((site) => site.id === user.siteId),
+      users: [publicUser(user)],
+      blocks: data.blocks.filter((block) => block.siteId === user.siteId),
+      residents: data.residents.filter((item) => item.id === user.residentId),
+      apartments,
+      dues: data.dues.filter((item) => apartmentIds.has(item.apartmentId)),
+      payments: data.payments.filter((item) => apartmentIds.has(item.apartmentId)),
+      requests: data.requests.filter((item) => apartmentIds.has(item.apartmentId)),
+      announcements: data.announcements.filter((item) => item.siteId === user.siteId),
+    };
+  }
+  const allowed = userSiteIds(user, data);
+  const allow = new Set(allowed);
+  const scoped = scopeToSites(data, allowed);
+  return {
+    ...scoped,
+    users: data.users
+      .filter((item) => item.id === user.id || (item.role === "resident" && allow.has(item.siteId)))
+      .map(publicUser),
+  };
+}
+
+// İstekteki ?siteId= değerini doğrular; yoksa kullanıcının ilk sitesine düşer.
+function resolveSiteId(url, user, data) {
+  const allowed = userSiteIds(user, data);
+  ensure(allowed.length > 0, "Erişebileceğiniz bir site bulunamadı.");
+  const requested = clean(url.searchParams.get("siteId"));
+  if (!requested) return allowed[0];
+  ensure(allowed.includes(requested), "Bu siteye erişim yetkiniz yok.");
+  return requested;
+}
+
+// Gövdeden gelen siteId'yi doğrular (yazma uçları için).
+function requireSiteAccess(siteId, user, data) {
+  const allowed = userSiteIds(user, data);
+  ensure(allowed.includes(siteId), "Bu siteye erişim yetkiniz yok.");
+  return siteId;
+}
+
 function daysBetween(start, end) {
   return Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000));
 }
@@ -374,7 +453,9 @@ function recurringIssues(data) {
 
 // Site Sağlık Skoru: dokümandaki ağırlıklar (ödeme %35, çözüm %25, şikayet %20,
 // tekrar %10, iletişim %10). İstemci ve sunucu aynı formülü kullanır.
-function calculateHealthScore(data) {
+// siteId verilirse skor yalnızca o sitenin verisinden hesaplanır.
+function calculateHealthScore(rawData, siteId) {
+  const data = siteId ? siteScope(rawData, siteId) : rawData;
   const totalDues = data.dues.length || 1;
   const paidRatio = data.dues.filter((due) => due.status === "paid").length / totalDues;
   const openRequests = data.requests.filter((request) => request.status !== "cozuldu" && request.status !== "reddedildi");
@@ -779,7 +860,7 @@ async function routeApi(req, res, url) {
       return;
     }
     const token = signToken({ sub: user.id, role: user.role });
-    json(res, 200, { user: publicUser(user), token, data: publicData(data) });
+    json(res, 200, { user: publicUser(user), token, data: stateForUser(data, user) });
     return;
   }
 
@@ -795,15 +876,21 @@ async function routeApi(req, res, url) {
       json(res, 409, { error: "Bu e-posta ile kayıtlı kullanıcı var" });
       return;
     }
+    // Kayıt olan sakin bir siteye bağlanır: seçilen blok sitesini belirler.
+    const block = data.blocks.find((item) => item.id === clean(body.blockId)) || data.blocks[0];
+    ensure(block, "Kayıt için tanımlı bir blok bulunamadı.");
+    const siteId = block.siteId;
     const resident = {
       id: uid("resident"),
+      siteId,
       name: clean(body.name),
       phone: clean(body.phone),
       email,
     };
     const apartment = {
       id: uid("apt"),
-      blockId: clean(body.blockId || data.blocks[0]?.id),
+      siteId,
+      blockId: block.id,
       no: clean(body.apartmentNo),
       floor: Number(body.floor || 1),
       residentId: resident.id,
@@ -815,6 +902,7 @@ async function routeApi(req, res, url) {
       phone: resident.phone,
       role: "resident",
       residentId: resident.id,
+      siteId,
       passwordHash: hashPassword(password),
     };
     data.residents.push(resident);
@@ -822,12 +910,50 @@ async function routeApi(req, res, url) {
     data.users.push(user);
     await writeData(data);
     const token = signToken({ sub: user.id, role: user.role });
-    json(res, 201, { user: publicUser(user), token, data: publicData(data) });
+    json(res, 201, { user: publicUser(user), token, data: stateForUser(data, user) });
     return;
   }
 
   if (method === "GET" && url.pathname === "/api/state") {
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/sites/overview") {
+    // Yönetim firması görünümü: yönetilen her site için özet metrikler.
+    const overview = userSiteIds(authUser, data).map((siteId) => {
+      const site = data.sites.find((item) => item.id === siteId);
+      const scoped = siteScope(data, siteId);
+      const total = scoped.dues.reduce((sum, due) => sum + Number(due.amount), 0);
+      const paid = scoped.dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + Number(due.amount), 0);
+      const health = calculateHealthScore(data, siteId);
+      return {
+        siteId,
+        name: site?.name || siteId,
+        address: site?.address || "",
+        apartments: scoped.apartments.length,
+        collectionRate: Math.round((paid / Math.max(total, 1)) * 100),
+        pendingAmount: total - paid,
+        openRequests: scoped.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status)).length,
+        score: health.score,
+        status: health.status,
+      };
+    });
+    json(res, 200, { sites: overview });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/sites") {
+    const body = await readBody(req);
+    const name = clean(body.name);
+    ensure(name, "Site adı zorunludur.");
+    const site = { id: uid("site"), name, address: clean(body.address) };
+    data.sites.push(site);
+    // Siteyi oluşturan yönetici otomatik olarak bu siteye erişir.
+    const owner = data.users.find((item) => item.id === authUser.id);
+    if (owner && Array.isArray(owner.siteIds)) owner.siteIds.push(site.id);
+    await writeData(data);
+    json(res, 201, { site, data: stateForUser(data, owner || authUser) });
     return;
   }
 
@@ -849,13 +975,15 @@ async function routeApi(req, res, url) {
     ensure(PERIOD_RE.test(period), "Dönem YYYY-AA biçiminde olmalıdır (örn. 2026-06).");
     ensure(Number.isFinite(amount) && amount > 0, "Aidat tutarı sıfırdan büyük olmalıdır.");
     ensure(DATE_RE.test(dueDate), "Son ödeme tarihi YYYY-AA-GG biçiminde olmalıdır.");
+    // Aidat yalnızca seçili site için oluşturulur.
+    const siteId = resolveSiteId(url, authUser, data);
     const existing = new Set(data.dues.filter((due) => due.period === period).map((due) => due.apartmentId));
     const newDues = data.apartments
-      .filter((apartment) => !existing.has(apartment.id))
-      .map((apartment) => ({ id: uid("due"), apartmentId: apartment.id, period, amount, dueDate, status: "pending" }));
+      .filter((apartment) => apartment.siteId === siteId && !existing.has(apartment.id))
+      .map((apartment) => ({ id: uid("due"), siteId, apartmentId: apartment.id, period, amount, dueDate, status: "pending" }));
     data.dues.push(...newDues);
     await writeData(data);
-    json(res, 201, { created: newDues.length, data: publicData(data) });
+    json(res, 201, { created: newDues.length, data: stateForUser(data, authUser) });
     return;
   }
 
@@ -866,9 +994,11 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Due not found" });
       return;
     }
+    requireSiteAccess(due.siteId, authUser, data);
     due.status = "paid";
     data.payments.push({
       id: uid("pay"),
+      siteId: due.siteId,
       dueId: due.id,
       apartmentId: due.apartmentId,
       amount: due.amount,
@@ -877,7 +1007,7 @@ async function routeApi(req, res, url) {
       note: "Yönetici tarafından işlendi",
     });
     await writeData(data);
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
@@ -889,6 +1019,7 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Due not found" });
       return;
     }
+    requireSiteAccess(due.siteId, authUser, data);
     const apartment = data.apartments.find((item) => item.id === due.apartmentId);
     const resident = data.residents.find((item) => item.id === apartment?.residentId);
     const reminder = await draftPaymentReminderWithAI({ resident, apartment, due });
@@ -903,6 +1034,7 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Due not found" });
       return;
     }
+    requireSiteAccess(due.siteId, authUser, data);
     const apartment = data.apartments.find((item) => item.id === due.apartmentId);
     const resident = data.residents.find((item) => item.id === apartment?.residentId);
     const reminder = clean(body.note)
@@ -919,6 +1051,7 @@ async function routeApi(req, res, url) {
     });
     data.payments.push({
       id: uid("reminder"),
+      siteId: due.siteId,
       dueId: due.id,
       apartmentId: due.apartmentId,
       amount: 0,
@@ -931,7 +1064,7 @@ async function routeApi(req, res, url) {
       delivery,
     });
     await writeData(data);
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
@@ -942,13 +1075,21 @@ async function routeApi(req, res, url) {
     const apartmentId = clean(body.apartmentId);
     ensure(title, "Talep başlığı zorunludur.");
     ensure(description, "Talep açıklaması zorunludur.");
-    ensure(data.apartments.some((apartment) => apartment.id === apartmentId), "Geçerli bir daire seçilmelidir.");
+    const apartment = data.apartments.find((item) => item.id === apartmentId);
+    ensure(apartment, "Geçerli bir daire seçilmelidir.");
+    // Sakin yalnızca kendi dairesi için talep açabilir; yönetici yönettiği sitede.
+    if (authUser.role === "resident") {
+      ensure(apartment.residentId === authUser.residentId, "Yalnızca kendi daireniz için talep açabilirsiniz.");
+    } else {
+      requireSiteAccess(apartment.siteId, authUser, data);
+    }
     const photoDataUrl = clean(body.photoDataUrl);
-    const analysis = await analyzeComplaintWithAI({ data, title, description, photoDataUrl });
+    const analysis = await analyzeComplaintWithAI({ data: siteScope(data, apartment.siteId), title, description, photoDataUrl });
     // Görseli AI'a verdikten sonra dosyaya yaz; db.json'da base64 tutma.
     const stored = await storage.saveDataUrl(photoDataUrl, "req");
     const request = {
       id: uid("req"),
+      siteId: apartment.siteId,
       apartmentId,
       category: analysis.category,
       title,
@@ -969,7 +1110,7 @@ async function routeApi(req, res, url) {
     };
     data.requests.push(request);
     await writeData(data);
-    json(res, 201, { request, analysis, data: publicData(data) });
+    json(res, 201, { request, analysis, data: stateForUser(data, authUser) });
     return;
   }
 
@@ -981,10 +1122,11 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Request not found" });
       return;
     }
+    requireSiteAccess(request.siteId, authUser, data);
     request.status = clean(body.status);
     if (request.status === "cozuldu") request.resolvedAt = today();
     await writeData(data);
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
@@ -995,10 +1137,11 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Request not found" });
       return;
     }
+    requireSiteAccess(data.requests[index].siteId, authUser, data);
     const [removed] = data.requests.splice(index, 1);
     if (removed?.photoUrl) await storage.remove(removed.photoUrl);
     await writeData(data);
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
@@ -1009,6 +1152,7 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Request not found" });
       return;
     }
+    requireSiteAccess(request.siteId, authUser, data);
     if (body.status !== undefined) request.status = clean(body.status);
     if (body.adminNote !== undefined) request.adminNote = clean(body.adminNote);
     if (body.assignee !== undefined) {
@@ -1021,7 +1165,7 @@ async function routeApi(req, res, url) {
     if (request.status === "cozuldu" && !request.resolvedAt) request.resolvedAt = today();
     if (request.status !== "cozuldu") request.resolvedAt = "";
     await writeData(data);
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
@@ -1030,9 +1174,11 @@ async function routeApi(req, res, url) {
     const content = clean(body.content);
     ensure(clean(body.title), "Duyuru başlığı zorunludur.");
     ensure(content, "Duyuru içeriği zorunludur.");
+    const siteId = resolveSiteId(url, authUser, data);
     const improved = await improveAnnouncementWithAI({ content, tone: clean(body.tone) });
     const announcement = {
       id: uid("ann"),
+      siteId,
       title: clean(body.title),
       content,
       aiContent: improved.content,
@@ -1043,8 +1189,8 @@ async function routeApi(req, res, url) {
       date: today(),
       readBy: [],
     };
-    // Duyuruyu e-postası olan tüm sakinlere bildirim katmanıyla ilet.
-    const recipients = data.users.filter((user) => user.role === "resident" && clean(user.email));
+    // Duyuruyu yalnızca ilgili sitenin e-postalı sakinlerine ilet.
+    const recipients = data.users.filter((user) => user.role === "resident" && user.siteId === siteId && clean(user.email));
     const results = await Promise.all(
       recipients.map((user) =>
         notifier.send({
@@ -1063,7 +1209,7 @@ async function routeApi(req, res, url) {
     };
     data.announcements.push(announcement);
     await writeData(data);
-    json(res, 201, { announcement, data: publicData(data) });
+    json(res, 201, { announcement, data: stateForUser(data, authUser) });
     return;
   }
 
@@ -1074,13 +1220,16 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Announcement not found" });
       return;
     }
+    // Kullanıcı yalnızca kendi sitesinin duyurusunu okundu işaretleyebilir.
+    const readable = authUser.role === "resident" ? [authUser.siteId] : userSiteIds(authUser, data);
+    ensure(readable.includes(announcement.siteId), "Bu duyuruya erişim yetkiniz yok.");
     if (!Array.isArray(announcement.readBy)) announcement.readBy = [];
     // Aynı kullanıcı için tekrarlanan işaretlemeler yok sayılır (idempotent).
     if (!announcement.readBy.some((entry) => entry.userId === authUser.id)) {
       announcement.readBy.push({ userId: authUser.id, name: authUser.name, date: today() });
       await writeData(data);
     }
-    json(res, 200, publicData(data));
+    json(res, 200, stateForUser(data, authUser));
     return;
   }
 
@@ -1090,16 +1239,20 @@ async function routeApi(req, res, url) {
     const email = clean(body.email);
     ensure(clean(body.residentName), "Sakin adı zorunludur.");
     ensure(clean(body.no), "Daire numarası zorunludur.");
-    ensure(data.blocks.some((block) => block.id === blockId), "Geçerli bir blok seçilmelidir.");
+    const block = data.blocks.find((item) => item.id === blockId);
+    ensure(block, "Geçerli bir blok seçilmelidir.");
     ensure(!email || isEmail(email), "Geçerli bir e-posta adresi girin.");
+    const siteId = requireSiteAccess(block.siteId, authUser, data);
     const resident = {
       id: uid("resident"),
+      siteId,
       name: clean(body.residentName),
       phone: clean(body.phone),
       email,
     };
     const apartment = {
       id: uid("apt"),
+      siteId,
       blockId,
       no: clean(body.no),
       floor: Number(body.floor) || 1,
@@ -1112,12 +1265,13 @@ async function routeApi(req, res, url) {
       email: resident.email,
       role: "resident",
       residentId: resident.id,
+      siteId,
       passwordHash: hashPassword(clean(body.password) || "demo123"),
     });
     data.residents.push(resident);
     data.apartments.push(apartment);
     await writeData(data);
-    json(res, 201, { resident, apartment, data: publicData(data) });
+    json(res, 201, { resident, apartment, data: stateForUser(data, authUser) });
     return;
   }
 
@@ -1125,6 +1279,8 @@ async function routeApi(req, res, url) {
     const body = await readBody(req);
     const records = parseApartmentCsv(body.csv);
     ensure(records.length > 0, "İçeri aktarılacak satır bulunamadı. Başlık satırı ve en az bir kayıt gerekir.");
+    // İçeri aktarma seçili siteye yapılır; bloklar o site içinde eşleşir.
+    const siteId = resolveSiteId(url, authUser, data);
     const result = { created: 0, skipped: 0, blocksCreated: 0, errors: [] };
     records.forEach((record, index) => {
       const rowNo = index + 2; // başlık + 1 tabanlı
@@ -1139,9 +1295,11 @@ async function routeApi(req, res, url) {
         result.errors.push(`Satır ${rowNo}: geçersiz e-posta (${email}).`);
         return;
       }
-      let block = data.blocks.find((item) => item.name.toLocaleLowerCase("tr-TR") === blockName.toLocaleLowerCase("tr-TR"));
+      let block = data.blocks.find(
+        (item) => item.siteId === siteId && item.name.toLocaleLowerCase("tr-TR") === blockName.toLocaleLowerCase("tr-TR")
+      );
       if (!block) {
-        block = { id: uid("block"), name: blockName };
+        block = { id: uid("block"), siteId, name: blockName };
         data.blocks.push(block);
         result.blocksCreated += 1;
       }
@@ -1152,9 +1310,9 @@ async function routeApi(req, res, url) {
         result.skipped += 1;
         return;
       }
-      const resident = { id: uid("resident"), name: clean(record.name), phone: clean(record.phone), email };
+      const resident = { id: uid("resident"), siteId, name: clean(record.name), phone: clean(record.phone), email };
       data.residents.push(resident);
-      data.apartments.push({ id: uid("apt"), blockId: block.id, no, floor: Number(record.floor) || 1, residentId: resident.id });
+      data.apartments.push({ id: uid("apt"), siteId, blockId: block.id, no, floor: Number(record.floor) || 1, residentId: resident.id });
       if (email) {
         const userExists = data.users.some((u) => clean(u.email).toLocaleLowerCase("tr-TR") === email.toLocaleLowerCase("tr-TR"));
         if (!userExists) {
@@ -1165,6 +1323,7 @@ async function routeApi(req, res, url) {
             email,
             role: "resident",
             residentId: resident.id,
+            siteId,
             passwordHash: hashPassword("demo123"),
           });
         }
@@ -1172,19 +1331,26 @@ async function routeApi(req, res, url) {
       result.created += 1;
     });
     await writeData(data);
-    json(res, 201, { ...result, data: publicData(data) });
+    json(res, 201, { ...result, data: stateForUser(data, authUser) });
     return;
   }
 
   if (method === "GET" && url.pathname === "/api/health-score") {
-    json(res, 200, { current: calculateHealthScore(data), history: data.healthScores || [] });
+    const siteId = resolveSiteId(url, authUser, data);
+    json(res, 200, {
+      siteId,
+      current: calculateHealthScore(data, siteId),
+      history: (data.healthScores || []).filter((item) => item.siteId === siteId),
+    });
     return;
   }
 
   if (method === "POST" && url.pathname === "/api/health-score/snapshot") {
-    const current = calculateHealthScore(data);
+    const siteId = resolveSiteId(url, authUser, data);
+    const current = calculateHealthScore(data, siteId);
     const snapshot = {
       id: uid("hs"),
+      siteId,
       date: today(),
       score: current.score,
       status: current.status,
@@ -1194,13 +1360,14 @@ async function routeApi(req, res, url) {
     if (!Array.isArray(data.healthScores)) data.healthScores = [];
     data.healthScores.push(snapshot);
     await writeData(data);
-    json(res, 201, { snapshot, current, history: data.healthScores });
+    json(res, 201, { siteId, snapshot, current, history: data.healthScores.filter((item) => item.siteId === siteId) });
     return;
   }
 
   if (method === "POST" && url.pathname === "/api/reset") {
     await repository.reset();
-    json(res, 200, publicData(await readData()));
+    const fresh = await readData();
+    json(res, 200, stateForUser(fresh, fresh.users.find((item) => item.id === authUser.id) || authUser));
     return;
   }
 
@@ -1268,4 +1435,7 @@ module.exports = {
   calculateHealthScore,
   parseCsvRows,
   parseApartmentCsv,
+  userSiteIds,
+  scopeToSites,
+  stateForUser,
 };

@@ -45,6 +45,8 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 - [x] Duyuru okunma takibi (sakin ekranında otomatik işaretleme) ve yönetici bildirim geçmişi eklendi.
 - [x] Bildirim katmanı eklendi: hatırlatma ve duyurular SMS/e-posta seam'i üzerinden iletiliyor, sonuç geçmişte görünüyor.
 - [x] Talep atama eklendi: firma/kişi ataması, atama tarihi ve raporda firma performans tablosu (ortalama çözüm süresi).
+- [x] Çoklu site desteği eklendi: tüm veri `siteId` ile ayrıldı, yönetici site seçici ve "Tüm Siteler" karşılaştırma ekranı geldi.
+- [x] Veri erişimi rol bazlı kapsandı: sakin yalnızca kendi sitesini ve kendi kayıtlarını, yönetici yönettiği siteleri görür.
 
 ## Yol Haritası
 
@@ -70,7 +72,7 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 
 ### Faz 3+ — Entegrasyon ve akıllı yönetim katmanı
 
-- [ ] Yönetim firmaları için çoklu site görünümü ekle (`siteId` filtrelemesi).
+- [x] Yönetim firmaları için çoklu site görünümü ekle (`siteId` filtrelemesi).
 - [ ] Online ödeme veya banka hareketi içeri aktarma altyapısını planla.
 - [ ] Karşılaştırmalı site skorları, tedarikçi performansı ve tahsilat tahmini ekle.
 
@@ -124,7 +126,9 @@ Parolalar `scrypt` ile hash'lenir; eski düz-metin parolalar ilk okumada otomati
 
 Erişim: (genel) kimlik gerektirmez, (oturum) geçerli token gerekir, (admin) yönetici rolü gerekir.
 
-- `GET /api/state` (genel)
+- `GET /api/state` (genel) — oturumsuz yalnızca site/blok listesi; oturumlu kullanıcının kapsamındaki veri
+- `GET /api/sites/overview` (admin) — yönetilen sitelerin karşılaştırmalı özeti
+- `POST /api/sites` (admin) — yeni site oluştur
 - `GET /api/ai/status` (genel)
 - `GET /api/ai/debug` (admin)
 - `POST /api/auth/login` (genel)
@@ -147,11 +151,16 @@ Erişim: (genel) kimlik gerektirmez, (oturum) geçerli token gerekir, (admin) y�
 
 Yüklenen talep fotoğrafları `/uploads/<dosya>` yolundan servis edilir.
 
+Site kapsamı: `dues/bulk`, `announcements`, `apartments/import`, `health-score` ve `health-score/snapshot` uçları `?siteId=` parametresi alır; verilmezse kullanıcının ilk sitesi kullanılır. Erişim yetkisi olmayan bir `siteId` 400 döndürür.
+
 ## Veritabanı
 
 Veri erişimi `db/repository.js` içindeki repository katmanı arkasındadır. Varsayılan sürücü JSON dosyasıdır (`data/db.json`). PostgreSQL'e geçmek için `PostgresRepository` aynı arayüzle doldurulur ve `DB_DRIVER=postgres` ile devreye alınır. Geçiş şeması `db/schema.sql` dosyasındadır.
 
 ## Demo Kullanıcıları
 
-- Yönetici: `admin@apartai.local` / `demo123`
-- Sakin: `ayse@example.com` / `demo123`
+Seed iki site içerir: **Çınar Apartmanı** (site-1) ve **Meltem Sitesi** (site-2).
+
+- Yönetici (her iki siteyi yönetir): `admin@apartai.local` / `demo123`
+- Sakin (Çınar Apartmanı): `ayse@example.com` / `demo123`
+- Sakin (Meltem Sitesi): `deniz@example.com` / `demo123`

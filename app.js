@@ -45,54 +45,70 @@ const seedState = {
   requestStatusFilter: "all",
   requestCategoryFilter: "all",
   sessionUser: null,
-  site: {
-    id: "site-1",
-    name: "Çınar Apartmanı",
-    address: "Kadıköy, İstanbul",
-  },
+  activeSiteId: "site-1",
+  sites: [
+    { id: "site-1", name: "Çınar Apartmanı", address: "Kadıköy, İstanbul" },
+    { id: "site-2", name: "Meltem Sitesi", address: "Ataşehir, İstanbul" },
+  ],
   users: [
-    { id: "user-admin-1", name: "Ömer Faruk Baysal", email: "admin@apartai.local", phone: "05xx 000 00 00", role: "admin" },
-    { id: "user-resident-1", name: "Ayşe Demir", email: "ayse@example.com", phone: "05xx 111 22 33", role: "resident", residentId: "resident-1" },
-    { id: "user-resident-2", name: "Mert Kaya", email: "mert@example.com", phone: "05xx 222 33 44", role: "resident", residentId: "resident-2" },
+    { id: "user-admin-1", name: "Ömer Faruk Baysal", email: "admin@apartai.local", phone: "05xx 000 00 00", role: "admin", siteIds: ["site-1", "site-2"] },
+    { id: "user-resident-1", name: "Ayşe Demir", email: "ayse@example.com", phone: "05xx 111 22 33", role: "resident", residentId: "resident-1", siteId: "site-1" },
+    { id: "user-resident-2", name: "Mert Kaya", email: "mert@example.com", phone: "05xx 222 33 44", role: "resident", residentId: "resident-2", siteId: "site-1" },
+    { id: "user-resident-3", name: "Deniz Yıldız", email: "deniz@example.com", phone: "05xx 555 66 77", role: "resident", residentId: "resident-5", siteId: "site-2" },
   ],
   blocks: [
-    { id: "block-a", name: "A Blok" },
-    { id: "block-b", name: "B Blok" },
-    { id: "block-c", name: "C Blok" },
+    { id: "block-a", siteId: "site-1", name: "A Blok" },
+    { id: "block-b", siteId: "site-1", name: "B Blok" },
+    { id: "block-c", siteId: "site-1", name: "C Blok" },
+    { id: "block-d", siteId: "site-2", name: "D Blok" },
+    { id: "block-e", siteId: "site-2", name: "E Blok" },
   ],
   apartments: [
-    { id: "apt-1", blockId: "block-a", no: "1", floor: 1, residentId: "resident-1" },
-    { id: "apt-2", blockId: "block-a", no: "2", floor: 1, residentId: "resident-2" },
-    { id: "apt-3", blockId: "block-b", no: "7", floor: 3, residentId: "resident-3" },
-    { id: "apt-4", blockId: "block-c", no: "11", floor: 5, residentId: "resident-4" },
+    { id: "apt-1", siteId: "site-1", blockId: "block-a", no: "1", floor: 1, residentId: "resident-1" },
+    { id: "apt-2", siteId: "site-1", blockId: "block-a", no: "2", floor: 1, residentId: "resident-2" },
+    { id: "apt-3", siteId: "site-1", blockId: "block-b", no: "7", floor: 3, residentId: "resident-3" },
+    { id: "apt-4", siteId: "site-1", blockId: "block-c", no: "11", floor: 5, residentId: "resident-4" },
+    { id: "apt-5", siteId: "site-2", blockId: "block-d", no: "3", floor: 2, residentId: "resident-5" },
+    { id: "apt-6", siteId: "site-2", blockId: "block-d", no: "4", floor: 2, residentId: "resident-6" },
+    { id: "apt-7", siteId: "site-2", blockId: "block-e", no: "9", floor: 4, residentId: "resident-7" },
   ],
   residents: [
-    { id: "resident-1", name: "Ayşe Demir", phone: "05xx 111 22 33", email: "ayse@example.com" },
-    { id: "resident-2", name: "Mert Kaya", phone: "05xx 222 33 44", email: "mert@example.com" },
-    { id: "resident-3", name: "Selin Ak", phone: "05xx 333 44 55", email: "selin@example.com" },
-    { id: "resident-4", name: "Can Öztürk", phone: "05xx 444 55 66", email: "can@example.com" },
+    { id: "resident-1", siteId: "site-1", name: "Ayşe Demir", phone: "05xx 111 22 33", email: "ayse@example.com" },
+    { id: "resident-2", siteId: "site-1", name: "Mert Kaya", phone: "05xx 222 33 44", email: "mert@example.com" },
+    { id: "resident-3", siteId: "site-1", name: "Selin Ak", phone: "05xx 333 44 55", email: "selin@example.com" },
+    { id: "resident-4", siteId: "site-1", name: "Can Öztürk", phone: "05xx 444 55 66", email: "can@example.com" },
+    { id: "resident-5", siteId: "site-2", name: "Deniz Yıldız", phone: "05xx 555 66 77", email: "deniz@example.com" },
+    { id: "resident-6", siteId: "site-2", name: "Burak Şen", phone: "05xx 666 77 88", email: "burak@example.com" },
+    { id: "resident-7", siteId: "site-2", name: "Elif Kara", phone: "05xx 777 88 99", email: "elif@example.com" },
   ],
   dues: [
-    { id: "due-1", apartmentId: "apt-1", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
-    { id: "due-2", apartmentId: "apt-2", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "pending" },
-    { id: "due-3", apartmentId: "apt-3", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "overdue" },
-    { id: "due-4", apartmentId: "apt-4", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
+    { id: "due-1", siteId: "site-1", apartmentId: "apt-1", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
+    { id: "due-2", siteId: "site-1", apartmentId: "apt-2", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "pending" },
+    { id: "due-3", siteId: "site-1", apartmentId: "apt-3", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "overdue" },
+    { id: "due-4", siteId: "site-1", apartmentId: "apt-4", period: "2026-05", amount: 1850, dueDate: "2026-05-10", status: "paid" },
+    { id: "due-5", siteId: "site-2", apartmentId: "apt-5", period: "2026-05", amount: 2400, dueDate: "2026-05-10", status: "paid" },
+    { id: "due-6", siteId: "site-2", apartmentId: "apt-6", period: "2026-05", amount: 2400, dueDate: "2026-05-10", status: "overdue" },
+    { id: "due-7", siteId: "site-2", apartmentId: "apt-7", period: "2026-05", amount: 2400, dueDate: "2026-05-10", status: "overdue" },
   ],
   payments: [
-    { id: "pay-1", dueId: "due-1", apartmentId: "apt-1", amount: 1850, date: "2026-05-02", method: "Havale", note: "Mayıs aidatı" },
-    { id: "pay-2", dueId: "due-4", apartmentId: "apt-4", amount: 1850, date: "2026-05-03", method: "Nakit", note: "Makbuz kesildi" },
+    { id: "pay-1", siteId: "site-1", dueId: "due-1", apartmentId: "apt-1", amount: 1850, date: "2026-05-02", method: "Havale", note: "Mayıs aidatı" },
+    { id: "pay-2", siteId: "site-1", dueId: "due-4", apartmentId: "apt-4", amount: 1850, date: "2026-05-03", method: "Nakit", note: "Makbuz kesildi" },
+    { id: "pay-3", siteId: "site-2", dueId: "due-5", apartmentId: "apt-5", amount: 2400, date: "2026-05-04", method: "Havale", note: "Mayıs aidatı" },
   ],
   requests: [
     {
       id: "req-1",
+      siteId: "site-1",
       apartmentId: "apt-4",
       category: "Temizlik",
       title: "C blok girişinde çöp kokusu",
       description: "C blok girişinde iki gündür çöpler alınmıyor, koku oluştu.",
-      photoDataUrl: "",
+      photoUrl: "",
       urgency: "Orta",
       status: "inceleniyor",
       adminNote: "Temizlik firması aranacak.",
+      assignee: "",
+      assignedAt: "",
       aiSummary: "C blok girişinde çöp toplama aksaması bildirildi.",
       aiSuggestedAction: "Temizlik firmasıyla aynı gün kontrol planla ve ilgili blokta takip notu oluştur.",
       aiProvider: "rules",
@@ -104,14 +120,17 @@ const seedState = {
     },
     {
       id: "req-2",
+      siteId: "site-1",
       apartmentId: "apt-3",
       category: "Asansör",
       title: "B blok asansör ses yapıyor",
       description: "B blok asansörü kalkışta sert ses çıkarıyor.",
-      photoDataUrl: "",
+      photoUrl: "",
       urgency: "Yüksek",
       status: "firmaya_iletildi",
       adminNote: "Bakım firması bugün gelecek.",
+      assignee: "Yılmaz Asansör",
+      assignedAt: "2026-04-30",
       aiSummary: "B blok asansörü için teknik kontrol gerekli.",
       aiSuggestedAction: "Bakım firmasına servis kaydı aç, çözüm saatini sakinlerle duyuru olarak paylaş.",
       aiProvider: "rules",
@@ -121,17 +140,52 @@ const seedState = {
       createdAt: "2026-04-29",
       resolvedAt: "",
     },
+    {
+      id: "req-3",
+      siteId: "site-2",
+      apartmentId: "apt-6",
+      category: "Elektrik",
+      title: "D blok ortak alan aydınlatması yanmıyor",
+      description: "D blok merdiven boşluğundaki lambalar iki gündür yanmıyor.",
+      photoUrl: "",
+      urgency: "Orta",
+      status: "yeni",
+      adminNote: "",
+      assignee: "",
+      assignedAt: "",
+      aiSummary: "D blok merdiven aydınlatmasında elektrik arızası bildirildi.",
+      aiSuggestedAction: "Elektrik ekibine kontrol kaydı aç, ortak alan güvenliğini önceliklendir.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
+      location: "D Blok",
+      createdAt: "2026-05-02",
+      resolvedAt: "",
+    },
   ],
   announcements: [
     {
       id: "ann-1",
+      siteId: "site-1",
       title: "Mayıs aidat dönemi",
       content: "Mayıs ayı aidat ödemeleri 10 Mayıs tarihine kadar yapılmalıdır.",
       aiContent: "Değerli sakinlerimiz, Mayıs ayı aidat ödemelerinizi 10 Mayıs tarihine kadar tamamlamanızı rica ederiz.",
       audience: "Tüm site",
       date: "2026-05-01",
+      readBy: [],
+    },
+    {
+      id: "ann-2",
+      siteId: "site-2",
+      title: "Otopark çizgi yenileme çalışması",
+      content: "Cumartesi günü otopark çizgileri yenilenecek, araçlar sokağa alınmalı.",
+      aiContent: "Değerli komşularımız, Cumartesi günü otopark çizgi yenileme çalışması yapılacaktır. Araçlarınızı geçici olarak site dışına almanızı rica ederiz.",
+      audience: "Tüm site",
+      date: "2026-05-03",
+      readBy: [],
     },
   ],
+  healthScores: [],
 };
 
 let state = structuredClone(seedState);
@@ -170,13 +224,74 @@ function applyServerData(data, patch = {}) {
     requestStatusFilter: state.requestStatusFilter,
     requestCategoryFilter: state.requestCategoryFilter,
     sessionUser: state.sessionUser,
+    activeSiteId: state.activeSiteId,
   };
   state = { ...state, ...data, ...uiState, ...patch };
   if (state.sessionUser?.role === "resident") {
     state.mode = "resident";
     state.selectedResidentId = state.sessionUser.residentId;
   }
+  ensureActiveSite();
   render();
+}
+
+// Seçili site her zaman erişilebilir bir siteye işaret etmeli.
+function ensureActiveSite() {
+  const sites = state.sites || [];
+  if (state.sessionUser?.role === "resident") {
+    state.activeSiteId = state.sessionUser.siteId || sites[0]?.id || "";
+    return;
+  }
+  if (!sites.some((site) => site.id === state.activeSiteId)) {
+    state.activeSiteId = sites[0]?.id || "";
+  }
+}
+
+function activeSite() {
+  return (state.sites || []).find((site) => site.id === state.activeSiteId) || null;
+}
+
+// Aktif siteye göre filtrelenmiş koleksiyonlar. render() öncesi yeniden kurulur,
+// böylece görünüm fonksiyonları site sınırını tek bir yerden alır.
+let scoped = {
+  sites: [],
+  users: [],
+  blocks: [],
+  residents: [],
+  apartments: [],
+  dues: [],
+  payments: [],
+  requests: [],
+  announcements: [],
+  healthScores: [],
+};
+
+function rebuildScope() {
+  const siteId = state.activeSiteId;
+  // siteId taşımayan eski kayıtlar da görünür kalsın (geriye dönük uyumluluk).
+  const pick = (rows) => (rows || []).filter((row) => !row.siteId || row.siteId === siteId);
+  scoped = {
+    sites: state.sites || [],
+    users: (state.users || []).filter((user) => user.role !== "resident" || !user.siteId || user.siteId === siteId),
+    blocks: pick(state.blocks),
+    residents: pick(state.residents),
+    apartments: pick(state.apartments),
+    dues: pick(state.dues),
+    payments: pick(state.payments),
+    requests: pick(state.requests),
+    announcements: pick(state.announcements),
+    healthScores: pick(state.healthScores),
+  };
+}
+
+function switchSite(siteId) {
+  setState({
+    activeSiteId: siteId,
+    selectedRequestId: null,
+    selectedDueId: null,
+    requestStatusFilter: "all",
+    requestCategoryFilter: "all",
+  });
 }
 
 function loadSession() {
@@ -326,12 +441,12 @@ function dueStatusText(status) {
   return { paid: "Ödendi", pending: "Bekliyor", overdue: "Gecikti" }[status] ?? status;
 }
 
-function dueSummary() {
-  const total = state.dues.reduce((sum, due) => sum + Number(due.amount), 0);
-  const paid = state.dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + Number(due.amount), 0);
-  const pending = state.dues.filter((due) => due.status !== "paid").reduce((sum, due) => sum + Number(due.amount), 0);
-  const overdue = state.dues.filter((due) => due.status === "overdue").reduce((sum, due) => sum + Number(due.amount), 0);
-  const paidCount = state.dues.filter((due) => due.status === "paid").length;
+function dueSummary(rows = scoped.dues) {
+  const total = rows.reduce((sum, due) => sum + Number(due.amount), 0);
+  const paid = rows.filter((due) => due.status === "paid").reduce((sum, due) => sum + Number(due.amount), 0);
+  const pending = rows.filter((due) => due.status !== "paid").reduce((sum, due) => sum + Number(due.amount), 0);
+  const overdue = rows.filter((due) => due.status === "overdue").reduce((sum, due) => sum + Number(due.amount), 0);
+  const paidCount = rows.filter((due) => due.status === "paid").length;
   const collectionRate = Math.round((paid / Math.max(total, 1)) * 100);
   return { total, paid, pending, overdue, paidCount, collectionRate };
 }
@@ -378,17 +493,20 @@ function requestStatusText(status) {
   }[status] ?? status;
 }
 
-function calculateHealthScore() {
-  const totalDues = state.dues.length || 1;
-  const paidRatio = state.dues.filter((due) => due.status === "paid").length / totalDues;
-  const openRequests = state.requests.filter((request) => request.status !== "cozuldu" && request.status !== "reddedildi");
-  const resolved = state.requests.filter((request) => request.resolvedAt);
+// Varsayılan olarak aktif sitenin verisiyle çalışır; başka bir site kapsamı
+// verilirse (çoklu site karşılaştırması) onun üzerinden hesaplar.
+function calculateHealthScore(rows = scoped) {
+  const totalDues = rows.dues.length || 1;
+  const paidRatio = rows.dues.filter((due) => due.status === "paid").length / totalDues;
+  const openRequests = rows.requests.filter((request) => request.status !== "cozuldu" && request.status !== "reddedildi");
+  const resolved = rows.requests.filter((request) => request.resolvedAt);
   const avgResolutionDays = resolved.length
     ? resolved.reduce((sum, request) => sum + daysBetween(request.createdAt, request.resolvedAt), 0) / resolved.length
     : 2.5;
-  const complaintDensity = Math.min(state.requests.length / Math.max(state.apartments.length, 1), 1.4);
-  const recurringRatio = recurringIssues().length ? 0.35 : 0.08;
-  const communicationScore = Math.min(state.announcements.length / 4, 1);
+  const complaintDensity = Math.min(rows.requests.length / Math.max(rows.apartments.length, 1), 1.4);
+  const recurring = recurringIssues(rows);
+  const recurringRatio = recurring.length ? 0.35 : 0.08;
+  const communicationScore = Math.min(rows.announcements.length / 4, 1);
 
   const paymentScore = paidRatio * 35;
   const resolutionScore = Math.max(0, 1 - avgResolutionDays / 10) * 25;
@@ -408,11 +526,11 @@ function calculateHealthScore() {
     reasons.push(`${openRequests.length} açık talep çözüm bekliyor.`);
     actions.push("Yüksek aciliyetli talepleri bugün içinde durumlandır.");
   }
-  if (recurringIssues().length) {
+  if (recurring.length) {
     reasons.push("Aynı blok ve kategoride tekrar eden talepler var.");
-    actions.push(`${recurringIssues()[0].label} için kalıcı çözüm kontrolü planla.`);
+    actions.push(`${recurring[0].label} için kalıcı çözüm kontrolü planla.`);
   }
-  if (state.announcements.length < 2) {
+  if (rows.announcements.length < 2) {
     reasons.push("Duyuru trafiği düşük, sakin bilgilendirmesi sınırlı.");
     actions.push("Haftalık kısa yönetim bilgilendirmesi yayınla.");
   }
@@ -429,11 +547,11 @@ function daysBetween(start, end) {
   return Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000));
 }
 
-function recurringIssues() {
+function recurringIssues(rows = scoped) {
   const groups = {};
-  state.requests.forEach((request) => {
-    const apt = state.apartments.find((item) => item.id === request.apartmentId);
-    const block = state.blocks.find((item) => item.id === apt?.blockId);
+  rows.requests.forEach((request) => {
+    const apt = rows.apartments.find((item) => item.id === request.apartmentId);
+    const block = rows.blocks.find((item) => item.id === apt?.blockId);
     const key = `${block?.name ?? "Genel"}-${request.category}`;
     groups[key] = (groups[key] ?? 0) + 1;
   });
@@ -442,22 +560,22 @@ function recurringIssues() {
     .map(([label, count]) => ({ label: label.replace("-", " / "), count }));
 }
 
-function requestStats() {
-  const open = state.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status)).length;
-  const resolved = state.requests.filter((request) => request.status === "cozuldu").length;
-  const resolutionRate = Math.round((resolved / Math.max(state.requests.length, 1)) * 100);
+function requestStats(rows = scoped.requests) {
+  const open = rows.filter((request) => !["cozuldu", "reddedildi"].includes(request.status)).length;
+  const resolved = rows.filter((request) => request.status === "cozuldu").length;
+  const resolutionRate = Math.round((resolved / Math.max(rows.length, 1)) * 100);
   return { open, resolved, resolutionRate };
 }
 
 function knownAssignees() {
-  return [...new Set(state.requests.map((request) => request.assignee).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr-TR"));
+  return [...new Set(scoped.requests.map((request) => request.assignee).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr-TR"));
 }
 
 // Firma/taşeron performansı: atanmış taleplerden toplam/açık/çözülen sayısı
 // ve ortalama çözüm süresi (gün) çıkarılır.
 function vendorPerformance() {
   const groups = {};
-  state.requests
+  scoped.requests
     .filter((request) => request.assignee)
     .forEach((request) => {
       const key = request.assignee;
@@ -477,9 +595,9 @@ function vendorPerformance() {
 }
 
 function blockIssueDensity() {
-  const counts = state.blocks.map((block) => {
-    const apartmentIds = state.apartments.filter((apartment) => apartment.blockId === block.id).map((apartment) => apartment.id);
-    const count = state.requests.filter((request) => apartmentIds.includes(request.apartmentId)).length;
+  const counts = scoped.blocks.map((block) => {
+    const apartmentIds = scoped.apartments.filter((apartment) => apartment.blockId === block.id).map((apartment) => apartment.id);
+    const count = scoped.requests.filter((request) => apartmentIds.includes(request.apartmentId)).length;
     return { block: block.name, count };
   });
   return counts.sort((a, b) => b.count - a.count);
@@ -487,22 +605,22 @@ function blockIssueDensity() {
 
 function pilotMetrics() {
   const residentsWithActivity = new Set([
-    ...state.dues.map((due) => state.apartments.find((apartment) => apartment.id === due.apartmentId)?.residentId).filter(Boolean),
-    ...state.requests.map((request) => state.apartments.find((apartment) => apartment.id === request.apartmentId)?.residentId).filter(Boolean),
+    ...scoped.dues.map((due) => scoped.apartments.find((apartment) => apartment.id === due.apartmentId)?.residentId).filter(Boolean),
+    ...scoped.requests.map((request) => scoped.apartments.find((apartment) => apartment.id === request.apartmentId)?.residentId).filter(Boolean),
   ]);
-  const residentActivityRate = Math.round((residentsWithActivity.size / Math.max(state.residents.length, 1)) * 100);
-  const systemRequestRate = state.requests.length ? 100 : 0;
-  const announcementCount = state.announcements.length;
+  const residentActivityRate = Math.round((residentsWithActivity.size / Math.max(scoped.residents.length, 1)) * 100);
+  const systemRequestRate = scoped.requests.length ? 100 : 0;
+  const announcementCount = scoped.announcements.length;
   return { residentActivityRate, systemRequestRate, announcementCount };
 }
 
 function similarRequests(targetRequest) {
   if (!targetRequest) return [];
-  const targetApartment = state.apartments.find((item) => item.id === targetRequest.apartmentId);
-  return state.requests
+  const targetApartment = scoped.apartments.find((item) => item.id === targetRequest.apartmentId);
+  return scoped.requests
     .filter((request) => {
       if (request.id === targetRequest.id) return false;
-      const apartment = state.apartments.find((item) => item.id === request.apartmentId);
+      const apartment = scoped.apartments.find((item) => item.id === request.apartmentId);
       return request.category === targetRequest.category || apartment?.blockId === targetApartment?.blockId;
     })
     .slice(0, 4);
@@ -541,9 +659,9 @@ function analyzeComplaint(text) {
     : ["iki gündür", "koku", "çalışmıyor", "kaçak"].some((word) => lower.includes(word))
       ? "Orta"
       : "Düşük";
-  const block = state.blocks.find((item) => lower.includes(item.name.toLocaleLowerCase("tr-TR").replace(" blok", "")));
+  const block = scoped.blocks.find((item) => lower.includes(item.name.toLocaleLowerCase("tr-TR").replace(" blok", "")));
   const location = block ? `${block.name}` : lower.includes("giriş") ? "Giriş alanı" : "Belirtilmedi";
-  const similar = state.requests.filter((request) => request.category === category && request.location.includes(block?.name ?? "")).length;
+  const similar = scoped.requests.filter((request) => request.category === category && request.location.includes(block?.name ?? "")).length;
   return {
     category,
     urgency,
@@ -569,10 +687,13 @@ function improveAnnouncement(text, tone) {
 
 function render() {
   const app = document.querySelector("#app");
+  ensureActiveSite();
+  rebuildScope();
   if (!state.sessionUser) {
     app.innerHTML = authView();
     return;
   }
+  const site = activeSite();
   app.innerHTML = `
     <div class="shell">
       <aside class="sidebar">
@@ -583,10 +704,11 @@ function render() {
             <span>AI destekli site yönetimi</span>
           </div>
         </div>
+        ${state.mode === "manager" ? siteSwitcher() : ""}
         ${state.mode === "manager" ? managerNav() : residentNav()}
         <div class="sidebar-footer">
-          ${state.site.name}<br />
-          ${state.site.address}
+          ${safeText(site?.name || "Site seçilmedi")}<br />
+          ${safeText(site?.address || "")}
         </div>
       </aside>
       <main class="main">
@@ -842,8 +964,16 @@ function authModalView(isLogin) {
                 <label>Ad soyad<input name="name" required /></label>
                 <label>E-posta<input name="email" type="email" required /></label>
                 <label>Telefon<input name="phone" placeholder="05xx" /></label>
-                <label>Blok
-                  <select name="blockId">${state.blocks.map((block) => `<option value="${block.id}">${block.name}</option>`).join("")}</select>
+                <label>Site ve blok
+                  <select name="blockId">
+                    ${(state.sites || [])
+                      .map((site) => {
+                        const blocks = (state.blocks || []).filter((block) => block.siteId === site.id);
+                        if (!blocks.length) return "";
+                        return `<optgroup label="${safeText(site.name)}">${blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</optgroup>`;
+                      })
+                      .join("")}
+                  </select>
                 </label>
                 <div class="form-grid wide">
                   <label>Daire no<input name="apartmentNo" required /></label>
@@ -877,7 +1007,7 @@ function sessionActions() {
     user.role === "admin"
       ? `<div class="mode-switch" aria-label="Ekran tipi">
           <button class="${state.mode === "manager" ? "active" : ""}" onclick="setState({ mode: 'manager', view: 'dashboard' })">Yönetici</button>
-          <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${state.residents[0]?.id ?? ""}' })">Sakin</button>
+          <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${scoped.residents[0]?.id ?? ""}' })">Sakin</button>
         </div>`
       : `<span class="status info">Sakin hesabı</span>`;
   return `
@@ -892,6 +1022,19 @@ function sessionActions() {
   `;
 }
 
+// Yöneticinin yönettiği siteler arasında geçiş yapmasını sağlar.
+function siteSwitcher() {
+  const sites = state.sites || [];
+  if (sites.length <= 1) return "";
+  return `
+    <label class="site-switcher">
+      <span>Aktif site</span>
+      <select onchange="switchSite(this.value)">
+        ${sites.map((site) => `<option value="${site.id}" ${site.id === state.activeSiteId ? "selected" : ""}>${safeText(site.name)}</option>`).join("")}
+      </select>
+    </label>`;
+}
+
 function managerNav() {
   const items = [
     ["dashboard", "Panel"],
@@ -900,6 +1043,7 @@ function managerNav() {
     ["announcements", "Duyurular"],
     ["setup", "Site Kurulumu"],
     ["reports", "Rapor"],
+    ["sites", "Tüm Siteler"],
   ];
   return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
 }
@@ -921,6 +1065,7 @@ function pageTitle() {
     announcements: "Duyurular",
     setup: "Site Kurulumu",
     reports: "Aylık Rapor",
+    sites: "Tüm Siteler",
     "resident-home": "Sakin Ekranı",
     "resident-request": "Talep Aç",
     "resident-announcements": "Duyurular",
@@ -936,6 +1081,7 @@ function pageDescription() {
     announcements: "Duyuru yayınla ve AI ile metni sakin bir tona getir.",
     setup: "Blok, daire ve sakin kayıtlarını yönet.",
     reports: "Tahsilat, kategori yoğunluğu ve skor nedenlerini incele.",
+    sites: "Yönettiğin tüm siteleri karşılaştır ve yeni site ekle.",
     "resident-home": "Borcunu, ödeme geçmişini ve açık taleplerini gör.",
     "resident-request": "Arıza veya şikayetini yönetime ilet.",
     "resident-announcements": "Yönetim duyurularını takip et.",
@@ -944,14 +1090,16 @@ function pageDescription() {
 }
 
 function managerView() {
-  return {
+  const views = {
     dashboard: dashboardView,
     dues: duesView,
     requests: requestsView,
     announcements: announcementsView,
     setup: setupView,
     reports: reportsView,
-  }[state.view]();
+    sites: sitesView,
+  };
+  return (views[state.view] || dashboardView)();
 }
 
 function residentView() {
@@ -964,8 +1112,8 @@ function residentView() {
 
 function dashboardView() {
   const health = calculateHealthScore();
-  const paid = state.dues.filter((due) => due.status === "paid").length;
-  const openRequests = state.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status));
+  const paid = scoped.dues.filter((due) => due.status === "paid").length;
+  const openRequests = scoped.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status));
   const avgResolution = openRequests.length ? "Açık takip" : "2.5 gün";
   return `
     <div class="grid dashboard-grid">
@@ -990,8 +1138,8 @@ function dashboardView() {
       </section>
       <section class="section metric">
         <span>Bu ay tahsilat</span>
-        <strong>%${Math.round((paid / Math.max(state.dues.length, 1)) * 100)}</strong>
-        <small>${paid}/${state.dues.length} aidat ödendi</small>
+        <strong>%${Math.round((paid / Math.max(scoped.dues.length, 1)) * 100)}</strong>
+        <small>${paid}/${scoped.dues.length} aidat ödendi</small>
       </section>
       <section class="section metric">
         <span>Açık talep</span>
@@ -1009,7 +1157,7 @@ function dashboardView() {
       <section class="section">
         <div class="section-header"><h2>Son Duyurular</h2></div>
         <ul class="plain-list">
-          ${state.announcements.slice(-3).reverse().map((item) => `<li><strong>${item.title}</strong><br>${item.aiContent || item.content}</li>`).join("")}
+          ${scoped.announcements.slice(-3).reverse().map((item) => `<li><strong>${item.title}</strong><br>${item.aiContent || item.content}</li>`).join("")}
         </ul>
       </section>
     </div>
@@ -1018,17 +1166,17 @@ function dashboardView() {
 
 function duesView() {
   const summary = dueSummary();
-  const riskyDues = state.dues.filter((due) => due.status !== "paid").sort((a, b) => {
+  const riskyDues = scoped.dues.filter((due) => due.status !== "paid").sort((a, b) => {
     const riskOrder = { Yüksek: 0, Orta: 1, Düşük: 2 };
     return riskOrder[dueRiskLevel(a).label] - riskOrder[dueRiskLevel(b).label];
   });
-  const selectedDue = state.dues.find((due) => due.id === state.selectedDueId);
+  const selectedDue = scoped.dues.find((due) => due.id === state.selectedDueId);
   return `
     <div class="grid dashboard-grid">
       <section class="section metric">
         <span>Tahsilat oranı</span>
         <strong>%${summary.collectionRate}</strong>
-        <small>${summary.paidCount}/${state.dues.length} aidat ödendi</small>
+        <small>${summary.paidCount}/${scoped.dues.length} aidat ödendi</small>
       </section>
       <section class="section metric">
         <span>Tahsil edilen</span>
@@ -1095,7 +1243,7 @@ function duesView() {
         <table>
           <thead><tr><th>Daire</th><th>Sakin</th><th>Dönem</th><th>Tutar</th><th>Son Ödeme</th><th>Durum</th><th>İşlem</th></tr></thead>
           <tbody>
-            ${state.dues.map((due) => `
+            ${scoped.dues.map((due) => `
               <tr>
                 <td>${apartmentLabel(due.apartmentId)}</td>
                 <td>${residentForApartment(due.apartmentId)?.name ?? "-"}</td>
@@ -1160,16 +1308,16 @@ function reminderModal(due) {
 }
 
 function requestsView() {
-  const categories = [...new Set(state.requests.map((request) => request.category))];
+  const categories = [...new Set(scoped.requests.map((request) => request.category))];
   const statusOptions = ["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"];
   const statusFilter = statusOptions.includes(state.requestStatusFilter) ? state.requestStatusFilter : "all";
   const categoryFilter = categories.includes(state.requestCategoryFilter) ? state.requestCategoryFilter : "all";
-  const filteredRequests = state.requests.filter((request) => {
+  const filteredRequests = scoped.requests.filter((request) => {
     const statusOk = statusFilter === "all" || request.status === statusFilter;
     const categoryOk = categoryFilter === "all" || request.category === categoryFilter;
     return statusOk && categoryOk;
   });
-  const selectedRequest = state.requests.find((request) => request.id === state.selectedRequestId);
+  const selectedRequest = scoped.requests.find((request) => request.id === state.selectedRequestId);
   return `
     <section class="section">
       <div class="section-header">
@@ -1284,7 +1432,7 @@ function requestDetailModal(request) {
 
 function announcementReadStats(item) {
   const readCount = (item.readBy || []).length;
-  const residentCount = state.users.filter((user) => user.role === "resident").length;
+  const residentCount = scoped.users.filter((user) => user.role === "resident").length;
   return { readCount, residentCount };
 }
 
@@ -1297,7 +1445,7 @@ function deliveryText(delivery) {
 }
 
 function notificationHistory() {
-  const reminders = state.payments
+  const reminders = scoped.payments
     .filter((payment) => payment.method === "Hatırlatma")
     .map((payment) => ({
       type: "Hatırlatma",
@@ -1305,7 +1453,7 @@ function notificationHistory() {
       target: apartmentLabel(payment.apartmentId),
       detail: (payment.note || "Aidat hatırlatması") + deliveryText(payment.delivery),
     }));
-  const announcements = state.announcements.map((item) => {
+  const announcements = scoped.announcements.map((item) => {
     const stats = announcementReadStats(item);
     return {
       type: "Duyuru",
@@ -1342,7 +1490,7 @@ function announcementsView() {
       <section class="section">
         <div class="section-header"><h2>Yayınlanan Duyurular</h2></div>
         <div class="grid">
-          ${state.announcements.slice().reverse().map((item) => {
+          ${scoped.announcements.slice().reverse().map((item) => {
             const stats = announcementReadStats(item);
             return `
             <article class="notice">
@@ -1378,7 +1526,7 @@ function setupView() {
         <div class="section-header"><h2>Daire ve Sakin Ekle</h2></div>
         <form class="form-grid wide" onsubmit="createApartment(event)">
           <label>Blok
-            <select name="blockId">${state.blocks.map((block) => `<option value="${block.id}">${block.name}</option>`).join("")}</select>
+            <select name="blockId">${scoped.blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</select>
           </label>
           <label>Daire No<input name="no" required /></label>
           <label>Kat<input name="floor" type="number" value="1" required /></label>
@@ -1405,8 +1553,8 @@ function setupView() {
           <table>
             <thead><tr><th>Daire</th><th>Kat</th><th>Sakin</th><th>Telefon</th></tr></thead>
             <tbody>
-              ${state.apartments.map((apt) => {
-                const resident = state.residents.find((item) => item.id === apt.residentId);
+              ${scoped.apartments.map((apt) => {
+                const resident = scoped.residents.find((item) => item.id === apt.residentId);
                 return `<tr><td>${apartmentLabel(apt.id)}</td><td>${apt.floor}</td><td>${resident?.name ?? "-"}</td><td>${resident?.phone ?? "-"}</td></tr>`;
               }).join("")}
             </tbody>
@@ -1423,7 +1571,7 @@ function reportsView() {
   const requests = requestStats();
   const blocks = blockIssueDensity();
   const pilot = pilotMetrics();
-  const byCategory = state.requests.reduce((acc, request) => {
+  const byCategory = scoped.requests.reduce((acc, request) => {
     acc[request.category] = (acc[request.category] ?? 0) + 1;
     return acc;
   }, {});
@@ -1509,10 +1657,10 @@ function reportsView() {
         ${API_BASE ? `<button class="btn-primary" onclick="saveHealthSnapshot()">Skoru kaydet</button>` : ""}
       </div>
       ${
-        (state.healthScores || []).length
+        scoped.healthScores.length
           ? `<div class="table-wrap"><table>
               <thead><tr><th>Tarih</th><th>Skor</th><th>Durum</th></tr></thead>
-              <tbody>${state.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td>${item.score}</td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
+              <tbody>${scoped.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td>${item.score}</td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
             </table></div>`
           : `<p>Henüz kayıtlı skor anlık görüntüsü yok. "Skoru kaydet" ile bugünün skorunu geçmişe ekleyebilirsin.</p>`
       }
@@ -1520,33 +1668,138 @@ function reportsView() {
   `;
 }
 
+// Yönetim firması görünümü: her site için aynı metrikler, karşılaştırmalı.
+function siteMetrics(siteId) {
+  const pick = (rows) => (rows || []).filter((row) => !row.siteId || row.siteId === siteId);
+  const rows = {
+    dues: pick(state.dues),
+    requests: pick(state.requests),
+    apartments: pick(state.apartments),
+    blocks: pick(state.blocks),
+    announcements: pick(state.announcements),
+  };
+  const summary = dueSummary(rows.dues);
+  const health = calculateHealthScore(rows);
+  const stats = requestStats(rows.requests);
+  const site = (state.sites || []).find((item) => item.id === siteId);
+  return {
+    siteId,
+    name: site?.name || siteId,
+    address: site?.address || "",
+    apartments: rows.apartments.length,
+    collectionRate: summary.collectionRate,
+    pending: summary.pending,
+    openRequests: stats.open,
+    score: health.score,
+    status: health.status,
+  };
+}
+
+function sitesView() {
+  const rows = (state.sites || []).map((site) => siteMetrics(site.id)).sort((a, b) => a.score - b.score);
+  const totalPending = rows.reduce((sum, row) => sum + row.pending, 0);
+  const avgScore = rows.length ? Math.round(rows.reduce((sum, row) => sum + row.score, 0) / rows.length) : 0;
+  return `
+    <div class="grid dashboard-grid">
+      <section class="section metric">
+        <span>Yönetilen site</span>
+        <strong>${rows.length}</strong>
+        <small>${rows.reduce((sum, row) => sum + row.apartments, 0)} daire</small>
+      </section>
+      <section class="section metric">
+        <span>Ortalama skor</span>
+        <strong>${avgScore}</strong>
+        <small>En düşük: ${rows[0]?.name ?? "-"}</small>
+      </section>
+      <section class="section metric">
+        <span>Toplam bekleyen</span>
+        <strong>${money(totalPending)}</strong>
+        <small>Tüm sitelerde tahsil edilmemiş</small>
+      </section>
+    </div>
+    <section class="section" style="margin-top:16px">
+      <div class="section-header">
+        <div>
+          <h2>Site Karşılaştırması</h2>
+          <p>En düşük skordan başlayarak sıralanır; satıra tıklayarak o siteye geç.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Site</th><th>Daire</th><th>Tahsilat</th><th>Bekleyen</th><th>Açık Talep</th><th>Skor</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr class="${row.siteId === state.activeSiteId ? "row-active" : ""}">
+                <td><strong>${safeText(row.name)}</strong><br><small>${safeText(row.address)}</small></td>
+                <td>${row.apartments}</td>
+                <td>%${row.collectionRate}</td>
+                <td>${money(row.pending)}</td>
+                <td>${row.openRequests}</td>
+                <td><span class="status ${row.score >= 75 ? "ok" : row.score >= 60 ? "warn" : "danger"}">${row.score} · ${row.status}</span></td>
+                <td>${row.siteId === state.activeSiteId ? `<span class="status info">Aktif</span>` : `<button class="btn" onclick="switchSite('${row.siteId}')">Bu siteye geç</button>`}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    ${
+      API_BASE
+        ? `<section class="section" style="margin-top:16px">
+            <div class="section-header"><h2>Yeni Site Ekle</h2></div>
+            <form class="form-grid wide" onsubmit="createSite(event)">
+              <label>Site adı<input name="name" required placeholder="Örn. Palmiye Konakları" /></label>
+              <label>Adres<input name="address" placeholder="İlçe, İl" /></label>
+              <button class="btn primary" type="submit">Siteyi Oluştur</button>
+            </form>
+          </section>`
+        : ""
+    }
+  `;
+}
+
+function createSite(event) {
+  event.preventDefault();
+  if (!API_BASE) return;
+  const form = new FormData(event.target);
+  const payload = { name: safeText(form.get("name")), address: safeText(form.get("address")) };
+  apiRequest("/sites", { method: "POST", body: JSON.stringify(payload) })
+    .then((result) => {
+      event.target.reset();
+      applyServerData(result.data, { activeSiteId: result.site.id, view: "setup" });
+    })
+    .catch((error) => alert(error.message));
+}
+
 function saveHealthSnapshot() {
   if (!API_BASE) return;
-  apiRequest("/health-score/snapshot", { method: "POST" })
+  apiRequest(`/health-score/snapshot?siteId=${encodeURIComponent(state.activeSiteId)}`, { method: "POST" })
     .then((result) => {
-      setState({ healthScores: result.history });
+      // Sunucu yalnızca bu sitenin geçmişini döner; diğer sitelerin kayıtlarını koru.
+      const others = (state.healthScores || []).filter((item) => item.siteId !== state.activeSiteId);
+      setState({ healthScores: [...others, ...result.history] });
     })
     .catch((error) => alert(error.message));
 }
 
 function currentResident() {
   const residentId = state.sessionUser?.role === "resident" ? state.sessionUser.residentId : state.selectedResidentId;
-  return state.residents.find((item) => item.id === residentId) ?? state.residents[0];
+  return scoped.residents.find((item) => item.id === residentId) ?? scoped.residents[0];
 }
 
 function residentApartment() {
-  return state.apartments.find((item) => item.residentId === currentResident().id);
+  return scoped.apartments.find((item) => item.residentId === currentResident()?.id);
 }
 
 function residentHomeView() {
   const apt = residentApartment();
-  const dues = state.dues.filter((due) => due.apartmentId === apt?.id);
-  const requests = state.requests.filter((request) => request.apartmentId === apt?.id);
+  const dues = scoped.dues.filter((due) => due.apartmentId === apt?.id);
+  const requests = scoped.requests.filter((request) => request.apartmentId === apt?.id);
   return `
     <div class="resident-shell">
       <section class="mobile-preview">
         <div class="resident-header">
-          <h1>${currentResident().name}</h1>
+          <h1>${safeText(currentResident()?.name || "Sakin")}</h1>
           <span>${apartmentLabel(apt?.id)}</span>
         </div>
         <div class="resident-body">
@@ -1594,7 +1847,7 @@ let markingAnnouncementsRead = false;
 function unreadAnnouncementsForSession() {
   const userId = state.sessionUser?.id;
   if (!userId) return [];
-  return state.announcements.filter((item) => !(item.readBy || []).some((entry) => entry.userId === userId));
+  return scoped.announcements.filter((item) => !(item.readBy || []).some((entry) => entry.userId === userId));
 }
 
 // Sakin duyuru ekranını açtığında okunmamışları sunucuda okundu işaretler.
@@ -1637,7 +1890,7 @@ function residentAnnouncementsView() {
       <section class="section">
         <div class="section-header"><h2>Duyurular</h2></div>
         <div class="grid">
-          ${state.announcements.slice().reverse().map((item) => {
+          ${scoped.announcements.slice().reverse().map((item) => {
             const isNew = userId && !(item.readBy || []).some((entry) => entry.userId === userId);
             return `<article class="notice"><strong>${item.title}</strong>${isNew ? `<span class="status warn">Yeni</span>` : ""}${aiBadge(item)}<p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`;
           }).join("")}
@@ -1654,15 +1907,16 @@ function createDues(event) {
   const amount = Number(form.get("amount"));
   const dueDate = form.get("dueDate");
   if (API_BASE) {
-    apiRequest("/dues/bulk", { method: "POST", body: JSON.stringify({ period, amount, dueDate }) }).then((result) => {
-      applyServerData(result.data);
-    });
+    apiRequest(`/dues/bulk?siteId=${encodeURIComponent(state.activeSiteId)}`, { method: "POST", body: JSON.stringify({ period, amount, dueDate }) })
+      .then((result) => applyServerData(result.data))
+      .catch((error) => alert(error.message));
     return;
   }
-  const existing = new Set(state.dues.filter((due) => due.period === period).map((due) => due.apartmentId));
-  const newDues = state.apartments
+  const siteId = state.activeSiteId;
+  const existing = new Set(scoped.dues.filter((due) => due.period === period).map((due) => due.apartmentId));
+  const newDues = scoped.apartments
     .filter((apt) => !existing.has(apt.id))
-    .map((apt) => ({ id: id("due"), apartmentId: apt.id, period, amount, dueDate, status: "pending" }));
+    .map((apt) => ({ id: id("due"), siteId, apartmentId: apt.id, period, amount, dueDate, status: "pending" }));
   state.dues = [...state.dues, ...newDues];
   saveState();
   render();
@@ -1684,9 +1938,13 @@ function applyLoggedInUser(user) {
     state.mode = "resident";
     state.view = "resident-home";
     state.selectedResidentId = safeUser.residentId;
+    state.activeSiteId = safeUser.siteId || state.activeSiteId;
   } else {
     state.mode = "manager";
     state.view = "dashboard";
+    // Yönetici oturumu yönettiği ilk siteyle başlar.
+    const allowed = Array.isArray(safeUser.siteIds) && safeUser.siteIds.length ? safeUser.siteIds : (state.sites || []).map((site) => site.id);
+    if (!allowed.includes(state.activeSiteId)) state.activeSiteId = allowed[0] || "";
   }
   render();
 }
@@ -1739,9 +1997,12 @@ function registerResident(event) {
     return;
   }
   const residentId = id("resident");
-  const user = { id: id("user"), name: payload.name, email: payload.email, phone: payload.phone, role: "resident", residentId };
-  state.residents = [...state.residents, { id: residentId, name: payload.name, phone: payload.phone, email: payload.email }];
-  state.apartments = [...state.apartments, { id: id("apt"), blockId: payload.blockId, no: payload.apartmentNo, floor: payload.floor, residentId }];
+  // Seçilen blok, sakinin bağlanacağı siteyi belirler.
+  const block = (state.blocks || []).find((item) => item.id === payload.blockId) || state.blocks[0];
+  const siteId = block?.siteId || state.activeSiteId;
+  const user = { id: id("user"), name: payload.name, email: payload.email, phone: payload.phone, role: "resident", residentId, siteId };
+  state.residents = [...state.residents, { id: residentId, siteId, name: payload.name, phone: payload.phone, email: payload.email }];
+  state.apartments = [...state.apartments, { id: id("apt"), siteId, blockId: block?.id, no: payload.apartmentNo, floor: payload.floor, residentId }];
   state.users = [...state.users, user];
   saveState();
   applyLoggedInUser(user);
@@ -1765,14 +2026,14 @@ function markPaid(dueId) {
   const due = state.dues.find((item) => item.id === dueId);
   state.payments = [
     ...state.payments,
-    { id: id("pay"), dueId, apartmentId: due.apartmentId, amount: due.amount, date: new Date().toISOString().slice(0, 10), method: "Manuel", note: "Yönetici tarafından işlendi" },
+    { id: id("pay"), siteId: due.siteId, dueId, apartmentId: due.apartmentId, amount: due.amount, date: new Date().toISOString().slice(0, 10), method: "Manuel", note: "Yönetici tarafından işlendi" },
   ];
   saveState();
   render();
 }
 
 function openReminderModal(dueId) {
-  const due = state.dues.find((item) => item.id === dueId);
+  const due = scoped.dues.find((item) => item.id === dueId);
   setState({ selectedDueId: dueId, reminderDraft: due ? reminderTextForDue(due) : "", reminderFallbackUsed: true });
   if (API_BASE) {
     apiRequest(`/dues/${dueId}/reminder-draft`, { method: "POST" }).then((result) => {
@@ -1792,7 +2053,7 @@ function closeDueModal(event) {
 }
 
 function markReminderSent(dueId) {
-  const due = state.dues.find((item) => item.id === dueId);
+  const due = scoped.dues.find((item) => item.id === dueId);
   const payload = {
     note: state.reminderDraft || (due ? reminderTextForDue(due) : "Ödeme hatırlatması gönderildi."),
   };
@@ -1804,7 +2065,7 @@ function markReminderSent(dueId) {
   }
   state.payments = [
     ...state.payments,
-    { id: id("reminder"), dueId, apartmentId: due.apartmentId, amount: 0, date: new Date().toISOString().slice(0, 10), method: "Hatırlatma", note: payload.note },
+    { id: id("reminder"), siteId: due.siteId, dueId, apartmentId: due.apartmentId, amount: 0, date: new Date().toISOString().slice(0, 10), method: "Hatırlatma", note: payload.note },
   ];
   state.selectedDueId = null;
   state.reminderDraft = "";
@@ -1892,21 +2153,25 @@ function createAnnouncement(event) {
     audience: safeText(form.get("audience")),
   };
   if (API_BASE) {
-    apiRequest("/announcements", { method: "POST", body: JSON.stringify(payload) }).then((result) => {
-      event.target.reset();
-      applyServerData(result.data);
-    });
+    apiRequest(`/announcements?siteId=${encodeURIComponent(state.activeSiteId)}`, { method: "POST", body: JSON.stringify(payload) })
+      .then((result) => {
+        event.target.reset();
+        applyServerData(result.data);
+      })
+      .catch((error) => alert(error.message));
     return;
   }
   state.announcements = [
     ...state.announcements,
     {
       id: id("ann"),
+      siteId: state.activeSiteId,
       title: payload.title,
       content,
       aiContent: improveAnnouncement(content, tone),
       audience: payload.audience,
       date: new Date().toISOString().slice(0, 10),
+      readBy: [],
     },
   ];
   saveState();
@@ -1936,13 +2201,14 @@ function createApartment(event) {
   }
   const residentId = id("resident");
   const apartmentId = id("apt");
+  const siteId = (state.blocks || []).find((item) => item.id === payload.blockId)?.siteId || state.activeSiteId;
   state.residents = [
     ...state.residents,
-    { id: residentId, name: payload.residentName, phone: payload.phone, email: payload.email },
+    { id: residentId, siteId, name: payload.residentName, phone: payload.phone, email: payload.email },
   ];
   state.apartments = [
     ...state.apartments,
-    { id: apartmentId, blockId: payload.blockId, no: payload.no, floor: payload.floor, residentId },
+    { id: apartmentId, siteId, blockId: payload.blockId, no: payload.no, floor: payload.floor, residentId },
   ];
   saveState();
   event.target.reset();
@@ -1969,7 +2235,7 @@ function importApartmentsCsv(event) {
     alert("Lütfen CSV içeriği yapıştırın veya bir dosya seçin.");
     return;
   }
-  apiRequest("/apartments/import", { method: "POST", body: JSON.stringify({ csv }) })
+  apiRequest(`/apartments/import?siteId=${encodeURIComponent(state.activeSiteId)}`, { method: "POST", body: JSON.stringify({ csv }) })
     .then((result) => {
       event.target.reset();
       const errorNote = result.errors?.length ? `\nHatalar:\n- ${result.errors.join("\n- ")}` : "";
@@ -1991,14 +2257,21 @@ async function createResidentRequest(event) {
     alert(error.message);
     return;
   }
+  const apartment = residentApartment();
+  if (!apartment) {
+    alert("Kayıtlı daire bulunamadı.");
+    return;
+  }
   if (API_BASE) {
     apiRequest("/requests", {
       method: "POST",
-      body: JSON.stringify({ apartmentId: residentApartment().id, title, description, photoDataUrl }),
-    }).then((result) => {
-      event.target.reset();
-      applyServerData(result.data, { view: "resident-home" });
-    });
+      body: JSON.stringify({ apartmentId: apartment.id, title, description, photoDataUrl }),
+    })
+      .then((result) => {
+        event.target.reset();
+        applyServerData(result.data, { view: "resident-home" });
+      })
+      .catch((error) => alert(error.message));
     return;
   }
   const ai = analyzeComplaint(`${title}. ${description}`);
@@ -2006,7 +2279,8 @@ async function createResidentRequest(event) {
     ...state.requests,
     {
       id: id("req"),
-      apartmentId: residentApartment().id,
+      siteId: apartment.siteId,
+      apartmentId: apartment.id,
       category: ai.category,
       title,
       description,

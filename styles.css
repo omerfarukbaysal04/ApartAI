@@ -1509,6 +1509,36 @@ textarea {
   }
 }
 
+/* Çoklu site: kenar çubuğundaki site seçici ve karşılaştırma tablosu */
+.site-switcher {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 14px;
+}
+
+.site-switcher span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.site-switcher select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+}
+
+tr.row-active > td {
+  background: rgba(15, 118, 110, 0.07);
+}
+
 /* Sosyal medya bölümü (landing) */
 .social-section {
   position: relative;

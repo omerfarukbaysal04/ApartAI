@@ -388,7 +388,7 @@ test("duyuru yayını sakinlere bildirim iletimini kaydeder", async () => {
 
 test("aidat hatırlatması bildirim iletim sonucunu kaydeder", async () => {
   const token = await adminToken();
-  const state = await api("GET", "/api/state", {});
+  const state = await api("GET", "/api/state", { token });
   const due = state.body.dues.find((d) => d.status !== "paid");
   const res = await api("POST", `/api/dues/${due.id}/reminder`, { token, body: {} });
   assert.equal(res.status, 200);
@@ -441,4 +441,152 @@ test("sakin talep ataması yapamaz (403)", async () => {
     body: { assignee: "X Firması" },
   });
   assert.equal(res.status, 403);
+});
+
+// --- Çoklu site (Faz 3) ---
+
+async function residentToken(email) {
+  const res = await api("POST", "/api/auth/login", { body: { email, password: "demo123" } });
+  return res.body.token;
+}
+
+test("oturumsuz /api/state yalnızca site ve blok listesi döndürür", async () => {
+  const res = await api("GET", "/api/state", {});
+  assert.equal(res.status, 200);
+  assert.ok(res.body.sites.length >= 2);
+  assert.ok(res.body.blocks.length > 0);
+  // Hassas veriler sızmamalı.
+  assert.deepEqual(res.body.dues, []);
+  assert.deepEqual(res.body.residents, []);
+  assert.deepEqual(res.body.users, []);
+});
+
+test("yönetici yönettiği tüm sitelerin verisini görür", async () => {
+  const token = await adminToken();
+  const res = await api("GET", "/api/state", { token });
+  const siteIds = new Set(res.body.dues.map((due) => due.siteId));
+  assert.ok(siteIds.has("site-1"));
+  assert.ok(siteIds.has("site-2"));
+});
+
+test("sakin yalnızca kendi sitesini ve kendi kayıtlarını görür", async () => {
+  const token = await residentToken("deniz@example.com");
+  const res = await api("GET", "/api/state", { token });
+  assert.deepEqual(res.body.sites.map((site) => site.id), ["site-2"]);
+  assert.ok(res.body.blocks.every((block) => block.siteId === "site-2"));
+  // Yalnızca kendi dairesi ve kendi borcu.
+  assert.equal(res.body.apartments.length, 1);
+  assert.equal(res.body.apartments[0].id, "apt-5");
+  assert.ok(res.body.dues.every((due) => due.apartmentId === "apt-5"));
+  assert.equal(res.body.users.length, 1);
+});
+
+test("calculateHealthScore yalnızca verilen sitenin verisini kullanır", () => {
+  // Sabit veri: site-a tamamen ödenmiş, site-b tamamen gecikmiş.
+  const data = {
+    sites: [{ id: "site-a" }, { id: "site-b" }],
+    blocks: [{ id: "b-a", siteId: "site-a", name: "A" }, { id: "b-b", siteId: "site-b", name: "B" }],
+    apartments: [{ id: "a1", siteId: "site-a", blockId: "b-a" }, { id: "a2", siteId: "site-b", blockId: "b-b" }],
+    residents: [],
+    payments: [],
+    healthScores: [],
+    dues: [
+      { id: "d1", siteId: "site-a", apartmentId: "a1", amount: 100, status: "paid" },
+      { id: "d2", siteId: "site-b", apartmentId: "a2", amount: 100, status: "overdue" },
+    ],
+    requests: [],
+    announcements: [
+      { id: "an1", siteId: "site-a" },
+      { id: "an2", siteId: "site-a" },
+      { id: "an3", siteId: "site-b" },
+    ],
+  };
+  const a = app.calculateHealthScore(data, "site-a");
+  const b = app.calculateHealthScore(data, "site-b");
+  assert.ok(a.score > b.score, `site-a (${a.score}) site-b'den (${b.score}) yüksek olmalı`);
+});
+
+test("health-score isteği doğru siteyi kapsar", async () => {
+  const token = await adminToken();
+  const first = await api("GET", "/api/health-score?siteId=site-1", { token });
+  const second = await api("GET", "/api/health-score?siteId=site-2", { token });
+  assert.equal(first.body.siteId, "site-1");
+  assert.equal(second.body.siteId, "site-2");
+  assert.ok(Number.isInteger(first.body.current.score));
+  // Geçmiş yalnızca ilgili siteye ait kayıtları içermeli.
+  assert.ok(first.body.history.every((item) => item.siteId === "site-1"));
+  assert.ok(second.body.history.every((item) => item.siteId === "site-2"));
+});
+
+test("erişilmeyen siteId 400 döndürür", async () => {
+  const token = await adminToken();
+  const res = await api("GET", "/api/health-score?siteId=site-yok", { token });
+  assert.equal(res.status, 400);
+});
+
+test("sites/overview yönetilen her site için özet döndürür", async () => {
+  const token = await adminToken();
+  const res = await api("GET", "/api/sites/overview", { token });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.sites.length, 2);
+  const site2 = res.body.sites.find((site) => site.siteId === "site-2");
+  assert.equal(site2.name, "Meltem Sitesi");
+  assert.ok(Number.isInteger(site2.score));
+  assert.ok(site2.openRequests >= 1);
+});
+
+test("dues/bulk yalnızca hedef sitenin dairelerine kayıt açar", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/dues/bulk?siteId=site-2", {
+    token,
+    body: { period: "2026-11", amount: 2500, dueDate: "2026-11-10" },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created, 3); // site-2'de 3 daire var
+  const created = res.body.data.dues.filter((due) => due.period === "2026-11");
+  assert.ok(created.every((due) => due.siteId === "site-2"));
+});
+
+test("duyuru seçilen siteye yazılır ve yalnızca o sitenin sakinlerine gider", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/announcements?siteId=site-2", {
+    token,
+    body: { title: "Site 2 duyurusu", content: "Yalnızca Meltem Sitesi için.", tone: "Kısa" },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.announcement.siteId, "site-2");
+  // site-2'de e-postalı tek sakin kullanıcısı var.
+  assert.equal(res.body.announcement.delivery.total, 1);
+});
+
+test("sakin başka sitenin duyurusunu okundu işaretleyemez", async () => {
+  const token = await residentToken("deniz@example.com"); // site-2 sakini
+  const res = await api("POST", "/api/announcements/ann-1/read", { token }); // site-1 duyurusu
+  assert.equal(res.status, 400);
+});
+
+test("sakin başka dairenin adına talep açamaz", async () => {
+  const token = await residentToken("deniz@example.com"); // apt-5 sakini
+  const res = await api("POST", "/api/requests", {
+    token,
+    body: { apartmentId: "apt-1", title: "Deneme", description: "Başka daire adına talep." },
+  });
+  assert.equal(res.status, 400);
+});
+
+test("yeni site oluşturulur ve yöneticiye erişim verilir", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/sites", { token, body: { name: "Palmiye Konakları", address: "Beylikdüzü" } });
+  assert.equal(res.status, 201);
+  const newId = res.body.site.id;
+  assert.ok(res.body.data.sites.some((site) => site.id === newId));
+  // Yeni site yöneticinin erişim listesine eklendiği için skoru sorgulanabilir.
+  const health = await api("GET", `/api/health-score?siteId=${newId}`, { token });
+  assert.equal(health.status, 200);
+});
+
+test("adsız site oluşturma 400 döndürür", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/sites", { token, body: { name: "" } });
+  assert.equal(res.status, 400);
 });
