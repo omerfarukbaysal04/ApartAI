@@ -59,6 +59,7 @@ const seedState = {
   financesStartDate: "",
   financesEndDate: "",
   financesSelectedMonth: "all",
+  financesCategoryFilter: "all",
   warningModalDueId: null,
   warningModalAptId: null,
   warningModalTone: "friendly",
@@ -134,7 +135,8 @@ const seedState = {
       siteId: "site-1",
       apartmentId: "apt-4",
       category: "Temizlik",
-      title: "C blok girişinde çöp kokusu",
+      entryType: "complaint",
+      title: "C blok girişinde çöp kokusu ve atık birikmesi",
       description: "C blok girişinde iki gündür çöpler alınmıyor, koku oluştu.",
       photoUrl: "",
       urgency: "Orta",
@@ -156,7 +158,8 @@ const seedState = {
       siteId: "site-1",
       apartmentId: "apt-3",
       category: "Asansör",
-      title: "B blok asansör ses yapıyor",
+      entryType: "fault",
+      title: "B blok asansör kalkışta sert ses yapıyor",
       description: "B blok asansörü kalkışta sert ses çıkarıyor.",
       photoUrl: "",
       urgency: "Yüksek",
@@ -178,6 +181,7 @@ const seedState = {
       siteId: "site-2",
       apartmentId: "apt-6",
       category: "Elektrik",
+      entryType: "fault",
       title: "D blok ortak alan aydınlatması yanmıyor",
       description: "D blok merdiven boşluğundaki lambalar iki gündür yanmıyor.",
       photoUrl: "",
@@ -194,6 +198,121 @@ const seedState = {
       location: "D Blok",
       createdAt: "2026-05-02",
       resolvedAt: "",
+    },
+    {
+      id: "req-4",
+      siteId: "site-1",
+      apartmentId: "apt-1",
+      category: "Su ve tesisat",
+      entryType: "fault",
+      title: "A blok bodrum hidrofor su sızıntısı",
+      description: "Bodrum kattaki ana hidrofor vanasında damlatma vardı, teknik ekip contayı yeniledi.",
+      photoUrl: "",
+      urgency: "Yüksek",
+      status: "cozuldu",
+      adminNote: "Tesisatçı contayı değiştirdi, sızıntı kesildi.",
+      assignee: "Termo Teknik",
+      assignedAt: "2026-05-03",
+      aiSummary: "Hidrofor vanasındaki su sızıntısı başarıyla giderildi.",
+      aiSuggestedAction: "Basınç testini tamamla ve kontrol kaydını kapat.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
+      location: "A Blok Bodrum",
+      createdAt: "2026-05-02",
+      resolvedAt: "2026-05-04",
+    },
+    {
+      id: "req-5",
+      siteId: "site-1",
+      apartmentId: "apt-2",
+      category: "Güvenlik",
+      entryType: "complaint",
+      title: "Kapalı otoparkta hatalı araç parkı",
+      description: "Yangın çıkış kapısının önüne park eden araç sebebiyle geçiş engelleniyor.",
+      photoUrl: "",
+      urgency: "Orta",
+      status: "yeni",
+      adminNote: "",
+      assignee: "",
+      assignedAt: "",
+      aiSummary: "Kapalı otoparkta acil çıkış koridorunu kapatan araç şikayeti.",
+      aiSuggestedAction: "Araç plakasına SMS/uyarı ileterek çekilmesini sağla.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
+      location: "Kapalı Otopark -1",
+      createdAt: "2026-09-25",
+      resolvedAt: "",
+    },
+    {
+      id: "req-6",
+      siteId: "site-1",
+      apartmentId: "apt-1",
+      category: "Bahçe",
+      entryType: "suggestion",
+      title: "Ortak bahçeye çocuk oyun alanı ve kamelya eklenmesi",
+      description: "Arka bahçedeki atıl çim alana çocuklar için ahşap oyun grubu ve sakinler için kamelya yapılabilir.",
+      photoUrl: "",
+      urgency: "Düşük",
+      status: "yeni",
+      adminNote: "",
+      assignee: "",
+      assignedAt: "",
+      aiSummary: "Bahçe alanına çocuk oyun parkı ve dinlenme kamelyası önerisi.",
+      aiSuggestedAction: "Site genel kurul gündemine al ve sakin anketi başlat.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
+      location: "Arka Bahçe",
+      createdAt: "2026-09-20",
+      resolvedAt: "",
+    },
+    {
+      id: "req-7",
+      siteId: "site-1",
+      apartmentId: "apt-4",
+      category: "Ortak Alan",
+      entryType: "suggestion",
+      title: "Çatıya güneş panelleri kurulumu ile aidat tasarrufu",
+      description: "Ortak alan elektrik giderlerini %60 düşürmek adına çatıya lisanssız GES kurulması teklifi.",
+      photoUrl: "",
+      urgency: "Düşük",
+      status: "inceleniyor",
+      adminNote: "Mühendislik firmalarından fizibilite teklifi isteniyor.",
+      assignee: "Solar Mühendislik",
+      assignedAt: "2026-09-18",
+      aiSummary: "Ortak elektrik maliyetini düşürmek için güneş enerjisi önerisi.",
+      aiSuggestedAction: "Fizibilite ve geri dönüş süresi hesap raporu hazırlat.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
+      location: "Çatı Alanı",
+      createdAt: "2026-09-15",
+      resolvedAt: "",
+    },
+    {
+      id: "req-8",
+      siteId: "site-1",
+      apartmentId: "apt-3",
+      category: "Ortak Alan",
+      entryType: "complaint",
+      title: "Gece saatlerinde yüksek müzik sesi şikayeti",
+      description: "Hafta içi saat 23:30 sonrası üst kattan gelen aşırı gürültü uykuyu engelliyor.",
+      photoUrl: "",
+      urgency: "Yüksek",
+      status: "reddedildi",
+      adminNote: "Belirtilen saatte nöbetçi güvenlik kontrol ettiğinde ses tespit edilemedi.",
+      assignee: "Güvenlik Amiri",
+      assignedAt: "2026-09-12",
+      aiSummary: "Gece gürültü şikayeti yerinde teyit edilemediğinden işlem kapatıldı.",
+      aiSuggestedAction: "İlgili daireye apartman yaşam kuralları hatırlatması ilet.",
+      aiProvider: "rules",
+      aiModel: "fallback",
+      aiFallbackUsed: true,
+      location: "B Blok 3. Kat",
+      createdAt: "2026-09-11",
+      resolvedAt: "2026-09-12",
     },
   ],
   announcements: [
@@ -283,6 +402,62 @@ const seedState = {
       vendor: "Yeşil Vadi Peyzaj",
       invoiceNo: "MAK-102",
       description: "Bahar dönemi çim havalandırma ve patlayan damlama borusu değişimi",
+    },
+    // Son Dönem Giderleri (Eylül, Ağustos, Temmuz 2026)
+    {
+      id: "exp-s-1",
+      siteId: "site-1",
+      title: "Asansör Periyodik Bakımı (Eylül)",
+      category: "elevator",
+      amount: 3200,
+      date: "2026-09-28",
+      vendor: "Kone Asansör Servis",
+      invoiceNo: "SRV-9011",
+      description: "Eylül ayı A ve B blok asansör bakım kontrolü ve yağlama",
+    },
+    {
+      id: "exp-s-2",
+      siteId: "site-1",
+      title: "Site Ortak Alan Temizlik Malzemeleri",
+      category: "cleaning",
+      amount: 1450,
+      date: "2026-09-22",
+      vendor: "Titiz Kimya ve Hijyen Ltd.",
+      invoiceNo: "FAT-1840",
+      description: "Otomat deterjanı, sıvı sabun ve kat temizlik sarf malzemeleri",
+    },
+    {
+      id: "exp-s-3",
+      siteId: "site-1",
+      title: "Ortak Alan Elektrik Faturası (Eylül)",
+      category: "electricity",
+      amount: 4300,
+      date: "2026-09-10",
+      vendor: "BEDAŞ / Enerji A.Ş.",
+      invoiceNo: "FTR-2026-9901",
+      description: "Eylül ayı merdiven, asansör ve çevre aydınlatma elektrik faturası",
+    },
+    {
+      id: "exp-s-4",
+      siteId: "site-1",
+      title: "Havuz & Su Deposu Dezenfeksiyonu",
+      category: "water",
+      amount: 2600,
+      date: "2026-08-15",
+      vendor: "Mavi Su Hijyen Ltd.",
+      invoiceNo: "FAT-7714",
+      description: "Yaz dönemi hidrofor ve ana su deposu klorlama ve filtre değişimi",
+    },
+    {
+      id: "exp-s-5",
+      siteId: "site-1",
+      title: "Güvenlik Kamera Sistemi Genişletme",
+      category: "security",
+      amount: 3500,
+      date: "2026-07-20",
+      vendor: "Kale Güvenlik Sistemleri",
+      invoiceNo: "FTR-4402",
+      description: "Kapalı otopark girişine 2 adet gece görüşlü IP kamera montajı",
     },
     // Geçmiş Dönem Giderleri (Nisan & Mart 2026)
     {
@@ -407,6 +582,15 @@ function applyServerData(data, patch = {}) {
     paymentStep: state.paymentStep,
     paymentReceiptData: state.paymentReceiptData,
     setupBlockFilter: state.setupBlockFilter,
+    duesPeriodFilter: state.duesPeriodFilter,
+    duesBlockFilter: state.duesBlockFilter,
+    duesStatusFilter: state.duesStatusFilter,
+    duesSelectedAptId: state.duesSelectedAptId,
+    financesDateFilter: state.financesDateFilter,
+    financesStartDate: state.financesStartDate,
+    financesEndDate: state.financesEndDate,
+    financesSelectedMonth: state.financesSelectedMonth,
+    financesCategoryFilter: state.financesCategoryFilter,
     editingSurveyId: state.editingSurveyId,
     assistantMessages: state.assistantMessages,
     sessionUser: state.sessionUser,
@@ -2502,7 +2686,9 @@ function duesView() {
     filteredDues = filteredDues.filter((d) => d.status === state.duesStatusFilter);
   }
 
-  const summary = dueSummary();
+  const hasActiveFilter = (state.duesBlockFilter && state.duesBlockFilter !== "all") || (state.duesSelectedAptId && state.duesSelectedAptId !== "all") || (state.duesPeriodFilter && state.duesPeriodFilter !== "all") || (state.duesStatusFilter && state.duesStatusFilter !== "all");
+
+  const summary = dueSummary(filteredDues);
   const forecast = collectionForecast();
 
   // Seçilen daire bilgisi (tek merkezden inceleme)
@@ -2526,22 +2712,22 @@ function duesView() {
       <section class="section metric">
         <span>📊 Tahsilat Oranı</span>
         <strong>%${summary.collectionRate}</strong>
-        <small>${summary.paidCount}/${allDues.length} aidat tahsil edildi</small>
+        <small>${summary.paidCount}/${filteredDues.length} aidat tahsil edildi</small>
       </section>
       <section class="section metric">
         <span>💰 Tahsil Edilen Tutar</span>
         <strong style="color:var(--ok);">${money(summary.paid)}</strong>
-        <small>Toplam: ${money(summary.total)}</small>
+        <small>${hasActiveFilter ? `Filtrelenen Toplam: ${money(summary.total)}` : `Toplam: ${money(summary.total)}`}</small>
       </section>
       <section class="section metric">
         <span>⚠️ Kalan / Geciken Borç</span>
         <strong style="color:var(--danger);">${money(summary.pending)}</strong>
-        <small>${allDues.filter((d) => d.status !== "paid").length} adet ödenmemiş aidat</small>
+        <small>${filteredDues.filter((d) => d.status !== "paid").length} adet ödenmemiş aidat</small>
       </section>
       <section class="section metric">
-        <span>🗓️ Ay Sonu Tahmini</span>
-        <strong style="color:var(--accent);">%${forecast.estimatedRate}</strong>
-        <small>Beklenen: ${money(forecast.estimatedAmount)}</small>
+        <span>🎯 Filtre Kapsamı</span>
+        <strong style="color:var(--accent);">${filteredDues.length} / ${allDues.length} Kayıt</strong>
+        <small>${hasActiveFilter ? "Kriterlere göre filtrelendi" : "Tüm aidat kayıtları"}</small>
       </section>
     </div>
 
@@ -2586,6 +2772,14 @@ function duesView() {
           <option value="paid" ${state.duesStatusFilter === "paid" ? "selected" : ""}>✅ Ödendi</option>
         </select>
       </div>
+
+      ${
+        hasActiveFilter
+          ? `<button class="btn" style="padding:6px 14px; font-size:12.5px; border-color:var(--line); color:var(--text-sub);" onclick="setState({ duesBlockFilter: 'all', duesSelectedAptId: 'all', duesPeriodFilter: 'all', duesStatusFilter: 'all' })" title="Tüm filtreleri temizle">
+              ✕ Filtreleri Temizle
+            </button>`
+          : ""
+      }
 
       <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="btn" style="border-color:var(--danger); color:var(--danger); font-size:12.5px; padding:6px 14px;" onclick="sendBatchOverdueReminders()" title="Vadesi geçen tüm sakinlere uyarı bildirimi gönderir">
@@ -2703,11 +2897,15 @@ function duesView() {
             <p>Seçilen dönem için sitedeki tüm dairelere borç tahakkuk ettirilir.</p>
           </div>
         </div>
-        <form class="form-grid" onsubmit="createDues(event)">
-          <label>Dönem<input name="period" type="month" value="${new Date().toISOString().slice(0, 7)}" required /></label>
-          <label>Tutar (TL)<input name="amount" type="number" min="1" value="1850" required /></label>
-          <label>Son Ödeme<input name="dueDate" type="date" value="${new Date().toISOString().slice(0, 8)}15" required /></label>
-          <button class="btn primary" type="submit" style="align-self:end;">Toplu Aidat Oluştur</button>
+        <form onsubmit="createDues(event)" style="display:flex; flex-direction:column; gap:14px; margin-top:6px;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:12px;">
+            <label>Dönem<input name="period" type="month" value="${new Date().toISOString().slice(0, 7)}" required /></label>
+            <label>Tutar (TL)<input name="amount" type="number" min="1" value="1850" required /></label>
+            <label>Son Ödeme<input name="dueDate" type="date" value="${new Date().toISOString().slice(0, 8)}15" required /></label>
+          </div>
+          <button class="btn primary" type="submit" style="width:100%; justify-content:center; padding:10px 16px; font-weight:700;">
+            ⚡ Tüm Daireler İçin Toplu Aidat Oluştur
+          </button>
         </form>
       </section>
     </div>
@@ -2770,7 +2968,18 @@ function duesView() {
                       </tr>
                     `;
                   }).join("")
-                : `<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--muted);">Filtreye uygun aidat kaydı bulunamadı.</td></tr>`
+                : `
+                <tr>
+                  <td colspan="7" style="text-align:center; padding:36px 16px; color:var(--muted);">
+                    <div style="font-size:26px; margin-bottom:8px;">🔍</div>
+                    <strong style="font-size:14px; color:var(--ink-secondary);">Seçilen filtre kriterlerine uygun aidat kaydı bulunamadı.</strong>
+                    <p style="margin:4px 0 14px; font-size:12.5px;">Farklı bir blok, daire, dönem veya durum seçebilirsiniz.</p>
+                    <button class="btn btn-sm primary" onclick="setState({ duesBlockFilter: 'all', duesSelectedAptId: 'all', duesPeriodFilter: 'all', duesStatusFilter: 'all' })">
+                      Tüm Filtreleri Sıfırla
+                    </button>
+                  </td>
+                </tr>
+                `
             }
           </tbody>
         </table>
@@ -3003,6 +3212,8 @@ function managerFinancesView() {
   }
 
   // Aidat ve Gider Filtreleme
+  const categoryFilter = state.financesCategoryFilter || "all";
+
   const filteredDues = allDues.filter((d) => {
     if (selectedMonth !== "all" && d.period !== selectedMonth) return false;
     const dateStr = d.paidDate || (d.period ? d.period + "-01" : "");
@@ -3013,6 +3224,7 @@ function managerFinancesView() {
 
   const filteredExpenses = allExpenses.filter((e) => {
     if (selectedMonth !== "all" && (!e.date || !e.date.startsWith(selectedMonth))) return false;
+    if (categoryFilter !== "all" && e.category !== categoryFilter) return false;
     if (filterStart && e.date && e.date < filterStart) return false;
     if (filterEnd && e.date && e.date > filterEnd) return false;
     return true;
@@ -3117,6 +3329,23 @@ function managerFinancesView() {
         <span style="color:var(--muted);">-</span>
         <input type="date" value="${state.financesEndDate || ""}" onchange="setState({ financesDateFilter: 'custom', financesSelectedMonth: 'all', financesEndDate: this.value })" title="Bitiş Tarihi" />
       </div>
+
+      <!-- Kategori Filtresi -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase;">🏷️ Kategori:</span>
+        <select class="dues-filter-select" onchange="setState({ financesCategoryFilter: this.value })" style="min-height:34px !important; padding:4px 10px !important;">
+          <option value="all" ${categoryFilter === "all" ? "selected" : ""}>Tüm Kategoriler</option>
+          ${Object.entries(EXPENSE_CATEGORIES).map(([catKey, catVal]) => `<option value="${catKey}" ${categoryFilter === catKey ? "selected" : ""}>${catVal.icon} ${safeText(catVal.label)}</option>`).join("")}
+        </select>
+      </div>
+
+      ${
+        dateFilter !== "all" || selectedMonth !== "all" || categoryFilter !== "all" || state.financesStartDate || state.financesEndDate
+          ? `<button class="btn" style="padding:6px 12px; font-size:12px; border-color:var(--line); color:var(--text-sub);" onclick="setState({ financesDateFilter: 'all', financesSelectedMonth: 'all', financesCategoryFilter: 'all', financesStartDate: '', financesEndDate: '' })">
+              ✕ Filtreleri Temizle
+            </button>`
+          : ""
+      }
     </div>
 
     <!-- 3. Aylık Nakit Akışı ve Gelir-Gider İncelemesi (Monthly Breakdown) -->
@@ -3288,7 +3517,16 @@ function managerFinancesView() {
             </table>
           </div>
           `
-          : `<div class="empty">Bu tarih filtresinde kayıtlı gider bulunmuyor.</div>`
+          : `
+          <div class="empty" style="text-align:center; padding:32px 16px;">
+            <div style="font-size:24px; margin-bottom:6px;">🧾</div>
+            <strong>Seçilen filtre kriterlerine uygun gider kaydı bulunamadı.</strong>
+            <p style="margin:4px 0 12px; font-size:12.5px; color:var(--muted);">Farklı bir tarih aralığı, ay veya kategori seçebilirsiniz.</p>
+            <button class="btn btn-sm" onclick="setState({ financesDateFilter: 'all', financesStartDate: '', financesEndDate: '', financesSelectedMonth: 'all', financesCategoryFilter: 'all' })">
+              Filtreleri Sıfırla
+            </button>
+          </div>
+          `
       }
     </section>
   `;
@@ -3325,7 +3563,7 @@ function requestsView() {
     <section class="section">
       <div class="section-header">
         <div>
-          <h2>Arıza, Şikayet ve Öneri Talepleri</h2>
+          <h2>Arıza, Şikayet ve Öneri Talepleri (${filteredRequests.length} / ${scoped.requests.length} Kayıt)</h2>
           <p>Yapay zeka analizleri, otomatik kategori sınıflandırması ve durum takibi.</p>
         </div>
       </div>
@@ -3380,7 +3618,18 @@ function requestsView() {
                   <button class="btn" onclick="setState({ selectedRequestId: '${request.id}' })">Detay</button>
                 </td>
               </tr>
-            `).join("") || `<tr><td colspan="7">Bu filtrelere uygun talep yok.</td></tr>`}
+            `).join("") || `
+              <tr>
+                <td colspan="7" style="text-align:center; padding:36px 16px; color:var(--muted);">
+                  <div style="font-size:24px; margin-bottom:6px;">📋</div>
+                  <strong style="color:var(--ink-secondary);">Bu filtrelere uygun arıza, şikayet veya öneri talebi bulunamadı.</strong>
+                  <p style="margin:4px 0 12px; font-size:12.5px;">Talep türü, durum veya kategori filtresini değiştirmeyi deneyebilirsiniz.</p>
+                  <button class="btn btn-sm" onclick="setState({ requestStatusFilter: 'all', requestCategoryFilter: 'all', requestEntryTypeFilter: 'all' })">
+                    Filtreleri Sıfırla
+                  </button>
+                </td>
+              </tr>
+            `}
           </tbody>
         </table>
       </div>
