@@ -1158,14 +1158,17 @@ function render() {
   ensureActiveSite();
   rebuildScope();
   if (!state.sessionUser) {
-    document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open");
+    document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open", "manager-menu-open");
+    document.documentElement.classList.remove("ai-chat-open", "manager-menu-open");
     app.innerHTML = authView();
     return;
   }
   document.body.classList.toggle("resident-mode", state.mode === "resident");
   document.body.classList.toggle("manager-mode", state.mode === "manager");
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
+  document.documentElement.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
   document.body.classList.toggle("manager-menu-open", Boolean(state.mobileManagerMenuOpen));
+  document.documentElement.classList.toggle("manager-menu-open", Boolean(state.mobileManagerMenuOpen));
 
   // Sakin hesabında mobilde sol menü gereksiz kalır (alt bar varken sol bar açılmaz)
   if (state.mode === "resident" && state.mobileNavOpen) {
@@ -5339,7 +5342,9 @@ function logoutUser() {
   state.view = "dashboard";
   state.isAssistantOpen = false;
   state.mobileNavOpen = false;
-  document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open");
+  state.mobileManagerMenuOpen = false;
+  document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open", "manager-menu-open");
+  document.documentElement.classList.remove("ai-chat-open", "manager-menu-open");
   render();
 }
 
@@ -6180,6 +6185,7 @@ function residentBottomNav() {
 function toggleManagerMenuSheet() {
   state.mobileManagerMenuOpen = !state.mobileManagerMenuOpen;
   document.body.classList.toggle("manager-menu-open", Boolean(state.mobileManagerMenuOpen));
+  document.documentElement.classList.toggle("manager-menu-open", Boolean(state.mobileManagerMenuOpen));
   render();
 }
 
@@ -6477,6 +6483,7 @@ function scrollAssistantToBottom() {
 
 function updateAssistantDOM() {
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
+  document.documentElement.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
   // 1. FAB widget'ı güncelle
   const container = document.querySelector("#ai-assistant-root");
   if (container) {
@@ -6521,6 +6528,7 @@ function sendAssistantPrompt(btn) {
 function toggleAssistant() {
   state.isAssistantOpen = !state.isAssistantOpen;
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
+  document.documentElement.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
   if (state.isAssistantOpen && (!state.assistantMessages || state.assistantMessages.length === 0)) {
     const saved = loadAssistantHistory();
     if (saved && saved.length > 0) {
