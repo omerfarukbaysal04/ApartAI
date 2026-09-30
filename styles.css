@@ -121,17 +121,39 @@ textarea:focus-visible {
   position: sticky;
   top: 0;
   height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
   color: #f8fafc;
-  padding: 24px 18px;
+  padding: 16px 14px 28px 14px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   background:
     radial-gradient(circle at 10% 15%, rgba(13, 148, 136, 0.15), transparent 45%),
     linear-gradient(180deg, #091e1c 0%, #0b1a20 50%, #081116 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
   z-index: 10;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
 }
 
 .brand {
@@ -200,24 +222,24 @@ textarea:focus-visible {
 
 .nav {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .nav button {
   position: relative;
   border: 1px solid transparent;
   width: 100%;
-  min-height: 44px;
+  min-height: 38px;
   border-radius: var(--radius);
   background: transparent;
-  color: rgba(248, 250, 252, 0.72);
+  color: rgba(248, 250, 252, 0.75);
   text-align: left;
-  padding: 10px 14px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   overflow: hidden;
   transition: all var(--speed) cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1230,7 +1252,7 @@ label {
   font-weight: 650;
 }
 
-input,
+input:not([type="radio"]):not([type="checkbox"]),
 select,
 textarea {
   width: 100%;
@@ -1241,6 +1263,23 @@ textarea {
   color: var(--ink);
   padding: 10px 13px;
   box-shadow: var(--shadow-xs);
+}
+
+input[type="radio"],
+input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  border: 1.5px solid rgba(203, 213, 225, 0.9) !important;
+  background: #ffffff;
+  cursor: pointer;
+  accent-color: var(--accent);
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 input:hover,
@@ -4999,3 +5038,556 @@ tr.row-active > td {
   padding: 18px 20px;
   margin-bottom: 20px;
 }
+
+/* ==========================================================================
+   7. ÖNCELİK DERECESİ SEÇİCİ (PRIORITY SELECTOR GRID)
+   ========================================================================== */
+.priority-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.priority-pill {
+  position: relative;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 48px;
+  border: 1.5px solid rgba(226, 232, 240, 0.95);
+  border-radius: 12px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  box-shadow: var(--shadow-xs);
+  box-sizing: border-box;
+}
+
+.priority-pill:hover {
+  border-color: rgba(13, 148, 136, 0.4);
+  background: rgba(240, 253, 250, 0.5);
+  transform: translateY(-1px);
+}
+
+.priority-pill input[type="radio"] {
+  margin: 0 !important;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.priority-pill.priority-low:has(input:checked) {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+  color: #065f46;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.priority-pill.priority-medium:has(input:checked) {
+  border-color: #0d9488;
+  background: rgba(13, 148, 136, 0.08);
+  color: #0f766e;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+}
+
+.priority-pill.priority-high:has(input:checked) {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+  font-weight: 750;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.22);
+}
+
+.priority-icon {
+  font-size: 16px;
+  display: inline-flex;
+}
+
+@media (max-width: 640px) {
+  .priority-selector-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/* ==========================================================================
+   8. AİDATLAR & DAİRE MERKEZİ BORÇ YÖNETİMİ (DUES REVAMP)
+   ========================================================================== */
+.dues-filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.dues-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dues-filter-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dues-filter-select {
+  min-height: 38px !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.apartment-central-card {
+  background: linear-gradient(135deg, #091e1c 0%, #0f3733 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 22px;
+  box-shadow: 0 12px 32px rgba(9, 30, 28, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.apt-central-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 16px;
+}
+
+.apt-central-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.apt-central-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.apt-stat-box {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.apt-stat-box span {
+  display: block;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.apt-stat-box strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  margin-top: 4px;
+  color: #ffffff;
+}
+
+.apt-central-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   9. KASA & GİDERLER: TARİH FİLTRELERİ & AYLIK NAKİT AKIŞI
+   ========================================================================== */
+.finances-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 20px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 22px;
+}
+
+.date-preset-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.date-preset-btn {
+  padding: 6px 14px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.date-preset-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.date-preset-btn.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.25);
+}
+
+.custom-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-date-inputs input[type="date"] {
+  min-height: 36px !important;
+  padding: 4px 10px !important;
+  font-size: 12.5px !important;
+  width: 140px;
+  border-radius: 8px;
+}
+
+.monthly-cashflow-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.monthly-cashflow-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: var(--shadow-xs);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.monthly-cashflow-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: #94a3b8;
+}
+
+.monthly-cashflow-card.active-period {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.22);
+}
+
+.cashflow-month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.cashflow-month-title {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.cashflow-diff-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.cashflow-diff-badge.positive {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.cashflow-diff-badge.negative {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.cashflow-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+  color: var(--ink-secondary);
+}
+
+.cashflow-row strong {
+  font-size: 13px;
+}
+
+.cashflow-ratio-bar {
+  height: 6px;
+  width: 100%;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 10px;
+  display: flex;
+}
+
+.cashflow-ratio-income {
+  background: #10b981;
+  height: 100%;
+}
+
+.cashflow-ratio-expense {
+  background: #ef4444;
+  height: 100%;
+}
+
+/* ==========================================================================
+   10. SİTELER PORTFÖY GRİDİ (SITES PORTFOLIO REVAMP)
+   ========================================================================== */
+.sites-portfolio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.site-portfolio-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.site-portfolio-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: #94a3b8;
+}
+
+.site-portfolio-card.is-active-site {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.25), var(--shadow-md);
+}
+
+.site-card-header {
+  padding: 20px 22px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.site-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.15) 0%, rgba(2, 132, 199, 0.15) 100%);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+}
+
+.site-card-body {
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.site-card-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.site-card-metrics-row small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.site-card-metrics-row strong {
+  display: block;
+  font-size: 15px;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.site-card-footer {
+  padding: 14px 22px 18px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ==========================================================================
+   11. RAPORLAMA KARTLARI (REPORTS REVAMP)
+   ========================================================================== */
+.report-hero-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .report-hero-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.health-score-dial-card {
+  background: linear-gradient(135deg, #091e1c 0%, #0d302c 100%);
+  color: #ffffff;
+  border-radius: 18px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-md);
+}
+
+.dial-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.dial-circle::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: conic-gradient(from 180deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+  opacity: 0.8;
+  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #fff calc(100% - 7px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #fff calc(100% - 7px));
+}
+
+.dial-score-num {
+  font-size: 38px;
+  font-weight: 850;
+  color: #ffffff;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   12. UYARI & İHTAR MODAL (WARNING MODAL)
+   ========================================================================== */
+.warning-tone-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.warning-tone-btn {
+  padding: 10px 12px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.warning-tone-btn.active {
+  border-color: #0f766e;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.warning-channels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.warning-channel-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.warning-channel-card:hover {
+  background: #ffffff;
+  border-color: #0d9488;
+  box-shadow: var(--shadow-xs);
+}
+

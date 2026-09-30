@@ -51,6 +51,18 @@ const seedState = {
   paymentStep: "form",
   paymentReceiptData: null,
   setupBlockFilter: "all",
+  duesPeriodFilter: "all",
+  duesBlockFilter: "all",
+  duesStatusFilter: "all",
+  duesSelectedAptId: "all",
+  financesDateFilter: "all",
+  financesStartDate: "",
+  financesEndDate: "",
+  financesSelectedMonth: "all",
+  warningModalDueId: null,
+  warningModalAptId: null,
+  warningModalTone: "friendly",
+  warningModalDraft: "",
   editingSurveyId: null,
   sessionUser: null,
   activeSiteId: "site-1",
@@ -101,6 +113,15 @@ const seedState = {
     { id: "due-5", siteId: "site-2", apartmentId: "apt-5", period: "2026-05", amount: 2400, dueDate: "2026-05-10", status: "paid" },
     { id: "due-6", siteId: "site-2", apartmentId: "apt-6", period: "2026-05", amount: 2400, dueDate: "2026-05-10", status: "overdue" },
     { id: "due-7", siteId: "site-2", apartmentId: "apt-7", period: "2026-05", amount: 2400, dueDate: "2026-05-10", status: "overdue" },
+    // Geçmiş Dönem Aidatları (Nisan & Mart 2026)
+    { id: "due-h-1", siteId: "site-1", apartmentId: "apt-1", period: "2026-04", amount: 1850, dueDate: "2026-04-10", status: "paid", paidDate: "2026-04-05" },
+    { id: "due-h-2", siteId: "site-1", apartmentId: "apt-2", period: "2026-04", amount: 1850, dueDate: "2026-04-10", status: "paid", paidDate: "2026-04-08" },
+    { id: "due-h-3", siteId: "site-1", apartmentId: "apt-3", period: "2026-04", amount: 1850, dueDate: "2026-04-10", status: "overdue" },
+    { id: "due-h-4", siteId: "site-1", apartmentId: "apt-4", period: "2026-04", amount: 1850, dueDate: "2026-04-10", status: "paid", paidDate: "2026-04-03" },
+    { id: "due-h-5", siteId: "site-1", apartmentId: "apt-1", period: "2026-03", amount: 1750, dueDate: "2026-03-10", status: "paid", paidDate: "2026-03-04" },
+    { id: "due-h-6", siteId: "site-1", apartmentId: "apt-2", period: "2026-03", amount: 1750, dueDate: "2026-03-10", status: "paid", paidDate: "2026-03-06" },
+    { id: "due-h-7", siteId: "site-1", apartmentId: "apt-3", period: "2026-03", amount: 1750, dueDate: "2026-03-10", status: "paid", paidDate: "2026-03-09" },
+    { id: "due-h-8", siteId: "site-1", apartmentId: "apt-4", period: "2026-03", amount: 1750, dueDate: "2026-03-10", status: "paid", paidDate: "2026-03-02" },
   ],
   payments: [
     { id: "pay-1", siteId: "site-1", dueId: "due-1", apartmentId: "apt-1", amount: 1850, date: "2026-05-02", method: "Havale", note: "Mayıs aidatı" },
@@ -262,6 +283,51 @@ const seedState = {
       vendor: "Yeşil Vadi Peyzaj",
       invoiceNo: "MAK-102",
       description: "Bahar dönemi çim havalandırma ve patlayan damlama borusu değişimi",
+    },
+    // Geçmiş Dönem Giderleri (Nisan & Mart 2026)
+    {
+      id: "exp-h-1",
+      siteId: "site-1",
+      title: "Ortak Alan Elektrik Faturası (Nisan)",
+      category: "electricity",
+      amount: 3850,
+      date: "2026-04-03",
+      vendor: "BEDAŞ / Enerji A.Ş.",
+      invoiceNo: "FTR-2026-7721",
+      description: "Nisan ayı ortak alan aydınlatma ve asansör elektrik tüketimi",
+    },
+    {
+      id: "exp-h-2",
+      siteId: "site-1",
+      title: "Asansör Nisan Ayı Periyodik Bakımı",
+      category: "elevator",
+      amount: 2800,
+      date: "2026-04-05",
+      vendor: "Kone Asansör Servis",
+      invoiceNo: "SRV-3312",
+      description: "A ve B blok asansör bakım faturası",
+    },
+    {
+      id: "exp-h-3",
+      siteId: "site-1",
+      title: "Merkezi Kazan & Hidrofor Bakımı",
+      category: "maintenance",
+      amount: 4200,
+      date: "2026-03-15",
+      vendor: "Termo Teknik Servis",
+      invoiceNo: "FTR-2026-5509",
+      description: "Kazan brülör ayarı ve hidrofor basınç tankı yenileme",
+    },
+    {
+      id: "exp-h-4",
+      siteId: "site-1",
+      title: "Ortak Alan Elektrik Faturası (Mart)",
+      category: "electricity",
+      amount: 4100,
+      date: "2026-03-04",
+      vendor: "BEDAŞ / Enerji A.Ş.",
+      invoiceNo: "FTR-2026-6610",
+      description: "Mart ayı ortak alan elektrik tüketimi",
     },
   ],
 };
@@ -2411,37 +2477,198 @@ function dashboardView() {
 }
 
 function duesView() {
+  const allDues = scoped.dues || [];
+  const siteBlocks = scoped.blocks || [];
+  const siteApartments = scoped.apartments || [];
+  const allPeriods = [...new Set(allDues.map((d) => d.period))].filter(Boolean).sort().reverse();
+
+  // Filtreleme mantığı
+  let filteredDues = allDues.slice();
+
+  if (state.duesBlockFilter && state.duesBlockFilter !== "all") {
+    const aptIdsInBlock = new Set(siteApartments.filter((a) => a.blockId === state.duesBlockFilter).map((a) => a.id));
+    filteredDues = filteredDues.filter((d) => aptIdsInBlock.has(d.apartmentId));
+  }
+
+  if (state.duesSelectedAptId && state.duesSelectedAptId !== "all") {
+    filteredDues = filteredDues.filter((d) => d.apartmentId === state.duesSelectedAptId);
+  }
+
+  if (state.duesPeriodFilter && state.duesPeriodFilter !== "all") {
+    filteredDues = filteredDues.filter((d) => d.period === state.duesPeriodFilter);
+  }
+
+  if (state.duesStatusFilter && state.duesStatusFilter !== "all") {
+    filteredDues = filteredDues.filter((d) => d.status === state.duesStatusFilter);
+  }
+
   const summary = dueSummary();
   const forecast = collectionForecast();
-  const riskyDues = scoped.dues.filter((due) => due.status !== "paid").sort((a, b) => {
-    const riskOrder = { Yüksek: 0, Orta: 1, Düşük: 2 };
-    return riskOrder[dueRiskLevel(a).label] - riskOrder[dueRiskLevel(b).label];
-  });
-  const selectedDue = scoped.dues.find((due) => due.id === state.selectedDueId);
+
+  // Seçilen daire bilgisi (tek merkezden inceleme)
+  const selectedApartment = state.duesSelectedAptId !== "all"
+    ? siteApartments.find((a) => a.id === state.duesSelectedAptId)
+    : null;
+  const selectedResident = selectedApartment ? residentForApartment(selectedApartment.id) : null;
+  const selectedBlock = selectedApartment ? siteBlocks.find((b) => b.id === selectedApartment.blockId) : null;
+  const aptHistoryDues = selectedApartment
+    ? allDues.filter((d) => d.apartmentId === selectedApartment.id).sort((a, b) => (b.period || "").localeCompare(a.period || ""))
+    : [];
+  const aptUnpaidDues = aptHistoryDues.filter((d) => d.status !== "paid");
+  const aptTotalDebt = aptUnpaidDues.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const aptTotalPaid = aptHistoryDues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+
+  const activeWarningDue = state.warningModalDueId ? allDues.find((d) => d.id === state.warningModalDueId) : null;
+
   return `
+    <!-- 1. Üst KPI Özet Kartları -->
     <div class="grid dashboard-grid">
       <section class="section metric">
-        <span>Tahsilat oranı</span>
+        <span>📊 Tahsilat Oranı</span>
         <strong>%${summary.collectionRate}</strong>
-        <small>${summary.paidCount}/${scoped.dues.length} aidat ödendi</small>
+        <small>${summary.paidCount}/${allDues.length} aidat tahsil edildi</small>
       </section>
       <section class="section metric">
-        <span>Tahsil edilen</span>
-        <strong>${money(summary.paid)}</strong>
+        <span>💰 Tahsil Edilen Tutar</span>
+        <strong style="color:var(--ok);">${money(summary.paid)}</strong>
         <small>Toplam: ${money(summary.total)}</small>
       </section>
       <section class="section metric">
-        <span>Ay Sonu Tahmini</span>
-        <strong>%${forecast.estimatedRate}</strong>
+        <span>⚠️ Kalan / Geciken Borç</span>
+        <strong style="color:var(--danger);">${money(summary.pending)}</strong>
+        <small>${allDues.filter((d) => d.status !== "paid").length} adet ödenmemiş aidat</small>
+      </section>
+      <section class="section metric">
+        <span>🗓️ Ay Sonu Tahmini</span>
+        <strong style="color:var(--accent);">%${forecast.estimatedRate}</strong>
         <small>Beklenen: ${money(forecast.estimatedAmount)}</small>
       </section>
     </div>
+
+    <!-- 2. Merkezi Daire, Blok ve Dönem Filtreleme Barı -->
+    <div class="dues-filter-panel">
+      <div class="dues-filter-group">
+        <span class="dues-filter-label">🏢 Blok Seç:</span>
+        <select class="dues-filter-select" onchange="setState({ duesBlockFilter: this.value, duesSelectedAptId: 'all' })">
+          <option value="all" ${state.duesBlockFilter === "all" ? "selected" : ""}>Tüm Bloklar (${siteBlocks.length})</option>
+          ${siteBlocks.map((b) => `<option value="${b.id}" ${state.duesBlockFilter === b.id ? "selected" : ""}>${safeText(b.name)}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="dues-filter-group">
+        <span class="dues-filter-label">🚪 Daire Seç (Merkezi İncele):</span>
+        <select class="dues-filter-select" onchange="setState({ duesSelectedAptId: this.value })">
+          <option value="all" ${state.duesSelectedAptId === "all" ? "selected" : ""}>Tüm Daireler (${siteApartments.length})</option>
+          ${siteApartments
+            .filter((a) => state.duesBlockFilter === "all" || a.blockId === state.duesBlockFilter)
+            .map((a) => {
+              const res = residentForApartment(a.id);
+              const blk = siteBlocks.find((b) => b.id === a.blockId);
+              return `<option value="${a.id}" ${state.duesSelectedAptId === a.id ? "selected" : ""}>${blk?.name || "Blok"} No: ${a.no} (${res?.name || "Boş"})</option>`;
+            }).join("")}
+        </select>
+      </div>
+
+      <div class="dues-filter-group">
+        <span class="dues-filter-label">📅 Dönem:</span>
+        <select class="dues-filter-select" onchange="setState({ duesPeriodFilter: this.value })">
+          <option value="all" ${state.duesPeriodFilter === "all" ? "selected" : ""}>Tüm Dönemler (${allPeriods.length})</option>
+          ${allPeriods.map((p) => `<option value="${p}" ${state.duesPeriodFilter === p ? "selected" : ""}>${p}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="dues-filter-group">
+        <span class="dues-filter-label">📌 Durum:</span>
+        <select class="dues-filter-select" onchange="setState({ duesStatusFilter: this.value })">
+          <option value="all" ${state.duesStatusFilter === "all" ? "selected" : ""}>Tümü</option>
+          <option value="overdue" ${state.duesStatusFilter === "overdue" ? "selected" : ""}>🚨 Gecikmiş</option>
+          <option value="pending" ${state.duesStatusFilter === "pending" ? "selected" : ""}>⏳ Bekliyor</option>
+          <option value="paid" ${state.duesStatusFilter === "paid" ? "selected" : ""}>✅ Ödendi</option>
+        </select>
+      </div>
+
+      <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="btn" style="border-color:var(--danger); color:var(--danger); font-size:12.5px; padding:6px 14px;" onclick="sendBatchOverdueReminders()" title="Vadesi geçen tüm sakinlere uyarı bildirimi gönderir">
+          📢 Geciken Dairelere Toplu Hatırlatma Gönder
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. Daire Tek Merkezden İnceleme Kartı (İstenen Daire Seçildiğinde Gözükür) -->
+    ${
+      selectedApartment
+        ? `
+        <div class="apartment-central-card">
+          <div class="apt-central-header">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:24px;">🏠</span>
+                <h2 style="margin:0; font-size:22px; color:#ffffff;">${safeText(selectedBlock?.name || "Blok")} — Daire No: ${selectedApartment.no}</h2>
+                <span class="status ${aptTotalDebt > 0 ? "danger" : "ok"}" style="font-size:12px;">
+                  ${aptTotalDebt > 0 ? `${aptUnpaidDues.length} Dönem Borçlu` : "Tüm Dönemler Güncel"}
+                </span>
+              </div>
+              <p style="margin:6px 0 0; color:rgba(255,255,255,0.75); font-size:13.5px;">
+                Sakin: <strong>${safeText(selectedResident?.name || "Tanımsız")}</strong> (${selectedResident?.occupancyType === "tenant" ? "Kiracı" : "Ev Sahibi"}) · 
+                Telefon: <strong>${safeText(selectedResident?.phone || "-")}</strong> · 
+                Plaka: <strong>${safeText(selectedResident?.plateNumber || "-")}</strong>
+              </p>
+            </div>
+            <button class="btn" style="background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.25); color:#ffffff;" onclick="setState({ duesSelectedAptId: 'all' })">
+              ✕ Tüm Dairelere Dön
+            </button>
+          </div>
+
+          <div class="apt-central-stats">
+            <div class="apt-stat-box">
+              <span>Toplam Ödenmemiş Borç</span>
+              <strong style="color:#fca5a5;">${money(aptTotalDebt)}</strong>
+            </div>
+            <div class="apt-stat-box">
+              <span>Toplam Tahsil Edilen</span>
+              <strong style="color:#6ee7b7;">${money(aptTotalPaid)}</strong>
+            </div>
+            <div class="apt-stat-box">
+              <span>Toplam Aidat Dönemi</span>
+              <strong>${aptHistoryDues.length} Ay</strong>
+            </div>
+            <div class="apt-stat-box">
+              <span>Geciken Dönemler</span>
+              <strong style="color:${aptUnpaidDues.length > 0 ? "#fca5a5" : "#6ee7b7"};">${aptUnpaidDues.length} Adet</strong>
+            </div>
+          </div>
+
+          <div class="apt-central-actions">
+            ${
+              aptTotalDebt > 0
+                ? `
+                <button class="btn primary" style="background:#ef4444; border-color:#dc2626;" onclick="openWarningModalForApt('${selectedApartment.id}')">
+                  🚨 Daireye Özel Uyarı / İhtar Gönder
+                </button>
+                <button class="btn" style="background:#25d366; border-color:#16a34a; color:#ffffff;" onclick="shareApartmentViaWhatsApp('${selectedApartment.id}')">
+                  📲 WhatsApp ile Borç Uyarısı İlet
+                </button>
+                <button class="btn" style="background:rgba(255,255,255,0.2); border-color:rgba(255,255,255,0.3); color:#ffffff;" onclick="markAllApartmentDuesPaid('${selectedApartment.id}')">
+                  ✅ Tüm Borçları Ödendi Yap
+                </button>
+                `
+                : `
+                <span style="font-size:13.5px; color:#6ee7b7; font-weight:600;">✨ Bu dairenin herhangi bir gecikmiş aidat borcu bulunmamaktadır.</span>
+                `
+            }
+          </div>
+        </div>
+        `
+        : ""
+    }
+
+    <!-- 4. Tahsilat Tahmini & Daire Alışkanlıkları -->
     <div class="split">
       <section class="section">
         <div class="section-header">
           <div>
-            <h2>Tahsilat Tahmini & Daire Alışkanlıkları</h2>
-            <p>Geçmiş 3 aya dayalı tahsilat olasılığı ve gecikme riski.</p>
+            <h2>Tahsilat Tahmini & Ödeme Alışkanlıkları</h2>
+            <p>Geçmiş dönem ödeme hızlarına göre sakin davranış dağılımı.</p>
           </div>
         </div>
         <div style="display:grid; gap:10px;">
@@ -2468,107 +2695,270 @@ function duesView() {
           </div>
         </div>
       </section>
+
       <section class="section">
         <div class="section-header">
           <div>
-            <h2>Öncelikli Hatırlatma Listesi</h2>
-            <p>Risk analizine göre önce uyarılması gereken daireler.</p>
+            <h2>Toplu Yeni Aidat Oluştur</h2>
+            <p>Seçilen dönem için sitedeki tüm dairelere borç tahakkuk ettirilir.</p>
           </div>
         </div>
-        <ul class="mini-list">
-          ${
-            riskyDues.length
-              ? riskyDues.slice(0, 5).map((due) => {
-                  const risk = dueRiskLevel(due);
-                  return `<li><span class="status ${risk.label === "Yüksek" ? "danger" : "warn"}">${risk.label} risk</span>${apartmentLabel(due.apartmentId)} - ${money(due.amount)}<small>${residentForApartment(due.apartmentId)?.name ?? "-"} / ${dateText(due.dueDate)}</small></li>`;
-                }).join("")
-              : `<li><span>Temiz</span>Bekleyen aidat bulunmuyor.<small>Tahsilat akışı dengeli.</small></li>`
-          }
-        </ul>
+        <form class="form-grid" onsubmit="createDues(event)">
+          <label>Dönem<input name="period" type="month" value="${new Date().toISOString().slice(0, 7)}" required /></label>
+          <label>Tutar (TL)<input name="amount" type="number" min="1" value="1850" required /></label>
+          <label>Son Ödeme<input name="dueDate" type="date" value="${new Date().toISOString().slice(0, 8)}15" required /></label>
+          <button class="btn primary" type="submit" style="align-self:end;">Toplu Aidat Oluştur</button>
+        </form>
       </section>
     </div>
-    <section class="section">
+
+    <!-- 5. Filtrelenmiş Daire Aidat Kayıtları Tablosu -->
+    <section class="section" style="margin-top:16px">
       <div class="section-header">
         <div>
-          <h2>Toplu Aidat Oluştur</h2>
-          <p>Seçilen dönem için tüm dairelere borç kaydı açılır.</p>
+          <h2>Aidat ve Borç Dökümü (${filteredDues.length} Kayıt)</h2>
+          <p>Daireye tıklayarak o dairenin tüm geçmişini tek merkezden inceleyebilirsiniz.</p>
         </div>
       </div>
-      <form class="form-grid" onsubmit="createDues(event)">
-        <label>Dönem<input name="period" type="month" value="2026-05" required /></label>
-        <label>Tutar<input name="amount" type="number" min="1" value="1850" required /></label>
-        <label>Son ödeme<input name="dueDate" type="date" value="2026-05-10" required /></label>
-        <button class="btn primary" type="submit">Aidat Oluştur</button>
-      </form>
-    </section>
-    <section class="section" style="margin-top:16px">
-      <div class="section-header"><h2>Daire Bazlı Borçlar</h2></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Daire</th><th>Sakin</th><th>Dönem</th><th>Tutar</th><th>Son Ödeme</th><th>Durum</th><th>İşlem</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Daire</th>
+              <th>Sakin</th>
+              <th>Dönem</th>
+              <th>Tutar</th>
+              <th>Son Ödeme</th>
+              <th>Durum</th>
+              <th style="text-align:right;">İşlem</th>
+            </tr>
+          </thead>
           <tbody>
-            ${scoped.dues.map((due) => `
-              <tr>
-                <td>${apartmentLabel(due.apartmentId)}</td>
-                <td>${residentForApartment(due.apartmentId)?.name ?? "-"}</td>
-                <td>${due.period}</td>
-                <td>${money(due.amount)}</td>
-                <td>${dateText(due.dueDate)}</td>
-                <td><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span></td>
-                <td>
-                  ${due.status !== "paid" ? `<div class="inline-actions"><button class="btn" onclick="markPaid('${due.id}')">Ödendi</button><button class="btn" onclick="openReminderModal('${due.id}')">Hatırlat</button></div>` : "-"}
-                </td>
-              </tr>
-            `).join("")}
+            ${
+              filteredDues.length
+                ? filteredDues.map((due) => {
+                    const apt = siteApartments.find((a) => a.id === due.apartmentId);
+                    const blk = siteBlocks.find((b) => b.id === apt?.blockId);
+                    const res = residentForApartment(due.apartmentId);
+                    return `
+                      <tr style="cursor:pointer;" onclick="if (!event.target.closest('button') && !event.target.closest('a')) setState({ duesSelectedAptId: '${due.apartmentId}' })">
+                        <td>
+                          <strong>${blk?.name || "Blok"} No: ${apt?.no || "-"}</strong>
+                          <span style="display:block; font-size:11px; color:var(--accent);">🔍 Daireyi İncele</span>
+                        </td>
+                        <td>
+                          <strong>${res?.name || "-"}</strong><br>
+                          <small style="color:var(--muted);">${res?.phone || ""}</small>
+                        </td>
+                        <td><strong>${due.period}</strong></td>
+                        <td style="font-weight:700;">${money(due.amount)}</td>
+                        <td>${dateText(due.dueDate)}</td>
+                        <td><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span></td>
+                        <td style="text-align:right;">
+                          <div class="inline-actions" style="justify-content:flex-end;">
+                            ${
+                              due.status !== "paid"
+                                ? `
+                                  <button class="btn" style="padding:5px 10px; font-size:12px;" onclick="markPaid('${due.id}')">Ödendi</button>
+                                  <button class="btn" style="padding:5px 10px; font-size:12px; border-color:var(--danger); color:var(--danger);" onclick="openWarningModalForDue('${due.id}')">🚨 Uyarı</button>
+                                  <button class="btn" style="padding:5px 10px; font-size:12px; border-color:#22c55e; color:#15803d;" onclick="shareDueViaWhatsApp('${due.id}')" title="WhatsApp Mesajı Aç">💬</button>
+                                `
+                                : `<span style="font-size:12px; color:var(--ok); font-weight:600;">✓ Tahsil Edildi</span>`
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("")
+                : `<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--muted);">Filtreye uygun aidat kaydı bulunamadı.</td></tr>`
+            }
           </tbody>
         </table>
       </div>
     </section>
-    ${selectedDue ? reminderModal(selectedDue) : ""}
+
+    <!-- 6. Çok Kanallı Uyarı & İhtar Modalı -->
+    ${activeWarningDue || state.warningModalAptId ? warningReminderModal() : ""}
   `;
 }
 
-function reminderModal(due) {
+function openWarningModalForDue(dueId) {
+  const due = scoped.dues.find((d) => d.id === dueId);
+  if (!due) return;
   const resident = residentForApartment(due.apartmentId);
-  const risk = dueRiskLevel(due);
-  const draft = state.reminderDraft || reminderTextForDue(due);
+  const draft = generateWarningText(due, resident, "friendly");
+  setState({ warningModalDueId: dueId, warningModalAptId: null, warningModalTone: "friendly", warningModalDraft: draft });
+}
+
+function openWarningModalForApt(aptId) {
+  const apt = scoped.apartments.find((a) => a.id === aptId);
+  if (!apt) return;
+  const resident = residentForApartment(aptId);
+  const unpaidDues = scoped.dues.filter((d) => d.apartmentId === aptId && d.status !== "paid");
+  const firstDue = unpaidDues[0] || { period: "Güncel", amount: 0, dueDate: today() };
+  const draft = generateWarningText(firstDue, resident, "official", unpaidDues);
+  setState({ warningModalDueId: firstDue.id, warningModalAptId: aptId, warningModalTone: "official", warningModalDraft: draft });
+}
+
+function closeWarningModal() {
+  setState({ warningModalDueId: null, warningModalAptId: null, warningModalDraft: "" });
+}
+
+function generateWarningText(due, resident, tone, multiDues = null) {
+  const residentName = resident?.name ? `Sayın ${resident.name}` : "Değerli Sakinimiz";
+  const siteName = activeSite()?.name || "Apartman Yönetimi";
+  const totalAmount = multiDues ? multiDues.reduce((s, d) => s + (Number(d.amount) || 0), 0) : due.amount;
+  const periodsStr = multiDues ? multiDues.map((d) => d.period).join(", ") : due.period;
+
+  if (tone === "friendly") {
+    return `${residentName}, ${siteName} ${periodsStr} dönemi aidat ödemenizi (${money(totalAmount)}) hatırlatır, anlayışınız ve katkılarınız için teşekkür eder, iyi günler dileriz.`;
+  } else if (tone === "official") {
+    return `BİLGİLENDİRME: ${residentName}, adınıza tahakkuk eden ${periodsStr} dönemine ait ${money(totalAmount)} tutarındaki aidat borcunuzun son ödeme tarihi (${dateText(due.dueDate)}) geçmiştir. Apartman ortak hizmetlerinin aksamaması adına ödemenizi en kısa sürede gerçekleştirmenizi rica ederiz. ${siteName}`;
+  } else {
+    return `RESMİ İHTAR VE SON ÇAĞRI: ${residentName}, ${siteName} bünyesindeki bağımsız bölümünüze ait ${periodsStr} dönemi toplam ${money(totalAmount)} tutarındaki aidat borcunuz vadesi geçmiş olarak beklemektedir. Kat Mülkiyeti Kanunu Madde 20 uyarınca söz konusu borcun 3 (üç) iş günü içinde ödenmesi, aksi halde gecikme tazminatı ve yasal icra takibi sürecinin başlatılacağı önemle ihtar olunur.`;
+  }
+}
+
+function selectWarningTone(tone) {
+  const due = scoped.dues.find((d) => d.id === state.warningModalDueId);
+  const resident = due ? residentForApartment(due.apartmentId) : null;
+  const multiDues = state.warningModalAptId
+    ? scoped.dues.filter((d) => d.apartmentId === state.warningModalAptId && d.status !== "paid")
+    : null;
+  const draft = generateWarningText(due, resident, tone, multiDues);
+  setState({ warningModalTone: tone, warningModalDraft: draft });
+}
+
+function warningReminderModal() {
+  const due = scoped.dues.find((d) => d.id === state.warningModalDueId);
+  const apt = scoped.apartments.find((a) => a.id === (due ? due.apartmentId : state.warningModalAptId));
+  const resident = residentForApartment(apt?.id);
+  const tone = state.warningModalTone || "friendly";
+  const draft = state.warningModalDraft || (due ? generateWarningText(due, resident, tone) : "");
+
   return `
-    <div class="modal-backdrop" onclick="closeDueModal(event)">
-      <section class="request-modal" onclick="event.stopPropagation()">
-        <button class="modal-close" onclick="setState({ selectedDueId: null, reminderDraft: '' })" aria-label="Kapat">×</button>
+    <div class="modal-backdrop" onclick="closeWarningModal()">
+      <div class="request-modal" style="max-width:580px;" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeWarningModal()" aria-label="Kapat">×</button>
         <div class="section-header">
           <div>
-            <h2>Ödeme Hatırlatma Taslağı</h2>
-            <p>${apartmentLabel(due.apartmentId)} - ${resident?.name ?? "Sakin"}</p>
-          </div>
-          <span class="status ${risk.className}">${risk.label} risk</span>
-        </div>
-        <div class="request-detail-grid">
-          <div class="request-detail-main">
-            <div class="ai-panel">
-              ${aiBadge({ fallbackUsed: state.reminderFallbackUsed })}
-              <h3>${due.period} dönemi / ${money(due.amount)}</h3>
-              <p>Son ödeme tarihi: ${dateText(due.dueDate)}. Bu metin sakinle paylaşılmadan önce yönetici tarafından düzenlenebilir.</p>
-              <strong>${due.status === "overdue" ? "Ton kibar ama net tutulmalı; gecikme bilgisi açıkça belirtilmeli." : "Ton yumuşak tutulmalı; son ödeme tarihi yaklaşımı hatırlatılmalı."}</strong>
-            </div>
-            <label>Hatırlatma metni
-              <textarea rows="7" oninput="state.reminderDraft = this.value">${safeText(draft)}</textarea>
-            </label>
-          </div>
-          <div class="request-side-form">
-            <span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span>
-            <div class="notice">
-              <strong>Ödeme Bilgisi</strong>
-              <p>${money(due.amount)} / ${due.period}</p>
-              <small>${resident?.phone ?? "-"} / ${resident?.email ?? "-"}</small>
-            </div>
-            <button class="btn primary" onclick="markReminderSent('${due.id}')">Hatırlatma Gönderildi İşaretle</button>
-            <button class="btn" onclick="markPaid('${due.id}')">Ödendi İşaretle</button>
+            <h2 style="margin:0; font-size:20px;">Daireye Uyarı / Hatırlatma Gönder</h2>
+            <p style="margin:4px 0 0; color:var(--muted); font-size:13px;">${apartmentLabel(apt?.id)} — ${resident?.name || "Sakin"}</p>
           </div>
         </div>
-      </section>
+
+        <!-- Ton Seçici -->
+        <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase;">Uyarı Tonu ve Formatı:</span>
+        <div class="warning-tone-selector">
+          <div class="warning-tone-btn ${tone === "friendly" ? "active" : ""}" onclick="selectWarningTone('friendly')">
+            🟢 Nazik Hatırlatma
+          </div>
+          <div class="warning-tone-btn ${tone === "official" ? "active" : ""}" onclick="selectWarningTone('official')">
+            🟡 Resmi Vade Uyarısı
+          </div>
+          <div class="warning-tone-btn ${tone === "legal" ? "active" : ""}" onclick="selectWarningTone('legal')">
+            🔴 Hukuki İhtar & Yasal Çağrı
+          </div>
+        </div>
+
+        <label style="margin-top:12px; display:block;">
+          <span style="font-size:13px; font-weight:650; display:block; margin-bottom:6px;">Düzenlenebilir İhtar / Bildirim Metni:</span>
+          <textarea id="warningModalDraftInput" rows="5" style="font-size:13.5px; line-height:1.5;" oninput="state.warningModalDraft = this.value">${safeText(draft)}</textarea>
+        </label>
+
+        <!-- İletim Kanalları -->
+        <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; display:block; margin-top:14px;">İletim Kanalını Seçin:</span>
+        <div class="warning-channels-grid">
+          <div class="warning-channel-card" onclick="sendWarningViaNotification('${due?.id || ""}')" title="Sakinin ApartAI bildirim kutusuna resmi bildirim düşürür">
+            <span style="font-size:18px;">🔔</span>
+            <div>
+              <strong>ApartAI Bildirimi</strong>
+              <small style="display:block; color:var(--muted); font-size:11px;">Uygulama içi zil</small>
+            </div>
+          </div>
+          <div class="warning-channel-card" onclick="sendWarningViaWhatsApp('${resident?.phone || ""}')" title="WhatsApp üzerinden hazır mesajı açar">
+            <span style="font-size:18px;">💬</span>
+            <div>
+              <strong>WhatsApp</strong>
+              <small style="display:block; color:var(--muted); font-size:11px;">Mesajla ilet</small>
+            </div>
+          </div>
+          <div class="warning-channel-card" onclick="sendWarningViaSMS('${due?.id || ""}')" title="SMS iletim logunu sisteme işler">
+            <span style="font-size:18px;">📱</span>
+            <div>
+              <strong>SMS İhtar</strong>
+              <small style="display:block; color:var(--muted); font-size:11px;">Doğrudan hatta</small>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
+}
+
+function sendWarningViaNotification(dueId) {
+  const text = document.getElementById("warningModalDraftInput")?.value || state.warningModalDraft;
+  if (!text) return;
+  if (API_BASE && dueId) {
+    apiRequest(`/dues/${dueId}/reminder`, { method: "POST", body: JSON.stringify({ note: text }) })
+      .then((data) => {
+        closeWarningModal();
+        applyServerData(data);
+        alert("✅ Bildirim sakinin ApartAI bildirim kutusuna başarıyla iletildi.");
+      })
+      .catch((err) => alert(err.message));
+  } else {
+    closeWarningModal();
+    alert("✅ Bildirim sakinin ApartAI bildirim kutusuna başarıyla iletildi.");
+  }
+}
+
+function sendWarningViaWhatsApp(phone) {
+  const text = document.getElementById("warningModalDraftInput")?.value || state.warningModalDraft;
+  const cleanPhone = (phone || "").replace(/\D/g, "");
+  const targetPhone = cleanPhone ? (cleanPhone.startsWith("90") ? cleanPhone : `90${cleanPhone.replace(/^0/, "")}`) : "";
+  const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`;
+  window.open(waUrl, "_blank");
+  closeWarningModal();
+}
+
+function sendWarningViaSMS(dueId) {
+  sendWarningViaNotification(dueId);
+}
+
+function shareDueViaWhatsApp(dueId) {
+  const due = scoped.dues.find((d) => d.id === dueId);
+  if (!due) return;
+  const resident = residentForApartment(due.apartmentId);
+  const msg = generateWarningText(due, resident, "official");
+  sendWarningViaWhatsApp(resident?.phone || "");
+}
+
+function shareApartmentViaWhatsApp(aptId) {
+  openWarningModalForApt(aptId);
+}
+
+function markAllApartmentDuesPaid(aptId) {
+  if (!confirm("Bu daireye ait tüm bekleyen aidatları 'Ödendi' olarak işaretlemek istiyor musunuz?")) return;
+  const unpaid = scoped.dues.filter((d) => d.apartmentId === aptId && d.status !== "paid");
+  unpaid.forEach((due) => markPaid(due.id));
+}
+
+function sendBatchOverdueReminders() {
+  const overdues = scoped.dues.filter((d) => d.status === "overdue");
+  if (!overdues.length) {
+    alert("Harika! Sitede şu anda vadesi geçmiş aidat borcu bulunmuyor.");
+    return;
+  }
+  if (!confirm(`Sitede vadesi geçmiş ${overdues.length} adet aidat borcu tespit edildi. Tüm bu dairelerin sakinlerine resmi hatırlatma bildirimi gönderilsin mi?`)) {
+    return;
+  }
+  overdues.forEach((due) => {
+    if (API_BASE) {
+      apiRequest(`/dues/${due.id}/reminder`, { method: "POST", body: JSON.stringify({ note: "Sayın sakinimiz, vadesi geçen aidat borcunuz bulunmaktadır." }) }).catch(() => {});
+    }
+  });
+  alert(`📢 ${overdues.length} adet geciken daire sakinine başarıyla hatırlatma bildirimi gönderildi.`);
 }
 
 const EXPENSE_CATEGORIES = {
@@ -2589,61 +2979,201 @@ function expenseCategoryBadge(cat) {
 }
 
 function managerFinancesView() {
-  const dues = scoped.dues || [];
-  const expenses = (scoped.expenses || []).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const allDues = scoped.dues || [];
+  const allExpenses = (scoped.expenses || []).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-  const totalIncome = dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-  const totalExpense = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  // Tarih Filtresi Hesaplama
+  const dateFilter = state.financesDateFilter || "all";
+  const selectedMonth = state.financesSelectedMonth || "all";
+  const now = new Date();
+  let filterStart = null;
+  let filterEnd = null;
+
+  if (dateFilter === "week") {
+    filterStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else if (dateFilter === "month") {
+    filterStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else if (dateFilter === "quarter") {
+    filterStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else if (dateFilter === "year") {
+    filterStart = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
+  } else if (dateFilter === "custom") {
+    filterStart = state.financesStartDate || null;
+    filterEnd = state.financesEndDate || null;
+  }
+
+  // Aidat ve Gider Filtreleme
+  const filteredDues = allDues.filter((d) => {
+    if (selectedMonth !== "all" && d.period !== selectedMonth) return false;
+    const dateStr = d.paidDate || (d.period ? d.period + "-01" : "");
+    if (filterStart && dateStr && dateStr < filterStart) return false;
+    if (filterEnd && dateStr && dateStr > filterEnd) return false;
+    return true;
+  });
+
+  const filteredExpenses = allExpenses.filter((e) => {
+    if (selectedMonth !== "all" && (!e.date || !e.date.startsWith(selectedMonth))) return false;
+    if (filterStart && e.date && e.date < filterStart) return false;
+    if (filterEnd && e.date && e.date > filterEnd) return false;
+    return true;
+  });
+
+  // Filtrelenmiş Dönem Finans Özeti
+  const periodIncome = filteredDues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const periodExpense = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const periodNet = periodIncome - periodExpense;
+
+  // Genel Kasa Mevcudu (Tüm Zamanlar Kümülatif Nakit)
+  const totalIncome = allDues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const totalExpense = allExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const vaultBalance = totalIncome - totalExpense;
 
-  const currentPeriod = new Date().toISOString().slice(0, 7);
-  const thisMonthIncome = dues
-    .filter((d) => d.status === "paid" && (d.period === currentPeriod || (d.paidDate && d.paidDate.startsWith(currentPeriod))))
-    .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-  const thisMonthExpense = expenses
-    .filter((e) => e.date && e.date.startsWith(currentPeriod))
-    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const thisMonthNet = thisMonthIncome - thisMonthExpense;
+  // Aylık Nakit Akışı Kırılımı (Monthly Breakdown)
+  const monthMap = {};
+  for (const d of allDues) {
+    if (d.status === "paid" && d.period) {
+      if (!monthMap[d.period]) monthMap[d.period] = { period: d.period, income: 0, expense: 0 };
+      monthMap[d.period].income += (Number(d.amount) || 0);
+    }
+  }
+  for (const e of allExpenses) {
+    const period = (e.date || "").slice(0, 7);
+    if (period) {
+      if (!monthMap[period]) monthMap[period] = { period, income: 0, expense: 0 };
+      monthMap[period].expense += (Number(e.amount) || 0);
+    }
+  }
+  const monthlyBreakdown = Object.values(monthMap).sort((a, b) => b.period.localeCompare(a.period));
 
+  // Filtrelenmiş Kategori Dağılımı
   const catSums = {};
-  for (const exp of expenses) {
+  for (const exp of filteredExpenses) {
     const cat = exp.category || "other";
     catSums[cat] = (catSums[cat] || 0) + (Number(exp.amount) || 0);
   }
-
   const categoryBreakdown = Object.entries(catSums)
     .map(([cat, amount]) => ({
       category: cat,
       meta: EXPENSE_CATEGORIES[cat] || { label: cat, icon: "📋", color: "#64748b" },
       amount,
-      pct: totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
+      pct: periodExpense > 0 ? Math.round((amount / periodExpense) * 100) : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 
   return `
+    <!-- 1. Üst Finansal KPI Kartları -->
     <div class="grid dashboard-grid">
       <section class="section metric ${vaultBalance >= 0 ? "vault-positive" : "vault-negative"}">
-        <span>💰 Güncel Kasa Bakiyesi</span>
+        <span>💰 Toplam Kasa Bakiyesi</span>
         <strong style="color: ${vaultBalance >= 0 ? "var(--accent)" : "var(--danger)"};">${money(vaultBalance)}</strong>
-        <small>${vaultBalance >= 0 ? "Nakit mevcudu sağlıklı" : "Giderler gelirleri aştı"}</small>
+        <small>${vaultBalance >= 0 ? "Kasa nakit durumu dengeli" : "Açık veriyor, tahsilat hızlandırılmalı"}</small>
       </section>
       <section class="section metric">
-        <span>📈 Tahsil Edilen Gelir</span>
-        <strong style="color: var(--ok);">${money(totalIncome)}</strong>
-        <small>${dues.filter((d) => d.status === "paid").length} adet aidat tahsilatı</small>
+        <span>📈 Seçilen Dönem Geliri</span>
+        <strong style="color: var(--ok);">${money(periodIncome)}</strong>
+        <small>${filteredDues.filter((d) => d.status === "paid").length} adet aidat tahsilatı</small>
       </section>
       <section class="section metric">
-        <span>📉 Toplam Harcamalar</span>
-        <strong style="color: var(--danger);">${money(totalExpense)}</strong>
-        <small>${expenses.length} adet fatura/gider kaydı</small>
+        <span>📉 Seçilen Dönem Gideri</span>
+        <strong style="color: var(--danger);">${money(periodExpense)}</strong>
+        <small>${filteredExpenses.length} adet fatura ve masraf</small>
       </section>
       <section class="section metric">
-        <span>🗓️ Bu Ay Net Nakit Akışı</span>
-        <strong style="color: ${thisMonthNet >= 0 ? "var(--accent)" : "var(--warning)"};">${thisMonthNet >= 0 ? "+" : ""}${money(thisMonthNet)}</strong>
-        <small>Gelir: ${money(thisMonthIncome)} | Gider: ${money(thisMonthExpense)}</small>
+        <span>⚖️ Dönem Net Nakit Farkı</span>
+        <strong style="color: ${periodNet >= 0 ? "var(--accent)" : "var(--danger)"};">
+          ${periodNet >= 0 ? "+" : ""}${money(periodNet)}
+        </strong>
+        <small>${selectedMonth !== "all" ? `${selectedMonth} ayı net akışı` : "Filtrelenen aralık sonucu"}</small>
       </section>
     </div>
 
+    <!-- 2. Gelişmiş Tarih Filtreleme Araç Çubuğu -->
+    <div class="finances-filter-bar">
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span style="font-size:12.5px; font-weight:700; color:var(--muted); text-transform:uppercase;">📅 Tarih Aralığı:</span>
+        <div class="date-preset-pills">
+          <button type="button" class="date-preset-btn ${dateFilter === "all" && selectedMonth === "all" ? "active" : ""}" onclick="setState({ financesDateFilter: 'all', financesSelectedMonth: 'all', financesStartDate: '', financesEndDate: '' })">
+            Tüm Zamanlar
+          </button>
+          <button type="button" class="date-preset-btn ${dateFilter === "week" ? "active" : ""}" onclick="setState({ financesDateFilter: 'week', financesSelectedMonth: 'all' })">
+            Son 1 Hafta
+          </button>
+          <button type="button" class="date-preset-btn ${dateFilter === "month" ? "active" : ""}" onclick="setState({ financesDateFilter: 'month', financesSelectedMonth: 'all' })">
+            Son 1 Ay
+          </button>
+          <button type="button" class="date-preset-btn ${dateFilter === "quarter" ? "active" : ""}" onclick="setState({ financesDateFilter: 'quarter', financesSelectedMonth: 'all' })">
+            Son 3 Ay
+          </button>
+          <button type="button" class="date-preset-btn ${dateFilter === "year" ? "active" : ""}" onclick="setState({ financesDateFilter: 'year', financesSelectedMonth: 'all' })">
+            Bu Yıl
+          </button>
+        </div>
+      </div>
+
+      <!-- Özel Tarih Aralığı Seçicisi -->
+      <div class="custom-date-inputs">
+        <span style="font-size:12px; font-weight:600; color:var(--muted);">Özel:</span>
+        <input type="date" value="${state.financesStartDate || ""}" onchange="setState({ financesDateFilter: 'custom', financesSelectedMonth: 'all', financesStartDate: this.value })" title="Başlangıç Tarihi" />
+        <span style="color:var(--muted);">-</span>
+        <input type="date" value="${state.financesEndDate || ""}" onchange="setState({ financesDateFilter: 'custom', financesSelectedMonth: 'all', financesEndDate: this.value })" title="Bitiş Tarihi" />
+      </div>
+    </div>
+
+    <!-- 3. Aylık Nakit Akışı ve Gelir-Gider İncelemesi (Monthly Breakdown) -->
+    <section class="section" style="margin-bottom:22px;">
+      <div class="section-header">
+        <div>
+          <h2>Aylık Nakit Akışı ve Gelir-Gider Analizi</h2>
+          <p>Her ayın gelir, gider ve net bakiye dengesi. İlgili aya tıklayarak detaylı filtreleme yapabilirsiniz.</p>
+        </div>
+        ${
+          selectedMonth !== "all"
+            ? `<button class="btn" style="padding:6px 12px; font-size:12.5px;" onclick="setState({ financesSelectedMonth: 'all' })">✕ Ay Filtresini Temizle (${selectedMonth})</button>`
+            : ""
+        }
+      </div>
+
+      <div class="monthly-cashflow-container">
+        ${
+          monthlyBreakdown.length
+            ? monthlyBreakdown.map((m) => {
+                const net = m.income - m.expense;
+                const totalVol = (m.income + m.expense) || 1;
+                const incPct = Math.round((m.income / totalVol) * 100);
+                const expPct = 100 - incPct;
+                const isSelected = selectedMonth === m.period;
+                return `
+                  <div class="monthly-cashflow-card ${isSelected ? "active-period" : ""}" onclick="setState({ financesSelectedMonth: '${isSelected ? "all" : m.period}' })" title="Bu ayın detaylarını filtrelemek için tıklayın">
+                    <div class="cashflow-month-header">
+                      <span class="cashflow-month-title">${m.period}</span>
+                      <span class="cashflow-diff-badge ${net >= 0 ? "positive" : "negative"}">
+                        ${net >= 0 ? "+" : ""}${money(net)}
+                      </span>
+                    </div>
+                    <div class="cashflow-row">
+                      <span>Gelir:</span>
+                      <strong style="color:var(--ok);">${money(m.income)}</strong>
+                    </div>
+                    <div class="cashflow-row">
+                      <span>Gider:</span>
+                      <strong style="color:var(--danger);">${money(m.expense)}</strong>
+                    </div>
+                    <div class="cashflow-ratio-bar">
+                      <div class="cashflow-ratio-income" style="width:${incPct}%;" title="Gelir Payı: %${incPct}"></div>
+                      <div class="cashflow-ratio-expense" style="width:${expPct}%;" title="Gider Payı: %${expPct}"></div>
+                    </div>
+                    <small style="display:block; text-align:right; margin-top:6px; font-size:11px; color:var(--muted);">
+                      ${isSelected ? "✓ Seçili Ay (Aktif)" : "Filtrelemek için tıkla"}
+                    </small>
+                  </div>
+                `;
+              }).join("")
+            : `<div class="empty">Henüz aylık akış verisi bulunmuyor.</div>`
+        }
+      </div>
+    </section>
+
+    <!-- 4. Yeni Gider Kaydı ve Kategori Dağılımı -->
     <div class="split">
       <section class="section">
         <div class="section-header">
@@ -2688,7 +3218,7 @@ function managerFinancesView() {
         <div class="section-header">
           <div>
             <h2>Kategori Bazlı Gider Dağılımı</h2>
-            <p>Harcamaların hangi kalemlerde yoğunlaştığını analiz edin.</p>
+            <p>Seçilen dönemde harcamaların kalemlere göre yoğunluğu.</p>
           </div>
         </div>
         ${
@@ -2708,20 +3238,21 @@ function managerFinancesView() {
               `).join("")}
             </div>
             `
-            : `<div class="empty">Henüz kaydedilmiş harcama bulunmamaktadır.</div>`
+            : `<div class="empty">Bu tarih aralığında kaydedilmiş harcama bulunmamaktadır.</div>`
         }
       </section>
     </div>
 
+    <!-- 5. Filtrelenmiş Gider Belgeleri ve Faturalar Tablosu -->
     <section class="section" style="margin-top:16px;">
       <div class="section-header">
         <div>
-          <h2>Kayıtlı Gider Belgeleri ve Faturalar (${expenses.length})</h2>
-          <p>Sisteme işlenmiş tüm harcamalar, faturalar ve tedarikçiler.</p>
+          <h2>Kayıtlı Gider Belgeleri ve Faturalar (${filteredExpenses.length})</h2>
+          <p>Filtreye uygun tüm harcamalar, faturalar ve tedarikçiler.</p>
         </div>
       </div>
       ${
-        expenses.length
+        filteredExpenses.length
           ? `
           <div class="table-wrap">
             <table class="table">
@@ -2737,7 +3268,7 @@ function managerFinancesView() {
                 </tr>
               </thead>
               <tbody>
-                ${expenses.map((exp) => `
+                ${filteredExpenses.map((exp) => `
                   <tr>
                     <td style="white-space:nowrap; font-size:13px; color:var(--muted);">${dateText(exp.date)}</td>
                     <td>
@@ -2757,7 +3288,7 @@ function managerFinancesView() {
             </table>
           </div>
           `
-          : `<div class="empty">Kayıtlı gider bulunmuyor. Sol taraftaki formdan ilk gider kaydınızı oluşturabilirsiniz.</div>`
+          : `<div class="empty">Bu tarih filtresinde kayıtlı gider bulunmuyor.</div>`
       }
     </section>
   `;
@@ -3201,111 +3732,172 @@ function reportsView() {
   }, {});
   const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Henüz veri yok";
   const topBlock = blocks[0]?.count ? blocks[0].block : "Henüz veri yok";
+
   return `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
       <div>
-        <h2 style="margin:0; font-size:22px;">Aylık Site Faaliyet & Sağlık Analizi</h2>
-        <p style="margin:4px 0 0; color:var(--muted); font-size:13.5px;">Tüm operasyonel, finansal ve teknik verilerin konsolide özeti.</p>
+        <h2 style="margin:0; font-size:24px;">📊 Aylık Faaliyet, Denetim & Sağlık Raporu</h2>
+        <p style="margin:4px 0 0; color:var(--muted); font-size:13.5px;">Tüm operasyonel, finansal ve teknik verilerin konsolide yönetici analizi.</p>
       </div>
       <button class="btn primary" onclick="openPrintModal()">🖨️ Resmi Faaliyet Bülteni (Pano Çıktısı)</button>
     </div>
 
-    <div class="grid dashboard-grid">
-      <section class="section metric">
-        <span>Site Sağlık Skoru</span>
-        <strong>${health.score}</strong>
-        <small>${health.status}</small>
-      </section>
-      <section class="section metric">
-        <span>Tahsilat oranı</span>
-        <strong>%${dues.collectionRate}</strong>
-        <small>${money(dues.paid)} tahsil edildi</small>
-      </section>
-      <section class="section metric">
-        <span>Çözüm oranı</span>
-        <strong>%${requests.resolutionRate}</strong>
-        <small>${requests.open} açık talep</small>
-      </section>
+    <!-- 1. Sağlık Skoru Kadranı ve Anahtar Metrikler -->
+    <div class="report-hero-grid">
+      <div class="health-score-dial-card">
+        <span style="font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:rgba(255,255,255,0.7); margin-bottom:8px;">Site Sağlık Endeksi</span>
+        <div class="dial-circle">
+          <span class="dial-score-num">${health.score}</span>
+        </div>
+        <strong style="font-size:15px; color:#5eead4;">${health.status}</strong>
+        <small style="color:rgba(255,255,255,0.65); font-size:11.5px; margin-top:4px;">100 üzerinden ağırlıklı skor</small>
+        ${API_BASE ? `<button class="btn" style="background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.25); color:#ffffff; font-size:11.5px; padding:4px 10px; margin-top:12px;" onclick="saveHealthSnapshot()">📸 Skoru Kaydet</button>` : ""}
+      </div>
+
+      <div class="grid dashboard-grid" style="margin:0;">
+        <section class="section metric">
+          <span>💰 Tahsilat Başarısı</span>
+          <strong style="color:var(--ok);">%${dues.collectionRate}</strong>
+          <small>${money(dues.paid)} tahsil edildi / ${money(dues.pending)} bekliyor</small>
+        </section>
+        <section class="section metric">
+          <span>🛠️ Talep Çözüm Oranı</span>
+          <strong style="color:var(--accent);">%${requests.resolutionRate}</strong>
+          <small>${requests.resolved} çözülen / ${requests.open} açık talep</small>
+        </section>
+        <section class="section metric">
+          <span>👥 Sakin Aktivite Payı</span>
+          <strong style="color:var(--info);">%${pilot.residentActivityRate}</strong>
+          <small>Sistemden talep açma: %${pilot.systemRequestRate}</small>
+        </section>
+      </div>
     </div>
+
+    <!-- 2. Yönetici Özeti ve Kategori Yoğunluğu -->
     <div class="split">
       <section class="section">
-        <div class="section-header"><h2>Aylık Yönetici Özeti</h2></div>
+        <div class="section-header">
+          <div>
+            <h2>Aylık Yönetici Özet Bülteni</h2>
+            <p>Yapay zeka destekli operasyonel durum özeti.</p>
+          </div>
+        </div>
         <ul class="plain-list">
-          <li>Toplam tahsilat oranı %${dues.collectionRate}; bekleyen tutar ${money(dues.pending)}.</li>
-          <li>En çok talep gelen kategori: ${topCategory}.</li>
-          <li>En yoğun blok/alan: ${topBlock}.</li>
-          <li>Site Sağlık Skoru ${health.score}/100 ve durum ${health.status}.</li>
-          <li>${health.actions[0]}</li>
+          <li><strong>Finansal Durum:</strong> Toplam tahsilat oranı <strong>%${dues.collectionRate}</strong> seviyesinde; tahsil edilmeyi bekleyen tutar <strong>${money(dues.pending)}</strong>.</li>
+          <li><strong>Operasyonel Yoğunluk:</strong> Bu dönem en çok talep gelen alan: <strong>${topCategory}</strong>.</li>
+          <li><strong>Kritik Lokasyon:</strong> En yoğun arıza/istek bildirimi yapılan bölüm: <strong>${topBlock}</strong>.</li>
+          <li><strong>Genel Skor:</strong> Sitenin sağlık skoru <strong>${health.score}/100</strong> ve durum <strong>${health.status}</strong>.</li>
+          <li><strong>Öncelikli Aksiyon:</strong> ${health.actions[0] || "Tüm operasyonel göstergeler normal seyrediyor."}</li>
         </ul>
       </section>
+
       <section class="section">
-        <div class="section-header"><h2>Kategori Yoğunluğu</h2></div>
+        <div class="section-header">
+          <div>
+            <h2>Kategori Yoğunluk Dağılımı</h2>
+            <p>Gelen taleplerin departman ve konulara göre dağılımı.</p>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Kategori</th><th>Talep Sayısı</th></tr></thead>
+            <thead><tr><th>Kategori</th><th>Talep Sayısı</th><th>Durum</th></tr></thead>
             <tbody>
-              ${Object.entries(byCategory).map(([category, count]) => `<tr><td>${category}</td><td>${count}</td></tr>`).join("") || `<tr><td colspan="2">Henüz talep yok</td></tr>`}
+              ${
+                Object.entries(byCategory).map(([category, count]) => `
+                  <tr>
+                    <td><strong>${category}</strong></td>
+                    <td>${count} adet</td>
+                    <td><span class="status ${count > 3 ? "warn" : "ok"}">${count > 3 ? "Yoğun" : "Normal"}</span></td>
+                  </tr>
+                `).join("") || `<tr><td colspan="3">Henüz talep kaydı bulunmuyor.</td></tr>`
+              }
             </tbody>
           </table>
         </div>
       </section>
     </div>
+
+    <!-- 3. Blok Yoğunlukları ve Pilot Başarı Metrikleri -->
     <div class="split">
       <section class="section">
-        <div class="section-header"><h2>Blok Bazlı Yoğunluk</h2></div>
+        <div class="section-header">
+          <div>
+            <h2>Bina / Blok Bazlı Arıza Yoğunluğu</h2>
+            <p>Hangi blokta daha fazla teknik bakım gerektiğini gösterir.</p>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Blok</th><th>Talep Sayısı</th><th>Durum</th></tr></thead>
+            <thead><tr><th>Blok Adı</th><th>Talep Sayısı</th><th>İzleme Durumu</th></tr></thead>
             <tbody>
-              ${blocks.map((item) => `<tr><td>${item.block}</td><td>${item.count}</td><td><span class="status ${item.count > 2 ? "warn" : "ok"}">${item.count > 2 ? "İzlenmeli" : "Normal"}</span></td></tr>`).join("")}
+              ${
+                blocks.map((item) => `
+                  <tr>
+                    <td><strong>${item.block}</strong></td>
+                    <td>${item.count} adet</td>
+                    <td><span class="status ${item.count > 2 ? "warn" : "ok"}">${item.count > 2 ? "İzlenmeli" : "Sorunsuz"}</span></td>
+                  </tr>
+                `).join("") || `<tr><td colspan="3">Blok verisi bulunamadı.</td></tr>`
+              }
             </tbody>
           </table>
         </div>
       </section>
+
       <section class="section">
-        <div class="section-header"><h2>Pilot Başarı Metrikleri</h2></div>
+        <div class="section-header">
+          <div>
+            <h2>Platform Kullanım & Otomasyon Başarısı</h2>
+            <p>ApartAI dijital dönüşüm ve sakin katılım metrikleri.</p>
+          </div>
+        </div>
         <ul class="plain-list">
-          <li>Sakin aktivite oranı: %${pilot.residentActivityRate}</li>
-          <li>Sistemden açılan talep oranı: %${pilot.systemRequestRate}</li>
-          <li>Yayınlanan duyuru sayısı: ${pilot.announcementCount}</li>
-          <li>Tekrarlayan sorun sinyali: ${recurringIssues().length ? recurringIssues().map((item) => `${item.label} (${item.count})`).join(", ") : "Henüz yok"}</li>
+          <li><strong>Sakin Katılım Oranı:</strong> %${pilot.residentActivityRate}</li>
+          <li><strong>Dijital Kanaldan Açılan Talep:</strong> %${pilot.systemRequestRate}</li>
+          <li><strong>Yayınlanan Resmi Duyuru:</strong> ${pilot.announcementCount} adet</li>
+          <li><strong>Tekrarlayan Arıza Sinyali:</strong> ${recurringIssues().length ? recurringIssues().map((item) => `${item.label} (${item.count})`).join(", ") : "Tespit edilen kronik arıza yok"}</li>
         </ul>
       </section>
     </div>
+
+    <!-- 4. Tedarikçi & Bakım Firma Performans Karnesi -->
     <section class="section">
       <div class="section-header">
         <div>
-          <h2>Tedarikçi & Firma Performans Karnesi</h2>
+          <h2>Tedarikçi & Bakım Firma Performans Karnesi</h2>
           <p>Anlaşmalı bakım firmalarının ortalama çözüm süresi ve SLA hedeflerine uyumu.</p>
         </div>
       </div>
       ${
         vendors.length
           ? `<div class="table-wrap"><table>
-              <thead><tr><th>Firma / Hizmet</th><th>Kategori</th><th>Toplam İş</th><th>Açık</th><th>Çözülen</th><th>Ort. Süre</th><th>SLA Başarı Karnesi</th></tr></thead>
+              <thead><tr><th>Firma / Hizmet Veren</th><th>Hizmet Alanı</th><th>Toplam İş</th><th>Açık</th><th>Çözülen</th><th>Ort. Çözüm Süresi</th><th>SLA Karnesi</th></tr></thead>
               <tbody>${vendors.map((v) => `<tr><td><strong>${safeText(v.assignee)}</strong></td><td><span class="status info">${safeText(v.category)}</span></td><td>${v.total}</td><td>${v.open}</td><td>${v.resolved}</td><td><strong>${v.avgDays !== null ? `${v.avgDays} gün` : "-"}</strong></td><td><span class="status ${v.scoreStatus}">${v.scoreText}</span></td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p>Henüz atanmış talep yok. Talep detayından firma/kişi atayarak karnesini takip edebilirsiniz.</p>`
+          : `<p style="color:var(--muted); padding:12px 0;">Henüz firmaya atanmış talep bulunmuyor. Talepler ekranından firma atayarak karne oluşturabilirsiniz.</p>`
       }
     </section>
+
+    <!-- 5. Site Sağlık Skoru Geçmişi -->
     <section class="section">
       <div class="section-header">
-        <h2>Site Sağlık Skoru Geçmişi</h2>
-        ${API_BASE ? `<button class="btn primary" onclick="saveHealthSnapshot()">Skoru kaydet</button>` : ""}
+        <div>
+          <h2>Site Sağlık Skoru Geçmiş Kayıtları</h2>
+          <p>Dönemsel performans ve iyileşme trendi.</p>
+        </div>
       </div>
       ${
         scoped.healthScores.length
           ? `<div class="table-wrap"><table>
-              <thead><tr><th>Tarih</th><th>Skor</th><th>Durum</th></tr></thead>
-              <tbody>${scoped.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td>${item.score}</td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
+              <thead><tr><th>Tarih</th><th>Skor</th><th>Değerlendirme</th></tr></thead>
+              <tbody>${scoped.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td><strong>${item.score}/100</strong></td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p>Henüz kayıtlı skor anlık görüntüsü yok. "Skoru kaydet" ile bugünün skorunu geçmişe ekleyebilirsiniz.</p>`
+          : `<p style="color:var(--muted); padding:12px 0;">Henüz kayıtlı anlık görüntü bulunmuyor. Yukarıdaki "Skoru Kaydet" butonu ile bugünün skorunu arşivleyebilirsiniz.</p>`
       }
     </section>
   `;
 }
 
-// Yönetim firması görünümü: her site için aynı metrikler, karşılaştırmalı.
 function siteMetrics(siteId) {
   const pick = (rows) => (rows || []).filter((row) => !row.siteId || row.siteId === siteId);
   const rows = {
@@ -3324,6 +3916,7 @@ function siteMetrics(siteId) {
     name: site?.name || siteId,
     address: site?.address || "",
     apartments: rows.apartments.length,
+    blocks: rows.blocks.length,
     collectionRate: summary.collectionRate,
     pending: summary.pending,
     openRequests: stats.open,
@@ -3333,61 +3926,144 @@ function siteMetrics(siteId) {
 }
 
 function sitesView() {
-  const rows = (state.sites || []).map((site) => siteMetrics(site.id)).sort((a, b) => a.score - b.score);
+  const rows = (state.sites || []).map((site) => siteMetrics(site.id)).sort((a, b) => b.score - a.score);
   const totalPending = rows.reduce((sum, row) => sum + row.pending, 0);
   const avgScore = rows.length ? Math.round(rows.reduce((sum, row) => sum + row.score, 0) / rows.length) : 0;
+  const totalApartments = rows.reduce((sum, row) => sum + row.apartments, 0);
+
   return `
+    <!-- 1. Üst Portföy KPI Kartları -->
     <div class="grid dashboard-grid">
       <section class="section metric">
-        <span>Yönetilen site</span>
-        <strong>${rows.length}</strong>
-        <small>${rows.reduce((sum, row) => sum + row.apartments, 0)} daire</small>
+        <span>🏢 Yönetilen Siteler</span>
+        <strong>${rows.length} Site</strong>
+        <small>${totalApartments} bağımsız bölüm</small>
       </section>
       <section class="section metric">
-        <span>Ortalama skor</span>
-        <strong>${avgScore}</strong>
-        <small>En düşük: ${rows[0]?.name ?? "-"}</small>
+        <span>⭐ Portföy Ortalama Skoru</span>
+        <strong style="color:var(--accent);">${avgScore} / 100</strong>
+        <small>${rows.length} siteden hesaplandı</small>
       </section>
       <section class="section metric">
-        <span>Toplam bekleyen</span>
-        <strong>${money(totalPending)}</strong>
-        <small>Tüm sitelerde tahsil edilmemiş</small>
+        <span>⚠️ Toplam Bekleyen Alacak</span>
+        <strong style="color:var(--danger);">${money(totalPending)}</strong>
+        <small>Tüm sitelerdeki kümülatif borç</small>
       </section>
     </div>
-    <section class="section" style="margin-top:16px">
+
+    <!-- 2. Siteler Portföy Kartları Gridi -->
+    <div style="margin-top:24px;">
       <div class="section-header">
         <div>
-          <h2>Site Karşılaştırması</h2>
-          <p>En düşük skordan başlayarak sıralanır; satıra tıklayarak o siteye geç.</p>
+          <h2>Site Portföyü & Hızlı Yönetim</h2>
+          <p>Yönettiğiniz tüm siteler. İlgili siteyi aktif yapmak ve yönetmek için kart üzerindeki butona tıklayın.</p>
+        </div>
+      </div>
+
+      <div class="sites-portfolio-grid">
+        ${rows.map((row) => {
+          const isActive = row.siteId === state.activeSiteId;
+          return `
+            <div class="site-portfolio-card ${isActive ? "is-active-site" : ""}">
+              <div class="site-card-header">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="site-card-icon">🏢</div>
+                  <div>
+                    <h3 style="margin:0; font-size:16.5px; color:var(--ink);">${safeText(row.name)}</h3>
+                    <small style="color:var(--muted); font-size:12px;">${safeText(row.address || "Adres belirtilmedi")}</small>
+                  </div>
+                </div>
+                <span class="status ${row.score >= 75 ? "ok" : row.score >= 60 ? "warn" : "danger"}" style="font-size:11.5px; font-weight:750;">
+                  ⭐ ${row.score}
+                </span>
+              </div>
+
+              <div class="site-card-body">
+                <div class="site-card-metrics-row">
+                  <div>
+                    <small>Daire</small>
+                    <strong>${row.apartments}</strong>
+                  </div>
+                  <div>
+                    <small>Tahsilat</small>
+                    <strong style="color:var(--ok);">%${row.collectionRate}</strong>
+                  </div>
+                  <div>
+                    <small>Açık Talep</small>
+                    <strong style="color:${row.openRequests > 0 ? "var(--danger)" : "var(--muted)"};">${row.openRequests}</strong>
+                  </div>
+                </div>
+
+                <div style="font-size:12.5px; color:var(--muted); display:flex; justify-content:space-between; margin-top:2px;">
+                  <span>Bekleyen Alacak:</span>
+                  <strong style="color:var(--danger);">${money(row.pending)}</strong>
+                </div>
+
+                <div style="height:6px; background:#f1f5f9; border-radius:999px; overflow:hidden;">
+                  <div style="width:${row.collectionRate}%; height:100%; background:var(--accent); border-radius:999px;"></div>
+                </div>
+              </div>
+
+              <div class="site-card-footer">
+                ${
+                  isActive
+                    ? `<span class="status ok" style="padding:6px 14px; font-weight:750;">🟢 Şu An Yönetilen Site</span>`
+                    : `<button class="btn primary" style="width:100%; font-size:13px; padding:8px 14px;" onclick="switchSite('${row.siteId}')">Bu Siteyi Yönet →</button>`
+                }
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+
+    <!-- 3. Karşılaştırmalı Detay Tablosu -->
+    <section class="section" style="margin-top:24px">
+      <div class="section-header">
+        <div>
+          <h2>Siteler Arası Performans Karşılaştırması</h2>
+          <p>Tüm sitelerin operasyonel göstergeleri tek bir tabloda.</p>
         </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Site</th><th>Daire</th><th>Tahsilat</th><th>Bekleyen</th><th>Açık Talep</th><th>Skor</th><th></th></tr></thead>
+          <thead><tr><th>Site Adı</th><th>Blok & Daire</th><th>Tahsilat Oranı</th><th>Bekleyen Borç</th><th>Açık Talepler</th><th>Sağlık Skoru</th><th style="text-align:right;">İşlem</th></tr></thead>
           <tbody>
             ${rows.map((row) => `
               <tr class="${row.siteId === state.activeSiteId ? "row-active" : ""}">
-                <td><strong>${safeText(row.name)}</strong><br><small>${safeText(row.address)}</small></td>
-                <td>${row.apartments}</td>
-                <td>%${row.collectionRate}</td>
-                <td>${money(row.pending)}</td>
-                <td>${row.openRequests}</td>
+                <td>
+                  <strong>${safeText(row.name)}</strong><br>
+                  <small style="color:var(--muted);">${safeText(row.address)}</small>
+                </td>
+                <td>${row.blocks || "-"} Blok · ${row.apartments} Daire</td>
+                <td><strong>%${row.collectionRate}</strong></td>
+                <td style="color:var(--danger); font-weight:700;">${money(row.pending)}</td>
+                <td>${row.openRequests} adet</td>
                 <td><span class="status ${row.score >= 75 ? "ok" : row.score >= 60 ? "warn" : "danger"}">${row.score} · ${row.status}</span></td>
-                <td>${row.siteId === state.activeSiteId ? `<span class="status info">Aktif</span>` : `<button class="btn" onclick="switchSite('${row.siteId}')">Bu siteye geç</button>`}</td>
+                <td style="text-align:right;">
+                  ${row.siteId === state.activeSiteId ? `<span class="status ok">Aktif</span>` : `<button class="btn" style="padding:5px 12px; font-size:12.5px;" onclick="switchSite('${row.siteId}')">Yönet</button>`}
+                </td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
     </section>
+
+    <!-- 4. Yeni Site Ekleme Formu -->
     ${
       API_BASE
-        ? `<section class="section" style="margin-top:16px">
-            <div class="section-header"><h2>Yeni Site Ekle</h2></div>
+        ? `<section class="section" style="margin-top:24px">
+            <div class="section-header">
+              <div>
+                <h2>Portföye Yeni Site Ekle</h2>
+                <p>Yönetimine başladığınız yeni bir site veya apartmanı sisteme tanımlayın.</p>
+              </div>
+            </div>
             <form class="form-grid wide" onsubmit="createSite(event)">
-              <label>Site adı<input name="name" required placeholder="Örn. Palmiye Konakları" /></label>
-              <label>Adres<input name="address" placeholder="İlçe, İl" /></label>
-              <button class="btn primary" type="submit">Siteyi Oluştur</button>
+              <label>Site / Apartman Adı<input name="name" required placeholder="Örn. Palmiye Konakları veya Çınar Sitesi" /></label>
+              <label>Adres & Konum<input name="address" placeholder="İlçe, İl (Örn: Kadıköy, İstanbul)" /></label>
+              <button class="btn primary" type="submit" style="align-self:end;">Siteyi Sisteme Ekle</button>
             </form>
           </section>`
         : ""
@@ -4090,20 +4766,26 @@ function residentRequestView() {
             <input name="title" required value="${safeText(templates[0]?.defaultTitle || "")}" placeholder="Örn: Asansör çalışmıyor veya Koridorda gürültü var" />
           </label>
 
-          <label>
-            <span>Öncelik Derecesi</span>
-            <div style="display:flex; gap:12px; margin-top:4px;">
-              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                <input type="radio" name="urgency" value="Düşük" /> Düşük
+          <div>
+            <span style="font-size:13px; font-weight:650; color:var(--ink-secondary); display:block; margin-bottom:4px;">Öncelik Derecesi</span>
+            <div class="priority-selector-grid">
+              <label class="priority-pill priority-low">
+                <input type="radio" name="urgency" value="Düşük" />
+                <span class="priority-icon">🟢</span>
+                <span>Düşük</span>
               </label>
-              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                <input type="radio" name="urgency" value="Orta" checked /> Normal / Orta
+              <label class="priority-pill priority-medium">
+                <input type="radio" name="urgency" value="Orta" checked />
+                <span class="priority-icon">🟡</span>
+                <span>Normal / Orta</span>
               </label>
-              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; font-weight:700; color:var(--danger);">
-                <input type="radio" name="urgency" value="Yüksek" /> 🚨 Acil
+              <label class="priority-pill priority-high">
+                <input type="radio" name="urgency" value="Yüksek" />
+                <span class="priority-icon">🚨</span>
+                <span style="font-weight:750;">Acil</span>
               </label>
             </div>
-          </label>
+          </div>
 
           <label>
             <span>Açıklama</span>
