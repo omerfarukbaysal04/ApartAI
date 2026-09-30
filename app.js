@@ -71,6 +71,7 @@ const seedState = {
   assistantMessages: [],
   isAssistantLoading: false,
   mobileNavOpen: false,
+  mobileManagerMenuOpen: false,
   sites: [
     { id: "site-1", name: "Çınar Apartmanı", address: "Kadıköy, İstanbul" },
     { id: "site-2", name: "Meltem Sitesi", address: "Ataşehir, İstanbul" },
@@ -558,6 +559,12 @@ function setState(patch) {
   state = { ...state, ...patch };
   if (patch.view) {
     saveActiveView(patch.view);
+    state.mobileManagerMenuOpen = false;
+    state.mobileNavOpen = false;
+  }
+  if (patch.mode) {
+    state.mobileManagerMenuOpen = false;
+    state.mobileNavOpen = false;
   }
   if (!API_BASE) saveState();
   render();
@@ -1158,6 +1165,7 @@ function render() {
   document.body.classList.toggle("resident-mode", state.mode === "resident");
   document.body.classList.toggle("manager-mode", state.mode === "manager");
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
+  document.body.classList.toggle("manager-menu-open", Boolean(state.mobileManagerMenuOpen));
 
   // Sakin hesabında mobilde sol menü gereksiz kalır (alt bar varken sol bar açılmaz)
   if (state.mode === "resident" && state.mobileNavOpen) {
@@ -1187,7 +1195,6 @@ function render() {
       <main class="main">
         <div class="topbar">
           <div class="title" style="display:flex; align-items:center; gap:12px;">
-            ${state.mode === "manager" ? `<button class="mobile-menu-trigger" onclick="setState({ mobileNavOpen: true })" aria-label="Menü">☰</button>` : ""}
             <div>
               <h1>${pageTitle()}</h1>
               <p>${pageDescription()}</p>
@@ -1202,6 +1209,7 @@ function render() {
     ${printReportModal()}
     ${notificationDetailModal()}
     ${paymentGatewayModal()}
+    ${managerMenuSheetModal()}
     <div id="ai-assistant-root">${assistantWidgetMarkup()}</div>
   `;
 }
@@ -6169,24 +6177,140 @@ function residentBottomNav() {
   `;
 }
 
+function toggleManagerMenuSheet() {
+  state.mobileManagerMenuOpen = !state.mobileManagerMenuOpen;
+  document.body.classList.toggle("manager-menu-open", Boolean(state.mobileManagerMenuOpen));
+  render();
+}
+
 function managerBottomNav() {
-  const items = [
-    { view: "dashboard", icon: "📊", label: "Özet" },
-    { view: "finances", icon: "💰", label: "Kasa" },
-    { view: "dues", icon: "💳", label: "Aidatlar" },
-    { view: "requests", icon: "🛠️", label: "Talepler" },
-    { view: "surveys", icon: "🗳️", label: "Anketler" },
-    { view: "profile", icon: "👤", label: "Profil" },
-  ];
+  const isMenuExpandedView = ["announcements", "surveys", "setup", "report", "sites", "ai-assistant", "profile"].includes(state.view);
+  const newReqCount = (scoped.requests || []).filter((r) => r.status === "yeni").length;
+
   return `
     <nav class="mobile-bottom-nav manager-nav">
-      ${items.map((item) => `
-        <button type="button" class="bottom-nav-item ${state.view === item.view ? "active" : ""}" onclick="setState({ view: '${item.view}' })">
-          <span class="nav-icon">${item.icon}</span>
-          <span class="nav-label">${item.label}</span>
-        </button>
-      `).join("")}
+      <button type="button" class="bottom-nav-item ${state.view === "dashboard" ? "active" : ""}" onclick="setState({ view: 'dashboard', mobileManagerMenuOpen: false })">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Özet</span>
+      </button>
+
+      <button type="button" class="bottom-nav-item ${state.view === "finances" ? "active" : ""}" onclick="setState({ view: 'finances', mobileManagerMenuOpen: false })">
+        <span class="nav-icon">💰</span>
+        <span class="nav-label">Kasa</span>
+      </button>
+
+      <!-- Ortadaki Tüm Menüleri Açan Özel Buton -->
+      <button type="button" class="bottom-nav-center-item ${isMenuExpandedView || state.mobileManagerMenuOpen ? "active" : ""}" onclick="toggleManagerMenuSheet()" aria-label="Tüm Menüyü Aç" title="Tüm Menü">
+        <span class="nav-icon">⚡</span>
+        <span class="nav-label">Menü</span>
+      </button>
+
+      <button type="button" class="bottom-nav-item ${state.view === "dues" ? "active" : ""}" onclick="setState({ view: 'dues', mobileManagerMenuOpen: false })">
+        <span class="nav-icon">💳</span>
+        <span class="nav-label">Aidatlar</span>
+      </button>
+
+      <button type="button" class="bottom-nav-item ${state.view === "requests" ? "active" : ""}" onclick="setState({ view: 'requests', mobileManagerMenuOpen: false })">
+        <span class="nav-icon">🛠️</span>
+        <span class="nav-label">Talepler</span>
+        ${newReqCount > 0 ? `<span class="bottom-nav-badge">${newReqCount}</span>` : ""}
+      </button>
     </nav>
+  `;
+}
+
+function managerMenuSheetModal() {
+  if (!state.mobileManagerMenuOpen) return "";
+  const site = activeSite();
+  const sites = state.sites || [];
+  const newReqCount = (scoped.requests || []).filter((r) => r.status === "yeni").length;
+  const overdueCount = (scoped.dues || []).filter((d) => d.status === "overdue").length;
+
+  const categories = [
+    {
+      title: "Finans & Yönetim",
+      items: [
+        { view: "dashboard", icon: "📊", label: "Özet Panel", desc: "Genel durum & sağlık skoru" },
+        { view: "finances", icon: "💰", label: "Kasa & Giderler", desc: "Gelir-gider & harcamalar" },
+        { view: "dues", icon: "💳", label: "Aidat Takibi", desc: "Toplu aidat & tahsilat", badge: overdueCount ? `${overdueCount} gecikme` : "" },
+        { view: "report", icon: "📈", label: "Detaylı Rapor", desc: "Finansal analiz ve döküm" },
+      ],
+    },
+    {
+      title: "Sakinler & İletişim",
+      items: [
+        { view: "requests", icon: "🛠️", label: "Talepler & Şikayetler", desc: "Arıza, öneri ve takip", badge: newReqCount ? `${newReqCount} yeni` : "" },
+        { view: "announcements", icon: "📢", label: "Duyurular", desc: "Toplu duyuru ve bildirim" },
+        { view: "surveys", icon: "🗳️", label: "Karar Anketleri", desc: "Oylama ve istişare" },
+        { view: "ai-assistant", icon: "✨", label: "ApartAI Asistanı", desc: "Yapay zeka analiz & soru" },
+      ],
+    },
+    {
+      title: "Site Yapısı & Hesap",
+      items: [
+        { view: "setup", icon: "🏢", label: "Site & Daire Kurulumu", desc: "Bina, kat ve daire yapısı" },
+        { view: "sites", icon: "🌐", label: "Tüm Siteler", desc: "Yönetilen siteler listesi" },
+        { view: "profile", icon: "👤", label: "Yönetici Profili", desc: "Hesap ve iletişim bilgisi" },
+      ],
+    },
+  ];
+
+  return `
+    <div class="modal-backdrop manager-sheet-backdrop" onclick="toggleManagerMenuSheet()">
+      <div class="manager-sheet-container" onclick="event.stopPropagation()">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-header-title">
+            <div class="sheet-icon-brand">⚡</div>
+            <div>
+              <h3>Yönetici İşlem Menüsü</h3>
+              <p>${safeText(site?.name || "ApartAI Yönetimi")}</p>
+            </div>
+          </div>
+          <button type="button" class="sheet-close-btn" onclick="toggleManagerMenuSheet()" aria-label="Kapat">×</button>
+        </div>
+
+        ${sites.length > 1 ? `
+          <div class="sheet-site-switcher">
+            <label>
+              <span>Aktif Site:</span>
+              <select onchange="switchSite(this.value); toggleManagerMenuSheet();">
+                ${sites.map((s) => `<option value="${s.id}" ${s.id === state.activeSiteId ? "selected" : ""}>${safeText(s.name)}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+        ` : ""}
+
+        <div class="sheet-content-scroll">
+          ${categories.map((cat) => `
+            <div class="sheet-section">
+              <div class="sheet-section-title">${cat.title}</div>
+              <div class="sheet-grid">
+                ${cat.items.map((item) => `
+                  <div class="sheet-tile ${state.view === item.view ? "active" : ""}" onclick="setState({ view: '${item.view}', mobileManagerMenuOpen: false })">
+                    <div class="sheet-tile-icon">${item.icon}</div>
+                    <div class="sheet-tile-info">
+                      <div class="sheet-tile-name">${item.label}</div>
+                      <div class="sheet-tile-desc">${item.desc}</div>
+                    </div>
+                    ${item.badge ? `<span class="sheet-tile-badge">${item.badge}</span>` : ""}
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="sheet-footer">
+          <button type="button" class="btn text-btn sheet-switch-btn" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${scoped.residents[0]?.id ?? ""}', mobileManagerMenuOpen: false })">
+            🔄 Sakin Ekranına Geç
+          </button>
+          <button type="button" class="btn sheet-logout-btn" onclick="toggleManagerMenuSheet(); logoutUser()">
+            🚪 Çıkış Yap
+          </button>
+        </div>
+      </div>
+    </div>
   `;
 }
 
