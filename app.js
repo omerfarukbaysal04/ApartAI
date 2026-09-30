@@ -272,19 +272,52 @@ function loadLocalState() {
   }
 }
 
+const ACTIVE_VIEW_KEY = "apartai-active-view-v1";
+
+function saveActiveView(view) {
+  if (!view) return;
+  try {
+    localStorage.setItem(ACTIVE_VIEW_KEY, view);
+    if (location.hash !== `#${view}`) {
+      history.replaceState(null, "", `#${view}`);
+    }
+  } catch (e) {}
+}
+
+function getSavedActiveView(role) {
+  const hashView = (location.hash || "").replace(/^#/, "").trim();
+  const storedView = localStorage.getItem(ACTIVE_VIEW_KEY) || "";
+  const candidate = hashView || storedView;
+
+  const managerViews = ["dashboard", "dues", "finances", "requests", "announcements", "surveys", "setup", "reports", "sites", "profile"];
+  const residentViews = ["resident-home", "resident-request", "resident-announcements", "resident-surveys", "profile"];
+
+  if (role === "resident") {
+    if (residentViews.includes(candidate)) return candidate;
+    return "resident-home";
+  } else {
+    if (managerViews.includes(candidate)) return candidate;
+    return "dashboard";
+  }
+}
+
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function setState(patch) {
   state = { ...state, ...patch };
+  if (patch.view) {
+    saveActiveView(patch.view);
+  }
   if (!API_BASE) saveState();
   render();
 }
 
 function applyServerData(data, patch = {}) {
+  const currentView = patch.view || state.view;
   const uiState = {
-    view: state.view,
+    view: currentView,
     mode: state.mode,
     selectedResidentId: state.selectedResidentId,
     selectedRequestId: state.selectedRequestId,
@@ -297,6 +330,9 @@ function applyServerData(data, patch = {}) {
     activeSiteId: state.activeSiteId,
   };
   state = { ...state, ...data, ...uiState, ...patch };
+  if (patch.view) {
+    saveActiveView(patch.view);
+  }
   if (state.sessionUser?.role === "resident") {
     state.mode = "resident";
     state.selectedResidentId = state.sessionUser.residentId;
@@ -413,16 +449,27 @@ async function loadRemoteState() {
   if (!API_BASE) {
     state = loadLocalState();
     state.sessionUser = loadSession();
+    const savedView = getSavedActiveView(state.sessionUser?.role);
+    if (savedView) {
+      state.view = savedView;
+      saveActiveView(savedView);
+    }
     render();
     return;
   }
   try {
     state = { ...state, ...(await apiRequest("/state")) };
     state.sessionUser = loadSession();
-    if (state.sessionUser?.role === "resident") {
+    const role = state.sessionUser?.role;
+    if (role === "resident") {
       state.mode = "resident";
-      state.view = "resident-home";
       state.selectedResidentId = state.sessionUser.residentId;
+    }
+    // F5 yenilemesinde kullanıcının bulunduğu sayfayı koru
+    const restoredView = getSavedActiveView(role);
+    if (restoredView) {
+      state.view = restoredView;
+      saveActiveView(restoredView);
     }
     render();
   } catch (error) {
@@ -3061,7 +3108,7 @@ function profileView() {
                 <strong>📱 Mobil Hızlı Erişim (PWA)</strong>
                 <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Uygulamayı telefon ana ekranına ekleyerek tek tıkla açın.</p>
               </div>
-              <button type="button" class="btn text-btn" onclick="alert('ApartAI mobil uyumlu bir web uygulamasıdır. Tarayıcınızın Paylaş/Menü kısmından \'Ana Ekrana Ekle\' diyerek uygulama gibi kullanabilirsiniz.')" style="font-size:12px;">Bilgi</button>
+              <button type="button" class="btn text-btn" onclick="showPwaInfo()" style="font-size:12px; border:1px solid var(--line); padding:4px 10px;">Bilgi</button>
             </div>
 
             <div class="preference-item" style="border-top:1px solid var(--line); padding-top:12px;">
@@ -3069,7 +3116,7 @@ function profileView() {
                 <strong style="color:var(--danger);">🚪 Oturumu Kapat</strong>
                 <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Mevcut hesaptan güvenli bir şekilde çıkış yapın.</p>
               </div>
-              <button type="button" class="btn" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5; font-size:12px; font-weight:600;" onclick="logout()">Çıkış Yap</button>
+              <button type="button" class="btn" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5; font-size:12px; font-weight:600;" onclick="logoutUser()">Çıkış Yap</button>
             </div>
           </div>
         </section>
@@ -3427,11 +3474,25 @@ function registerResident(event) {
   applyLoggedInUser(user);
 }
 
+function showPwaInfo() {
+  alert("ApartAI mobil uyumlu bir web uygulamasıdır. Akıllı telefonunuzda Safari veya Chrome tarayıcısının Paylaş veya Menü kısmından 'Ana Ekrana Ekle' seçeneğini kullanarak uygulamayı tek dokunuşla tam ekran kullanabilirsiniz.");
+}
+
 function logoutUser() {
   setToken(null);
   saveSession(null);
+  try {
+    localStorage.removeItem(ACTIVE_VIEW_KEY);
+    history.replaceState(null, "", " ");
+  } catch (e) {}
   state.sessionUser = null;
+  state.mode = "manager";
+  state.view = "dashboard";
   render();
+}
+
+function logout() {
+  logoutUser();
 }
 
 function markPaid(dueId) {
@@ -4514,3 +4575,22 @@ function assistantWidgetMarkup() {
 }
 
 loadRemoteState();
+
+// Tarayıcı İleri/Geri ve URL hash navigasyonu
+window.addEventListener("hashchange", () => {
+  const hashView = (location.hash || "").replace(/^#/, "").trim();
+  if (hashView && hashView !== state.view) {
+    const validView = getSavedActiveView(state.sessionUser?.role);
+    if (validView && validView !== state.view) {
+      state.view = validView;
+      render();
+    }
+  }
+});
+
+// Bildirim çekmecesini dışarı tıklandığında otomatik kapat
+document.addEventListener("click", (event) => {
+  if (state.showNotifications && !event.target.closest(".notification-dropdown-wrapper")) {
+    setState({ showNotifications: false });
+  }
+});

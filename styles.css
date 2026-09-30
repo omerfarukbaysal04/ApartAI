@@ -291,6 +291,8 @@ textarea:focus-visible {
   gap: 20px;
   margin-bottom: 28px;
   animation: rise-in 420ms ease both;
+  position: relative;
+  z-index: 500;
 }
 
 .session-bar {
@@ -299,6 +301,8 @@ textarea:focus-visible {
   justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 501;
 }
 
 .user-chip {
@@ -3727,6 +3731,98 @@ tr.row-active > td {
   transform: translateY(-1px);
 }
 
+/* ==========================================================================
+   Dashboard & Sakin Metrik Kartları Grid (Issue 4 Fix)
+   ========================================================================== */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.stat-card {
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+  transition: transform var(--speed, 0.2s) cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow var(--speed, 0.2s) cubic-bezier(0.16, 1, 0.3, 1),
+              border-color var(--speed, 0.2s) ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -2px rgba(15, 23, 42, 0.09);
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.stat-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #64748b);
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: "Outfit", sans-serif;
+  color: var(--ink, #1e293b);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.stat-card .metric-sub {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--muted, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .card-action-hint {
   margin-top: 14px;
   padding-top: 10px;
@@ -3740,6 +3836,7 @@ tr.row-active > td {
   transition: gap var(--speed, 0.2s) ease, color var(--speed, 0.2s) ease;
 }
 
+.stat-card:hover .card-action-hint,
 .interactive-dash-card:hover .card-action-hint {
   gap: 7px;
   color: var(--accent, #0d9488);
@@ -3755,63 +3852,44 @@ tr.row-active > td {
   text-overflow: ellipsis;
 }
 
-/* Kart Tematik Vurguları */
-.card-health {
-  border-top: 3px solid #10b981;
-}
-
+/* Kart Tematik Hover Vurguları */
 .card-health:hover {
   border-color: #10b981;
-  background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.06), transparent 70%), var(--panel);
-}
-
-.card-metric-dues {
-  border-top: 3px solid #0284c7;
+  background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.05), transparent 70%), var(--panel);
 }
 
 .card-metric-dues:hover {
   border-color: #0284c7;
-  background: radial-gradient(circle at top right, rgba(2, 132, 199, 0.06), transparent 70%), var(--panel);
+  background: radial-gradient(circle at top right, rgba(2, 132, 199, 0.05), transparent 70%), var(--panel);
 }
 
 .card-metric-due-warn {
-  border-top: 3px solid #e11d48;
+  border-color: rgba(225, 29, 72, 0.35);
 }
 
 .card-metric-due-warn:hover {
   border-color: #e11d48;
-  background: radial-gradient(circle at top right, rgba(225, 29, 72, 0.06), transparent 70%), var(--panel);
-}
-
-.card-metric-vault {
-  border-top: 3px solid #059669;
+  background: radial-gradient(circle at top right, rgba(225, 29, 72, 0.05), transparent 70%), var(--panel);
 }
 
 .card-metric-vault:hover {
   border-color: #059669;
-  background: radial-gradient(circle at top right, rgba(5, 150, 105, 0.06), transparent 70%), var(--panel);
-}
-
-.card-metric-reqs {
-  border-top: 3px solid #7c3aed;
+  background: radial-gradient(circle at top right, rgba(5, 150, 105, 0.05), transparent 70%), var(--panel);
 }
 
 .card-metric-reqs:hover {
   border-color: #7c3aed;
-  background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.06), transparent 70%), var(--panel);
-}
-
-.card-metric-ann {
-  border-top: 3px solid #ea580c;
+  background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.05), transparent 70%), var(--panel);
 }
 
 .card-metric-ann:hover {
   border-color: #ea580c;
-  background: radial-gradient(circle at top right, rgba(234, 88, 12, 0.06), transparent 70%), var(--panel);
+  background: radial-gradient(circle at top right, rgba(234, 88, 12, 0.05), transparent 70%), var(--panel);
 }
 
-.card-metric-surv {
-  border-top: 3px solid #8b5cf6;
+.card-metric-surv:hover {
+  border-color: #8b5cf6;
+  background: radial-gradient(circle at top right, rgba(139, 92, 246, 0.05), transparent 70%), var(--panel);
 }
 
 .card-metric-surv:hover {
@@ -3917,6 +3995,7 @@ tr.row-active > td {
 .notification-dropdown-wrapper {
   position: relative;
   display: inline-block;
+  z-index: 502;
 }
 
 .notification-bell-btn {
@@ -3989,15 +4068,15 @@ tr.row-active > td {
 
 .notification-drawer {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 10px);
   right: 0;
-  width: 340px;
-  max-width: 90vw;
-  background: #ffffff;
+  width: 380px;
+  max-width: min(380px, calc(100vw - 32px));
+  background: #ffffff !important;
   border: 1px solid var(--line, #e2e8f0);
   border-radius: 14px;
-  box-shadow: 0 16px 36px -4px rgba(15, 23, 42, 0.16), 0 6px 16px -2px rgba(15, 23, 42, 0.08);
-  z-index: 1000;
+  box-shadow: 0 24px 48px -4px rgba(15, 23, 42, 0.25), 0 10px 24px -2px rgba(15, 23, 42, 0.12);
+  z-index: 99999 !important;
   overflow: hidden;
   animation: drawerSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
