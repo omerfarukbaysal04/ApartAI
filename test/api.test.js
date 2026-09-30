@@ -615,11 +615,46 @@ test("yönetici anket oluşturur ve sakin oy kullanabilir", async () => {
   const updatedSurvey = voteRes.body.surveys.find((s) => s.id === surveyId);
   assert.equal(updatedSurvey.votes.length, 1);
   assert.equal(updatedSurvey.votes[0].optionIndex, 0);
+  assert.equal(updatedSurvey.votes[0].option, "Evet");
 
   // Yönetici anketi kapatır
   const closeRes = await api("PATCH", `/api/surveys/${surveyId}/close`, { token: admin });
   assert.equal(closeRes.status, 200);
   const closedSurvey = closeRes.body.surveys.find((s) => s.id === surveyId);
   assert.equal(closedSurvey.status, "closed");
+
+  // Yönetici anketi siler
+  const deleteRes = await api("DELETE", `/api/surveys/${surveyId}`, { token: admin });
+  assert.equal(deleteRes.status, 200);
+  assert.ok(!deleteRes.body.surveys.some((s) => s.id === surveyId));
 });
+
+test("yönetici ve sakin AI asistanını sorgulayabilir", async () => {
+  const admin = await adminToken();
+  const adminRes = await api("POST", "/api/ai/assistant?siteId=site-1", {
+    token: admin,
+    body: { message: "Tahsilat durumu nasıl?" },
+  });
+  assert.equal(adminRes.status, 200);
+  assert.ok(adminRes.body.reply.includes("Tahsilat"));
+
+  const resident = await residentToken("ayse@example.com");
+  const residentRes = await api("POST", "/api/ai/assistant?siteId=site-1", {
+    token: resident,
+    body: { message: "Aidat borcum ne kadar?" },
+  });
+  assert.equal(residentRes.status, 200);
+  assert.ok(typeof residentRes.body.reply === "string");
+  assert.ok(Array.isArray(residentRes.body.suggestedPrompts));
+
+  // Oturumsuz ziyaretçi / misafir AI asistanını sorgulayabilir
+  const guestRes = await api("POST", "/api/ai/assistant", {
+    body: { message: "ApartAI nedir ve ne işe yarar?" },
+  });
+  assert.equal(guestRes.status, 200);
+  assert.ok(guestRes.body.reply.includes("ApartAI"));
+  assert.ok(Array.isArray(guestRes.body.suggestedPrompts));
+});
+
+
 

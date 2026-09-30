@@ -820,12 +820,209 @@ async function draftPaymentReminderWithAI({ resident, apartment, due }) {
   });
 }
 
+async function assistantQueryWithAI({ user, siteId, message, data }) {
+  const targetSiteId = siteId || (user?.siteIds && user.siteIds[0]) || (data.sites && data.sites[0]?.id);
+  const site = (data.sites || []).find((s) => s.id === targetSiteId);
+  const blocks = (data.blocks || []).filter((b) => b.siteId === targetSiteId);
+  const apartments = (data.apartments || []).filter((a) => a.siteId === targetSiteId);
+  const residents = (data.residents || []).filter((r) => r.siteId === targetSiteId);
+  const dues = (data.dues || []).filter((d) => d.siteId === targetSiteId);
+  const requests = (data.requests || []).filter((r) => r.siteId === targetSiteId);
+  const announcements = (data.announcements || []).filter((a) => a.siteId === targetSiteId);
+  const surveys = (data.surveys || []).filter((s) => s.siteId === targetSiteId);
+
+  const role = user?.role || "guest";
+  const isGuest = role === "guest";
+  const isResident = role === "resident";
+
+  let residentContext = null;
+  if (isResident) {
+    const apt = apartments.find((a) => a.id === user.apartmentId);
+    const resInfo = residents.find((r) => r.id === apt?.residentId);
+    const block = blocks.find((b) => b.id === apt?.blockId);
+    const aptDues = dues.filter((d) => d.apartmentId === apt?.id);
+    const unpaidDues = aptDues.filter((d) => d.status !== "paid");
+    const totalUnpaid = unpaidDues.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const aptRequests = requests.filter((r) => r.apartmentId === apt?.id);
+    const activeSurveys = surveys.filter((s) => s.status !== "closed");
+    residentContext = {
+      apartmentNo: apt?.no || "-",
+      blockName: block?.name || "-",
+      residentName: resInfo?.name || user.name,
+      occupancyType: resInfo?.occupancyType === "tenant" ? "Kiracı" : "Ev Sahibi",
+      plateNumber: resInfo?.plateNumber || "Kayıtlı araç yok",
+      emergencyContact: resInfo?.emergencyContact || "Belirtilmemiş",
+      totalUnpaid,
+      unpaidPeriods: unpaidDues.map((d) => `${d.period} (${d.amount} TL - ${d.status === "overdue" ? "Gecikmiş" : "Beklemede"})`),
+      totalRequests: aptRequests.length,
+      openRequests: aptRequests.filter((r) => !["cozuldu", "reddedildi"].includes(r.status)).map((r) => `${r.title} (${r.status})`),
+      activeSurveys: activeSurveys.map((s) => ({
+        id: s.id,
+        title: s.title,
+        hasVoted: (s.votes || []).some((v) => v.userId === user.id || v.apartmentId === apt?.id),
+      })),
+    };
+  }
+
+  let adminContext = null;
+  if (!isResident && !isGuest) {
+    const totalDuesAmount = dues.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const paidDuesAmount = dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (d.amount || 0), 0);
+    const overdueDuesAmount = dues.filter((d) => d.status === "overdue").reduce((sum, d) => sum + (d.amount || 0), 0);
+    const collectionRate = totalDuesAmount > 0 ? Math.round((paidDuesAmount / totalDuesAmount) * 100) : 0;
+    const openReqs = requests.filter((r) => !["cozuldu", "reddedildi"].includes(r.status));
+    const resolvedReqs = requests.filter((r) => r.status === "cozuldu");
+
+    const catCounts = requests.reduce((acc, r) => {
+      acc[r.category] = (acc[r.category] || 0) + 1;
+      return acc;
+    }, {});
+    const topCategory = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Yok";
+
+    const owners = residents.filter((r) => r.occupancyType !== "tenant").length;
+    const tenants = residents.filter((r) => r.occupancyType === "tenant").length;
+
+    adminContext = {
+      siteName: site?.name || "Apartman",
+      apartmentCount: apartments.length,
+      residentCount: residents.length,
+      owners,
+      tenants,
+      collectionRate,
+      totalDuesAmount,
+      paidDuesAmount,
+      overdueDuesAmount,
+      pendingDuesAmount: totalDuesAmount - paidDuesAmount,
+      totalRequests: requests.length,
+      openRequests: openReqs.length,
+      resolvedRequests: resolvedReqs.length,
+      topCategory,
+      activeSurveysCount: surveys.filter((s) => s.status !== "closed").length,
+    };
+  }
+
+  const queryLower = (message || "").toLocaleLowerCase("tr-TR");
+  let fallbackReply = "";
+  let suggestedPrompts = [];
+
+  if (isGuest) {
+    suggestedPrompts = [
+      "ApartAI nedir ve ne işe yarar?",
+      "Yönetici olarak nasıl denerim?",
+      "Sakinler aidatlarını nasıl öder?",
+      "Fotoğraflı arıza bildirimi nasıl çalışır?",
+    ];
+    if (queryLower.includes("nedir") || queryLower.includes("nasıl") || queryLower.includes("ne işe")) {
+      fallbackReply = `**ApartAI**, apartman ve site yönetim süreçlerini otomatikleştiren yapay zeka destekli akıllı bir platformdur.\n\n` +
+        `- **Yöneticiler için:** Finansal tahsilat takibi, gecikme riski analizi, arızaları firmalara atama ve panoya asılabilir A4 resmi faaliyet bülteni üretimi.\n` +
+        `- **Sakinler için:** Güncel aidat borç takibi, kayıtlı araç plakası ve acil durum bilgileri, fotoğraflı arıza bildirimi ve site karar anketlerine dijital katılım.\n\n` +
+        `Yukarıdaki **"Yönetici Demosunu Başlat"** veya **"Sakin Portaline Gir"** butonlarına tıklayarak anında canlı deneyebilirsiniz!`;
+    } else if (queryLower.includes("yönetici") || queryLower.includes("demo") || queryLower.includes("denerim")) {
+      fallbackReply = `Yönetici panelini test etmek için üst menüdeki **"👑 Yönetici Girişi"** butonuna basarak tek tıkla demo oturumu açabilirsiniz (admin@apartai.local / demo123).`;
+    } else if (queryLower.includes("aidat") || queryLower.includes("ödeme") || queryLower.includes("öde")) {
+      fallbackReply = `Sakinler kendi dairelerine tahakkuk eden aidatları, son ödeme tarihlerini ve gecikme durumlarını portallerinden anlık takip edebilirler. Yönetici ise tek tıkla hatırlatma mesajı gönderebilir.`;
+    } else if (queryLower.includes("fotoğraf") || queryLower.includes("arıza") || queryLower.includes("talep")) {
+      fallbackReply = `Sakinler telefonlarından arızanın (örn. asansör arızası, tesisat sızıntısı) fotoğrafını çekip ilettiğinde, ApartAI görseli analiz ederek aciliyet derecesini ve ilgili tedarikçi firmayı otomatik olarak belirler.`;
+    } else {
+      fallbackReply = `Merhaba! Ben **ApartAI Akıllı Asistanıyım** 👋\n\nApartman ve site yönetiminde yapay zekanın sağladığı kolaylıklar hakkında bana her şeyi sorabilir veya yukarıdaki demo butonlarıyla canlı panelleri anında keşfedebilirsiniz.`;
+    }
+  } else if (isResident) {
+    suggestedPrompts = [
+      "Aidat borcum ne kadar?",
+      "Kayıtlı araç plakam nedir?",
+      "Aktif bir anket var mı?",
+      "Arıza talebi nasıl açarım?",
+    ];
+    if (queryLower.includes("aidat") || queryLower.includes("borç") || queryLower.includes("ödeme")) {
+      if (residentContext.totalUnpaid > 0) {
+        fallbackReply = `Dairenize (${residentContext.blockName} Blok No: ${residentContext.apartmentNo}) ait **${residentContext.totalUnpaid.toLocaleString("tr-TR")} TL** ödenmemiş aidat bakiyesi bulunmaktadır.\n\n` +
+          `Dönemler:\n${residentContext.unpaidPeriods.map((p) => `- ${p}`).join("\n")}\n\n` +
+          `Ödemenizi site banka hesabına daire numaranızı belirterek yapabilir veya yönetime bildirebilirsiniz.`;
+      } else {
+        fallbackReply = `Tebrikler! Dairenize (${residentContext.blockName} Blok No: ${residentContext.apartmentNo}) ait herhangi bir gecikmiş veya ödenmemiş aidat borcu bulunmamaktadır. Tüm dönemleriniz günceldir.`;
+      }
+    } else if (queryLower.includes("plaka") || queryLower.includes("araç") || queryLower.includes("araba") || queryLower.includes("otopark")) {
+      fallbackReply = `Dairenize kayıtlı araç plaka bilgisi: **${residentContext.plateNumber}**.\n\nMülkiyet durumu: **${residentContext.occupancyType}**.\nAcil durum irtibatı: **${residentContext.emergencyContact}**.\nBilgilerde değişiklik varsa lütfen site yönetimine başvurunuz.`;
+    } else if (queryLower.includes("anket") || queryLower.includes("oy") || queryLower.includes("karar")) {
+      if (residentContext.activeSurveys.length > 0) {
+        fallbackReply = `Şu anda sitemizde **${residentContext.activeSurveys.length} adet** aktif karar anketi bulunmaktadır:\n\n` +
+          residentContext.activeSurveys.map((s) => `- **${s.title}** (${s.hasVoted ? "✅ Oyunuzu kullandınız" : "⚠️ Henüz oy vermediniz"})`).join("\n") +
+          `\n\nSol menüdeki **Anketler** sekmesinden hemen tercihinizi belirtebilirsiniz.`;
+      } else {
+        fallbackReply = "Şu anda oylamaya açık aktif bir site anketi bulunmamaktadır.";
+      }
+    } else if (queryLower.includes("talep") || queryLower.includes("arıza") || queryLower.includes("şikayet") || queryLower.includes("tamir") || queryLower.includes("bozuk")) {
+      fallbackReply = `Dairenize ait toplam ${residentContext.totalRequests} talep kaydı bulunuyor (${residentContext.openRequests.length} açık talep: ${residentContext.openRequests.join(", ") || "Yok"}).\n\n` +
+        `Yeni bir arıza veya bildirim iletmek için menüdeki **Talep Aç** sekmesini kullanabilir, fotoğraf ekleyerek anında iletebilirsiniz.`;
+    } else if (queryLower.includes("yönetim") || queryLower.includes("iletişim") || queryLower.includes("telefon") || queryLower.includes("acil")) {
+      fallbackReply = `${site?.name || "Site"} Yönetimi ile görüşmek için sistem üzerinden talep oluşturabilir veya acil durumlarda bina görevlisine başvurabilirsiniz.\nKayıtlı Acil İrtibatınız: **${residentContext.emergencyContact}**.`;
+    } else {
+      fallbackReply = `Merhaba Sayın ${residentContext.residentName}! Ben **ApartAI Akıllı Asistanınızım**.\n\nSize aidat borç durumunuz, kayıtlı araç plakanız, arıza talepleriniz veya aktif site anketleri konusunda yardımcı olabilirim. Aşağıdaki sorulardan birini seçebilir veya dilediğinizi sorabilirsiniz.`;
+    }
+  } else {
+    suggestedPrompts = [
+      "Aidat tahsilat durumu nasıl?",
+      "En çok hangi konuda arıza var?",
+      "Asansör bakımı için duyuru taslağı yaz",
+      "Sitede kaç kiracı, kaç ev sahibi var?",
+    ];
+    if (queryLower.includes("tahsilat") || queryLower.includes("aidat") || queryLower.includes("kasa") || queryLower.includes("alacak")) {
+      fallbackReply = `**${adminContext.siteName}** Güncel Finansal Durum Özeti:\n\n` +
+        `- **Tahsilat Başarı Oranı:** %${adminContext.collectionRate}\n` +
+        `- **Tahsil Edilen:** ${adminContext.paidDuesAmount.toLocaleString("tr-TR")} TL\n` +
+        `- **Bekleyen / Kalan:** ${adminContext.pendingDuesAmount.toLocaleString("tr-TR")} TL\n` +
+        `- **Gecikmiş / Riskli Alacak:** ${adminContext.overdueDuesAmount.toLocaleString("tr-TR")} TL\n\n` +
+        `Aidatlar ekranından geciken dairelere tek tıkla hatırlatma mesajı gönderebilirsiniz.`;
+    } else if (queryLower.includes("arıza") || queryLower.includes("talep") || queryLower.includes("şikayet") || queryLower.includes("kategori")) {
+      fallbackReply = `**Teknik & Operasyonel Durum:**\n\n` +
+        `- Toplam Talep: **${adminContext.totalRequests}**\n` +
+        `- Devam Eden / Açık: **${adminContext.openRequests}**\n` +
+        `- Çözülen: **${adminContext.resolvedRequests}**\n` +
+        `- En Sık Karşılaşılan Kategori: **${adminContext.topCategory}**\n\n` +
+        `Talepler sekmesinden ilgili firmaya atama yapabilir veya detayları inceleyebilirsiniz.`;
+    } else if (queryLower.includes("kiracı") || queryLower.includes("ev sahibi") || queryLower.includes("malik") || queryLower.includes("oturan")) {
+      fallbackReply = `**${adminContext.siteName} Sakin Profili:**\n\n` +
+        `- Toplam Daire: **${adminContext.apartmentCount}**\n` +
+        `- Kayıtlı Sakin: **${adminContext.residentCount}**\n` +
+        `- Ev Sahibi: **${adminContext.owners}** daire (%${Math.round((adminContext.owners / (adminContext.residentCount || 1)) * 100)})\n` +
+        `- Kiracı: **${adminContext.tenants}** daire (%${Math.round((adminContext.tenants / (adminContext.residentCount || 1)) * 100)})\n\n` +
+        `Detaylı plaka ve acil durum irtibat listesine **Site Kurulumu** sekmesinden ulaşabilirsiniz.`;
+    } else if (queryLower.includes("duyuru") || queryLower.includes("taslak") || queryLower.includes("yaz") || queryLower.includes("hazırla")) {
+      fallbackReply = `📢 **Yönetim Duyurusu Taslağı:**\n\n` +
+        `**Başlık:** Ortak Alan Periyodik Bakım ve Bilgilendirme\n` +
+        `**İçerik:** Değerli Site Sakinlerimiz, sitemizin ortak kullanım alanlarında konfor ve güvenliğinizi en üst düzeyde tutmak amacıyla yarın 10:00 - 16:00 saatleri arasında planlı bakım ve kontroller gerçekleştirilecektir. Süreç boyunca göstereceğiniz anlayış için teşekkür eder, iyi günler dileriz.\n\n` +
+        `*Bu metni Duyurular sekmesinden sakinlerimize tek tıkla yayınlayabilirsiniz.*`;
+    } else if (queryLower.includes("anket") || queryLower.includes("karar")) {
+      fallbackReply = `Sistemde şu anda **${adminContext.activeSurveysCount} adet** aktif anket bulunmaktadır. Anketler sekmesinden katılım oranlarını ve oy dağılımını canlı inceleyebilirsiniz.`;
+    } else {
+      fallbackReply = `Merhaba Sayın Yöneticim! Ben **ApartAI Akıllı Yönetim Asistanınızım**.\n\nSitenizin finansal tahsilatları, teknik arıza yoğunlukları, sakin/kiracı istatistikleri ve duyuru hazırlama süreçlerinde size yardımcı olmaya hazırım. Hızlı sorulardan birini seçebilir veya sormak istediğiniz konuyu yazabilirsiniz.`;
+    }
+  }
+
+  const contextData = isGuest ? { info: "ApartAI Tanıtım & Demo" } : (isResident ? residentContext : adminContext);
+  return callAIJson({
+    operation: "assistant_chat",
+    fallback: { reply: fallbackReply, suggestedPrompts },
+    instructions: `Sen ApartAI platformunun yapay zeka site yönetim asistanısın. 
+Kullanıcı rolü: ${isGuest ? "Ziyaretçi / Misafir" : (isResident ? "Site Sakini" : "Site Yöneticisi")}.
+Site gerçek verileri JSON olarak verildi. Kullanıcının sorusuna bu verilere sadık kalarak nazik, çözüm odaklı, net ve Türkçe yanıt ver. 
+Format: JSON { "reply": "...", "suggestedPrompts": ["..."] }. 
+Eğer kullanıcı duyuru taslağı isterse şık, kurumsal ve yayınlanabilir bir duyuru metni üret.`,
+    input: {
+      userRole: user ? user.role : "guest",
+      userMessage: message,
+      contextData,
+    },
+  });
+}
+
 function routeAccess(method, pathname) {
   const publicRoutes = [
     ["POST", "/api/auth/login"],
     ["POST", "/api/auth/register"],
     ["GET", "/api/state"],
     ["GET", "/api/ai/status"],
+    ["POST", "/api/ai/assistant"],
   ];
   if (publicRoutes.some(([m, p]) => m === method && p === pathname)) return "public";
   // Any authenticated user (resident or admin) may open a request.
@@ -970,6 +1167,27 @@ async function routeApi(req, res, url) {
 
   if (method === "GET" && url.pathname === "/api/ai/debug") {
     json(res, 200, aiDebugSnapshot());
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ai/assistant") {
+    const body = await readBody(req);
+    const message = clean(body.message);
+    ensure(message, "Mesaj boş olamaz.");
+    let targetSiteId = null;
+    if (authUser) {
+      targetSiteId = resolveSiteId(url, authUser, data);
+    } else {
+      const requested = clean(url.searchParams.get("siteId"));
+      targetSiteId = (data.sites || []).find((s) => s.id === requested)?.id || data.sites?.[0]?.id || null;
+    }
+    const result = await assistantQueryWithAI({
+      user: authUser || { role: "guest", name: "Ziyaretçi" },
+      siteId: targetSiteId,
+      message,
+      data,
+    });
+    json(res, 200, result);
     return;
   }
 
@@ -1409,6 +1627,7 @@ async function routeApi(req, res, url) {
       residentId: authUser.residentId || "",
       apartmentId: userApartment?.id || "",
       optionIndex,
+      option: survey.options[optionIndex] || "",
       date: today(),
     };
     if (existingIndex >= 0) {
@@ -1430,6 +1649,21 @@ async function routeApi(req, res, url) {
     }
     requireSiteAccess(survey.siteId, authUser, data);
     survey.status = survey.status === "closed" ? "active" : "closed";
+    await writeData(data);
+    json(res, 200, stateForUser(data, authUser));
+    return;
+  }
+
+  const surveyDeleteMatch = url.pathname.match(/^\/api\/surveys\/([^/]+)$/);
+  if (method === "DELETE" && surveyDeleteMatch) {
+    const surveyIndex = (data.surveys || []).findIndex((item) => item.id === surveyDeleteMatch[1]);
+    if (surveyIndex < 0) {
+      json(res, 404, { error: "Survey not found" });
+      return;
+    }
+    const survey = data.surveys[surveyIndex];
+    requireSiteAccess(survey.siteId, authUser, data);
+    data.surveys.splice(surveyIndex, 1);
     await writeData(data);
     json(res, 200, stateForUser(data, authUser));
     return;
@@ -1492,7 +1726,10 @@ async function serveStatic(res, url) {
   try {
     const ext = path.extname(filePath).toLowerCase();
     const content = await fs.readFile(filePath);
-    res.writeHead(200, { "content-type": contentTypes[ext] || "application/octet-stream" });
+    res.writeHead(200, {
+      "content-type": contentTypes[ext] || "application/octet-stream",
+      "cache-control": "no-store, no-cache, must-revalidate",
+    });
     res.end(content);
   } catch {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });

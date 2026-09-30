@@ -46,6 +46,10 @@ const seedState = {
   requestCategoryFilter: "all",
   sessionUser: null,
   activeSiteId: "site-1",
+  isAssistantOpen: false,
+  assistantMessages: [],
+  isAssistantLoading: false,
+  mobileNavOpen: false,
   sites: [
     { id: "site-1", name: "Çınar Apartmanı", address: "Kadıköy, İstanbul" },
     { id: "site-2", name: "Meltem Sitesi", address: "Ataşehir, İstanbul" },
@@ -791,13 +795,15 @@ function render() {
   const site = activeSite();
   app.innerHTML = `
     <div class="shell">
-      <aside class="sidebar">
+      ${state.mobileNavOpen ? `<div class="sidebar-backdrop" onclick="setState({ mobileNavOpen: false })"></div>` : ""}
+      <aside class="sidebar ${state.mobileNavOpen ? "mobile-open" : ""}">
         <div class="brand">
           ${brandLogo()}
           <div>
             <strong>ApartAI</strong>
             <span>AI destekli site yönetimi</span>
           </div>
+          <button class="mobile-close-btn" onclick="setState({ mobileNavOpen: false })" aria-label="Menüyü Kapat">×</button>
         </div>
         ${state.mode === "manager" ? siteSwitcher() : ""}
         ${state.mode === "manager" ? managerNav() : residentNav()}
@@ -808,16 +814,21 @@ function render() {
       </aside>
       <main class="main">
         <div class="topbar">
-          <div class="title">
-            <h1>${pageTitle()}</h1>
-            <p>${pageDescription()}</p>
+          <div class="title" style="display:flex; align-items:center; gap:12px;">
+            <button class="mobile-menu-trigger" onclick="setState({ mobileNavOpen: true })" aria-label="Menü">☰</button>
+            <div>
+              <h1>${pageTitle()}</h1>
+              <p>${pageDescription()}</p>
+            </div>
           </div>
           ${sessionActions()}
         </div>
         ${state.mode === "manager" ? managerView() : residentView()}
       </main>
     </div>
+    ${state.mode === "resident" ? residentBottomNav() : managerBottomNav()}
     ${printReportModal()}
+    <div id="ai-assistant-root">${assistantWidgetMarkup()}</div>
   `;
 }
 
@@ -937,92 +948,206 @@ function authView() {
   const isLogin = authMode === "login";
   return `
     <main class="auth-page">
-      <section class="auth-hero">
-        <nav class="landing-nav">
-          <div class="landing-brand">
-            ${brandLogo("landing-logo")}
-            <div>
-              <strong>ApartAI</strong>
-              <span>AI destekli site yönetimi</span>
+      <nav class="landing-nav">
+        <div class="landing-brand">
+          ${brandLogo("landing-logo")}
+          <div>
+            <strong>ApartAI</strong>
+            <span>Akıllı Site Yönetimi</span>
+          </div>
+        </div>
+        <div class="landing-actions">
+          <button type="button" class="btn ghost" onclick="quickLogin('admin@apartai.local')">👑 Yönetici Girişi</button>
+          <button type="button" class="btn ghost" onclick="quickLogin('ayse@example.com')">🏠 Sakin Girişi</button>
+          <button type="button" class="btn primary" onclick="openAuthModal('login')">Giriş Yap</button>
+        </div>
+      </nav>
+
+      <section class="hero-section">
+        <div class="hero-bg-grid"></div>
+        <div class="hero-glow hero-glow-1"></div>
+        <div class="hero-glow hero-glow-2"></div>
+
+        <div class="hero-content">
+          <div class="hero-text">
+            <div class="hero-badge">
+              <span class="hero-badge-dot"></span>
+              Yapay Zeka Destekli Site Yönetim Platformu
+            </div>
+            <h1>Apartman Yönetiminde<br/><span class="hero-gradient-text">Yapay Zeka Devrimi</span></h1>
+            <p class="hero-desc">
+              Aidatlar, arıza bildirimleri, kat malikleri anketleri ve resmi faaliyet bültenleri tek bir akıllı platformda.
+              ApartAI veriyi anlık analiz eder, gecikme risklerini önler ve 7/24 sakin asistanlığı sunar.
+            </p>
+            <div class="hero-cta">
+              <button type="button" class="btn primary hero-btn" onclick="quickLogin('admin@apartai.local')">
+                <span>Yönetici Demosunu Başlat</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+              <button type="button" class="btn ghost hero-btn" onclick="quickLogin('ayse@example.com')">
+                <span>Sakin Portaline Gir</span>
+              </button>
             </div>
           </div>
-          <div class="landing-actions">
-            <button class="btn ghost" onclick="openAuthModal('login')">Giriş</button>
-            <button class="btn primary" onclick="openAuthModal('register')">Sakin Kaydı</button>
+
+          <div class="hero-visual" aria-hidden="true">
+            <svg class="hero-svg" viewBox="0 0 520 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="buildGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.15"/>
+                  <stop offset="100%" stop-color="#0284c7" stop-opacity="0.08"/>
+                </linearGradient>
+                <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#2dd4bf"/>
+                  <stop offset="100%" stop-color="#0ea5e9"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Pulsing grid circles -->
+              <circle class="hero-pulse-ring" cx="260" cy="210" r="200" stroke="rgba(45,212,191,0.08)" stroke-width="1"/>
+              <circle class="hero-pulse-ring ring-delay-1" cx="260" cy="210" r="150" stroke="rgba(45,212,191,0.12)" stroke-width="1"/>
+              <circle class="hero-pulse-ring ring-delay-2" cx="260" cy="210" r="100" stroke="rgba(45,212,191,0.15)" stroke-width="1"/>
+
+              <!-- Building silhouette left -->
+              <rect class="hero-building" x="80" y="120" width="110" height="220" rx="12" fill="url(#buildGrad)" stroke="rgba(45,212,191,0.2)" stroke-width="1.5"/>
+              <!-- Windows left -->
+              <rect class="hero-window w-blink-1" x="100" y="148" width="30" height="22" rx="4" fill="rgba(45,212,191,0.3)"/>
+              <rect class="hero-window w-blink-2" x="142" y="148" width="30" height="22" rx="4" fill="rgba(45,212,191,0.1)"/>
+              <rect class="hero-window w-blink-3" x="100" y="184" width="30" height="22" rx="4" fill="rgba(45,212,191,0.15)"/>
+              <rect class="hero-window w-blink-4" x="142" y="184" width="30" height="22" rx="4" fill="rgba(45,212,191,0.4)"/>
+              <rect class="hero-window w-blink-5" x="100" y="220" width="30" height="22" rx="4" fill="rgba(45,212,191,0.25)"/>
+              <rect class="hero-window w-blink-6" x="142" y="220" width="30" height="22" rx="4" fill="rgba(45,212,191,0.35)"/>
+              <rect class="hero-window w-blink-7" x="100" y="256" width="30" height="22" rx="4" fill="rgba(45,212,191,0.5)"/>
+              <rect class="hero-window w-blink-8" x="142" y="256" width="30" height="22" rx="4" fill="rgba(45,212,191,0.2)"/>
+              <!-- Door -->
+              <rect x="120" y="300" width="30" height="40" rx="6" fill="rgba(13,56,53,0.6)"/>
+
+              <!-- Building silhouette right (taller) -->
+              <rect class="hero-building" x="210" y="80" width="130" height="260" rx="14" fill="url(#buildGrad)" stroke="rgba(45,212,191,0.2)" stroke-width="1.5"/>
+              <!-- Windows right -->
+              <rect class="hero-window w-blink-2" x="232" y="108" width="34" height="24" rx="5" fill="rgba(14,165,233,0.3)"/>
+              <rect class="hero-window w-blink-5" x="280" y="108" width="34" height="24" rx="5" fill="rgba(14,165,233,0.12)"/>
+              <rect class="hero-window w-blink-8" x="232" y="148" width="34" height="24" rx="5" fill="rgba(14,165,233,0.18)"/>
+              <rect class="hero-window w-blink-1" x="280" y="148" width="34" height="24" rx="5" fill="rgba(14,165,233,0.4)"/>
+              <rect class="hero-window w-blink-4" x="232" y="188" width="34" height="24" rx="5" fill="rgba(14,165,233,0.35)"/>
+              <rect class="hero-window w-blink-7" x="280" y="188" width="34" height="24" rx="5" fill="rgba(14,165,233,0.1)"/>
+              <rect class="hero-window w-blink-6" x="232" y="228" width="34" height="24" rx="5" fill="rgba(14,165,233,0.45)"/>
+              <rect class="hero-window w-blink-3" x="280" y="228" width="34" height="24" rx="5" fill="rgba(14,165,233,0.2)"/>
+              <rect class="hero-window w-blink-5" x="232" y="268" width="34" height="24" rx="5" fill="rgba(14,165,233,0.28)"/>
+              <rect class="hero-window w-blink-1" x="280" y="268" width="34" height="24" rx="5" fill="rgba(14,165,233,0.5)"/>
+
+              <!-- Score dial -->
+              <g class="hero-score-group" transform="translate(380, 140)">
+                <circle cx="50" cy="50" r="46" fill="rgba(255,255,255,0.05)" stroke="rgba(45,212,191,0.15)" stroke-width="6"/>
+                <circle class="hero-score-arc" cx="50" cy="50" r="46" fill="none" stroke="url(#scoreGrad)" stroke-width="7" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="52" transform="rotate(-90 50 50)"/>
+                <text x="50" y="46" text-anchor="middle" font-size="24" font-weight="900" fill="#2dd4bf" dy=".3em">92</text>
+                <text x="50" y="72" text-anchor="middle" font-size="9" font-weight="600" fill="rgba(255,255,255,0.5)">SKOR</text>
+              </g>
+
+              <!-- Floating info chips -->
+              <g class="hero-chip chip-anim-1">
+                <rect x="350" y="270" width="155" height="36" rx="18" fill="rgba(255,255,255,0.07)" stroke="rgba(45,212,191,0.25)" stroke-width="1"/>
+                <circle cx="370" cy="288" r="5" fill="#10b981"/>
+                <text x="382" y="293" font-size="11" font-weight="700" fill="rgba(255,255,255,0.8)">Tahsilat: %94</text>
+              </g>
+              <g class="hero-chip chip-anim-2">
+                <rect x="60" y="370" width="145" height="36" rx="18" fill="rgba(255,255,255,0.07)" stroke="rgba(14,165,233,0.25)" stroke-width="1"/>
+                <circle cx="80" cy="388" r="5" fill="#0ea5e9"/>
+                <text x="92" y="393" font-size="11" font-weight="700" fill="rgba(255,255,255,0.8)">Anket: 14/16 Oy</text>
+              </g>
+              <g class="hero-chip chip-anim-3">
+                <rect x="350" y="330" width="165" height="36" rx="18" fill="rgba(255,255,255,0.07)" stroke="rgba(245,158,11,0.25)" stroke-width="1"/>
+                <circle cx="370" cy="348" r="5" fill="#f59e0b"/>
+                <text x="382" y="353" font-size="11" font-weight="700" fill="rgba(255,255,255,0.8)">AI: Asansör SLA ⚡</text>
+              </g>
+            </svg>
           </div>
-        </nav>
-        <div class="auth-copy">
-          <div class="auth-kicker"><span></span>AI destekli site yönetim asistanı</div>
-          <h1>Apartman yönetimini tek panelde sakinleştir.</h1>
-          <p>Aidat, arıza, şikayet, duyuru ve aylık yönetici özetlerini aynı yerde topla. ApartAI veriyi yorumlar, tekrar eden sorunları yakalar ve yöneticinin sonraki aksiyonunu netleştirir.</p>
-          <div class="hero-cta">
-            <button class="btn primary" onclick="openAuthModal('login')">Demo Panele Gir</button>
-            <button class="btn ghost" onclick="openAuthModal('register')">Sakin Hesabı Oluştur</button>
-          </div>
         </div>
-        <div class="auth-scene" aria-hidden="true">
-          <img class="hero-logo" src="assets/apartai-logo-wide.png" alt="" />
-          <svg viewBox="0 0 620 430" role="img">
-            <defs>
-              <linearGradient id="towerGradient" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#f7fffb" stop-opacity="0.98" />
-                <stop offset="100%" stop-color="#bfe6df" stop-opacity="0.84" />
-              </linearGradient>
-              <linearGradient id="panelGradient" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.94" />
-                <stop offset="100%" stop-color="#dbeaf8" stop-opacity="0.76" />
-              </linearGradient>
-              <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#061816" flood-opacity="0.22" />
-              </filter>
-            </defs>
-            <path class="svg-orbit" d="M116 219c56-92 183-135 296-96 95 33 150 112 121 178-31 72-156 98-272 70-111-27-192-75-145-152z" />
-            <g class="svg-building" filter="url(#softShadow)">
-              <rect x="96" y="92" width="170" height="260" rx="18" fill="url(#towerGradient)" />
-              <rect x="130" y="132" width="35" height="35" rx="8" />
-              <rect x="194" y="132" width="35" height="35" rx="8" />
-              <rect x="130" y="190" width="35" height="35" rx="8" />
-              <rect x="194" y="190" width="35" height="35" rx="8" />
-              <rect x="130" y="248" width="35" height="35" rx="8" />
-              <rect x="194" y="248" width="35" height="35" rx="8" />
-              <rect x="160" y="308" width="42" height="44" rx="10" />
-            </g>
-            <g class="svg-panel" filter="url(#softShadow)">
-              <rect x="294" y="72" width="226" height="160" rx="20" fill="url(#panelGradient)" />
-              <path d="M326 183c25-31 52-19 72-42 21-25 45-19 80-50" />
-              <circle cx="326" cy="183" r="8" />
-              <circle cx="398" cy="141" r="8" />
-              <circle cx="478" cy="91" r="8" />
-              <rect x="326" y="112" width="82" height="10" rx="5" />
-              <rect x="326" y="132" width="50" height="10" rx="5" />
-            </g>
-            <g class="svg-score" filter="url(#softShadow)">
-              <circle cx="446" cy="304" r="70" />
-              <path d="M446 247a57 57 0 1 1-51 82" />
-              <text x="446" y="314" text-anchor="middle">72</text>
-            </g>
-            <g class="svg-chip chip-one">
-              <rect x="70" y="46" width="150" height="42" rx="21" />
-              <text x="145" y="73" text-anchor="middle">Tahsilat %68</text>
-            </g>
-            <g class="svg-chip chip-two">
-              <rect x="386" y="248" width="158" height="42" rx="21" />
-              <text x="465" y="275" text-anchor="middle">4 açık talep</text>
-            </g>
-          </svg>
-        </div>
-        <div class="auth-stats">
-          <span><strong>72</strong> Site Sağlık Skoru</span>
-          <span><strong>3 dk</strong> Talep sınıflandırma</span>
-          <span><strong>1 panel</strong> Yönetici ve sakin akışı</span>
-        </div>
-        <div class="auth-features">
-          <article><strong>AI Şikayet Analizi</strong><span>Kategori, aciliyet, lokasyon ve önerilen aksiyon.</span></article>
-          <article><strong>Akıllı Yönetici Özeti</strong><span>Aidat, talep ve tekrar eden sorunlardan aylık özet.</span></article>
-          <article><strong>Mobil Sakin Ekranı</strong><span>Borç, duyuru ve talep durumu için sade web deneyimi.</span></article>
+
+        <div class="hero-stats-bar">
+          <div class="hero-stat"><span class="hero-stat-num">3dk</span><span class="hero-stat-label">Arıza Teşhisi</span></div>
+          <div class="hero-stat"><span class="hero-stat-num">%94</span><span class="hero-stat-label">Zamanında Tahsilat</span></div>
+          <div class="hero-stat"><span class="hero-stat-num">7/24</span><span class="hero-stat-label">AI Asistan</span></div>
+          <div class="hero-stat"><span class="hero-stat-num">A4</span><span class="hero-stat-label">Resmi Bülten</span></div>
         </div>
       </section>
-      ${socialSection()}
+
+      <!-- Features Section -->
+      <section class="features-section" id="ozellikler">
+        <div class="features-header">
+          <span class="section-tag">NEDEN APARTAI?</span>
+          <h2>Site Yönetimini Kolaylaştıran<br/><span class="hero-gradient-text">5 Temel Özellik</span></h2>
+          <p>Her detay kat malikleri, site sakinleri ve yönetim kurulları arasındaki güveni artırmak için tasarlandı.</p>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card feature-highlight">
+            <div class="feature-icon-wrap"><span>🧠</span></div>
+            <h3>Yapay Zeka Destekli Arıza Teşhisi</h3>
+            <p>Sakin arızanın fotoğrafını çeker, ApartAI görseli saniyeler içinde tarayarak kategorisini, aciliyet derecesini ve ilgili firmayı otomatik belirler.</p>
+            <div class="feature-tags">
+              <span>📸 Görsel Tarama</span>
+              <span>⚡ Aciliyet Skoru</span>
+              <span>🛠️ Firma Atama</span>
+            </div>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon-wrap"><span>📈</span></div>
+            <h3>Tahsilat Tahmini & Analiz</h3>
+            <p>Geçmiş ödeme sürelerini inceleyerek gecikme eğilimli daireleri tespit eder ve tek tıkla hatırlatma hazırlar.</p>
+            <div class="feature-mini-stat">%94<small>zamanında tahsilat</small></div>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon-wrap"><span>🗳️</span></div>
+            <h3>Karar Anketleri</h3>
+            <p>Kamera yenileme, aidat artışı gibi kritik kararları şeffaf dijital oylama ile hızla sonuca bağlayın.</p>
+            <div class="feature-bar-demo">
+              <div class="feature-bar-fill" style="width:82%"></div>
+            </div>
+            <small class="feature-bar-label">%82 katılım oranı</small>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon-wrap"><span>🖨️</span></div>
+            <h3>Resmi Faaliyet Bülteni</h3>
+            <p>A4 formatında basıma hazır aylık mali durum, çözülen arızalar ve yönetim kurulu kaşe/imza alanı içeren resmi bülten.</p>
+            <span class="feature-chip">📄 Tek Tıkla PDF / Baskı</span>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon-wrap"><span>🤖</span></div>
+            <h3>7/24 AI Asistan</h3>
+            <p>Sakinler ve yöneticiler için anlık yapay zeka destekli soru-cevap. Aidat borcu, plaka kaydı, arıza durumu hepsi bir tık uzağınızda.</p>
+            <span class="feature-chip">💬 Bağlamsal Sohbet</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA Section -->
+      <section class="cta-section">
+        <div class="cta-content">
+          <h2>Hemen Deneyin, Ücretsiz</h2>
+          <p>Demo hesaplarıyla tüm özellikleri keşfedin. Kurulum gerektirmez.</p>
+          <div class="cta-buttons">
+            <button type="button" class="btn primary hero-btn" onclick="quickLogin('admin@apartai.local')">
+              👑 Yönetici Paneli
+            </button>
+            <button type="button" class="btn ghost hero-btn" onclick="quickLogin('ayse@example.com')">
+              🏠 Sakin Portalı
+            </button>
+            <button type="button" class="btn ghost hero-btn" onclick="openAuthModal('login')">
+              Giriş Yap / Kayıt Ol
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="landing-footer">
+        <p>© 2026 ApartAI — Yapay Zeka Destekli Akıllı Site Yönetim Platformu</p>
+      </footer>
+
       ${authModalOpen ? authModalView(isLogin) : ""}
     </main>
   `;
@@ -2668,8 +2793,8 @@ function surveysView() {
             const participationRate = Math.min(100, Math.round((totalVotes / totalApartments) * 100));
             const isClosed = survey.status === "closed";
 
-            const optionCounts = (survey.options || []).map(opt => {
-              const count = (survey.votes || []).filter(v => v.option === opt).length;
+            const optionCounts = (survey.options || []).map((opt, idx) => {
+              const count = (survey.votes || []).filter(v => v.optionIndex === idx || v.option === opt).length;
               const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
               return { option: opt, count, pct };
             });
@@ -2682,9 +2807,14 @@ function surveysView() {
                     <h3 style="margin:6px 0 2px;">${safeText(survey.title)}</h3>
                     <small style="color:var(--muted);">Son Tarih: ${dateText(survey.deadline)} | Katılım: %${participationRate} (${totalVotes}/${totalApartments} daire)</small>
                   </div>
-                  <button class="btn ${isClosed ? '' : 'warn'}" onclick="toggleSurveyStatus('${survey.id}')">
-                    ${isClosed ? 'Tekrar Aç' : 'Anketi Kapat'}
-                  </button>
+                  <div style="display:flex; gap:8px; align-items:center;">
+                    <button class="btn ${isClosed ? '' : 'warn'}" onclick="toggleSurveyStatus('${survey.id}')">
+                      ${isClosed ? 'Tekrar Aç' : 'Anketi Kapat'}
+                    </button>
+                    <button class="btn danger" onclick="deleteSurvey('${survey.id}')" title="Anketi Kalıcı Olarak Sil">
+                      Sil
+                    </button>
+                  </div>
                 </div>
                 <p style="margin:10px 0 14px; font-size:13.5px; color:var(--text-sub);">${safeText(survey.description)}</p>
                 
@@ -2713,6 +2843,7 @@ function surveysView() {
 function residentSurveysView() {
   const surveys = scoped.surveys || [];
   const currentUserId = state.sessionUser?.id;
+  const currentResidentId = state.sessionUser?.residentId;
   const currentApartment = residentApartment();
 
   return `
@@ -2727,15 +2858,20 @@ function residentSurveysView() {
       <div class="survey-list">
         ${surveys.map(survey => {
           const votes = survey.votes || [];
-          const userVote = votes.find(v => v.userId === currentUserId || (currentApartment && v.apartmentId === currentApartment.id));
+          const userVote = votes.find(v => 
+            (currentUserId && v.userId === currentUserId) || 
+            (currentResidentId && v.residentId === currentResidentId) || 
+            (currentApartment && v.apartmentId === currentApartment.id)
+          );
           const hasVoted = Boolean(userVote);
           const isClosed = survey.status === "closed";
           const totalVotes = votes.length;
 
-          const optionCounts = (survey.options || []).map(opt => {
-            const count = votes.filter(v => v.option === opt).length;
+          const optionCounts = (survey.options || []).map((opt, idx) => {
+            const count = votes.filter(v => v.optionIndex === idx || v.option === opt).length;
             const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-            return { option: opt, count, pct, isVoted: userVote?.option === opt };
+            const votedThis = userVote?.optionIndex === idx || userVote?.option === opt;
+            return { option: opt, count, pct, isVoted: votedThis };
           });
 
           return `
@@ -2755,17 +2891,17 @@ function residentSurveysView() {
                 <form onsubmit="castVote(event, '${survey.id}')">
                   <div class="survey-vote-options">
                     ${survey.options.map((opt, idx) => `
-                      <label class="survey-vote-label">
-                        <input type="radio" name="option" value="${safeText(opt)}" required ${idx === 0 ? 'checked' : ''} />
-                        <span>${safeText(opt)}</span>
+                      <label class="survey-vote-label" style="display:flex; align-items:center; gap:10px; padding:10px 14px; margin-bottom:8px; background:var(--surface-sunken); border:1px solid var(--border); border-radius:10px; cursor:pointer;">
+                        <input type="radio" name="optionIndex" value="${idx}" required ${idx === 0 ? 'checked' : ''} />
+                        <span style="font-weight:500;">${safeText(opt)}</span>
                       </label>
                     `).join('')}
                   </div>
-                  <button class="btn primary" type="submit" style="margin-top:14px;">Oyu Kaydet</button>
+                  <button class="btn primary" type="submit" style="margin-top:10px;">✓ Oyu Kaydet</button>
                 </form>
               ` : `
                 <div class="survey-results">
-                  ${userVote ? `<div style="font-size:13px; font-weight:600; color:var(--primary); margin-bottom:10px;">Sizin Tercihiniz: "${safeText(userVote.option)}"</div>` : ''}
+                  ${userVote ? `<div style="font-size:13.5px; font-weight:600; color:var(--primary); margin-bottom:12px;">Sizin Tercihiniz: "${safeText(userVote.option || (survey.options && survey.options[userVote.optionIndex]) || 'Oyunuz Kaydedildi')}"</div>` : ''}
                   ${optionCounts.map(item => `
                     <div class="survey-option-bar ${item.isVoted ? 'highlight-vote' : ''}">
                       <div class="survey-bar-meta">
@@ -2841,32 +2977,47 @@ function createSurvey(event) {
 function castVote(event, surveyId) {
   event.preventDefault();
   const form = new FormData(event.target);
-  const option = safeText(form.get("option"));
-  if (!option) return;
+  const rawIdx = form.get("optionIndex");
+  if (rawIdx === null || rawIdx === undefined) return;
+  const optionIndex = Number(rawIdx);
+  const survey = (state.surveys || []).find((s) => s.id === surveyId);
+  if (!survey || optionIndex < 0 || optionIndex >= (survey.options || []).length) {
+    alert("Geçersiz seçenek.");
+    return;
+  }
+  const optionText = survey.options[optionIndex];
 
   if (API_BASE) {
     apiRequest(`/surveys/${encodeURIComponent(surveyId)}/vote`, {
       method: "POST",
-      body: JSON.stringify({ option }),
+      body: JSON.stringify({ optionIndex }),
     })
       .then((result) => {
-        applyServerData(result.data);
+        applyServerData(result);
       })
       .catch((error) => alert(error.message));
     return;
   }
 
   const currentApartment = residentApartment();
-  const survey = (state.surveys || []).find((s) => s.id === surveyId);
-  if (!survey) return;
-
   survey.votes = survey.votes || [];
-  survey.votes.push({
+  const existingIdx = survey.votes.findIndex(v => 
+    v.userId === (state.sessionUser?.id || "guest") || 
+    (currentApartment && v.apartmentId === currentApartment.id)
+  );
+  const voteRecord = {
     userId: state.sessionUser?.id || "guest",
+    residentId: state.sessionUser?.residentId || "",
     apartmentId: currentApartment?.id || "apt-unknown",
-    option,
+    optionIndex,
+    option: optionText,
     date: new Date().toISOString().slice(0, 10),
-  });
+  };
+  if (existingIdx >= 0) {
+    survey.votes[existingIdx] = voteRecord;
+  } else {
+    survey.votes.push(voteRecord);
+  }
   saveState();
   render();
 }
@@ -2877,7 +3028,7 @@ function toggleSurveyStatus(surveyId) {
       method: "PATCH",
     })
       .then((result) => {
-        applyServerData(result.data);
+        applyServerData(result);
       })
       .catch((error) => alert(error.message));
     return;
@@ -2888,6 +3039,320 @@ function toggleSurveyStatus(surveyId) {
   survey.status = survey.status === "closed" ? "active" : "closed";
   saveState();
   render();
+}
+
+function deleteSurvey(surveyId) {
+  if (!confirm("Bu anketi ve tüm oylarını silmek istediğinize emin misiniz?")) return;
+  if (API_BASE) {
+    apiRequest(`/surveys/${encodeURIComponent(surveyId)}`, {
+      method: "DELETE",
+    })
+      .then((result) => {
+        applyServerData(result);
+      })
+      .catch((error) => alert(error.message));
+    return;
+  }
+  state.surveys = (state.surveys || []).filter((s) => s.id !== surveyId);
+  saveState();
+  render();
+}
+
+function residentBottomNav() {
+  const items = [
+    { view: "resident-home", icon: "🏠", label: "Ana Sayfa" },
+    { view: "resident-request", icon: "🛠️", label: "Talep Aç" },
+    { view: "resident-announcements", icon: "📢", label: "Duyurular" },
+    { view: "resident-surveys", icon: "📊", label: "Anketler" },
+  ];
+  return `
+    <nav class="mobile-bottom-nav">
+      ${items.map((item) => `
+        <button type="button" class="bottom-nav-item ${state.view === item.view ? "active" : ""}" onclick="setState({ view: '${item.view}' })">
+          <span class="nav-icon">${item.icon}</span>
+          <span class="nav-label">${item.label}</span>
+        </button>
+      `).join("")}
+    </nav>
+  `;
+}
+
+function managerBottomNav() {
+  const items = [
+    { view: "dashboard", icon: "📊", label: "Özet" },
+    { view: "dues", icon: "💳", label: "Aidatlar" },
+    { view: "requests", icon: "🛠️", label: "Talepler" },
+    { view: "surveys", icon: "🗳️", label: "Anketler" },
+    { view: "reports", icon: "📑", label: "Raporlar" },
+  ];
+  return `
+    <nav class="mobile-bottom-nav manager-nav">
+      ${items.map((item) => `
+        <button type="button" class="bottom-nav-item ${state.view === item.view ? "active" : ""}" onclick="setState({ view: '${item.view}' })">
+          <span class="nav-icon">${item.icon}</span>
+          <span class="nav-label">${item.label}</span>
+        </button>
+      `).join("")}
+    </nav>
+  `;
+}
+
+function renderAssistantMessagesHtml() {
+  const messages = state.assistantMessages || [];
+  const isLoading = state.isAssistantLoading;
+  return `
+    ${messages.map((msg) => `
+      <div class="ai-chat-msg-row ${msg.role}">
+        <div class="ai-chat-bubble ${msg.role}">
+          <div class="ai-msg-content">${msg.content.replace(/\n/g, "<br/>").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")}</div>
+          <span class="ai-msg-time">${msg.time || ""}</span>
+        </div>
+      </div>
+      ${msg.suggestedPrompts && msg.suggestedPrompts.length > 0 ? `
+        <div class="ai-chips-container">
+          ${msg.suggestedPrompts.map((p) => `
+            <button type="button" class="ai-prompt-chip" data-prompt="${escapeAttr(p)}" onclick="sendAssistantPrompt(this)">${safeText(p)}</button>
+          `).join("")}
+        </div>
+      ` : ""}
+    `).join("")}
+
+    ${isLoading ? `
+      <div class="ai-chat-msg-row assistant">
+        <div class="ai-chat-bubble assistant typing">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+        </div>
+      </div>
+    ` : ""}
+  `;
+}
+
+function scrollAssistantToBottom() {
+  const container = document.querySelector("#ai-assistant-root");
+  if (!container) return;
+  const bodyEl = container.querySelector(".ai-chat-body");
+  if (bodyEl) {
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+    requestAnimationFrame(() => {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    });
+    setTimeout(() => {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }, 60);
+  }
+}
+
+function updateAssistantDOM() {
+  const container = document.querySelector("#ai-assistant-root");
+  if (!container) return;
+
+  const existingWindow = container.querySelector(".ai-chat-window");
+  const existingBody = container.querySelector(".ai-chat-body");
+
+  // Eğer sohbet penceresi zaten açıksa, tüm widget'ı silip baştan render ETME (titremeyi önler)
+  if (state.isAssistantOpen && existingWindow && existingBody) {
+    existingBody.innerHTML = renderAssistantMessagesHtml();
+    scrollAssistantToBottom();
+    const sendBtn = container.querySelector(".ai-send-btn");
+    if (sendBtn) sendBtn.disabled = Boolean(state.isAssistantLoading);
+    return;
+  }
+
+  container.innerHTML = assistantWidgetMarkup();
+  scrollAssistantToBottom();
+}
+
+function escapeAttr(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function sendAssistantPrompt(btn) {
+  const promptText = btn?.getAttribute("data-prompt");
+  if (promptText) {
+    sendAssistantMessage(promptText);
+  }
+}
+
+function toggleAssistant() {
+  state.isAssistantOpen = !state.isAssistantOpen;
+  if (state.isAssistantOpen && (!state.assistantMessages || state.assistantMessages.length === 0)) {
+    const isResident = state.mode === "resident";
+    const isGuest = !state.sessionUser;
+    const name = state.sessionUser?.name || "Ziyaretçi";
+    let initialText = "";
+    let initialPrompts = [];
+
+    if (isGuest) {
+      initialText = `Merhaba! Ben **ApartAI Akıllı Asistanıyım** 👋\n\nApartman ve site yönetim süreçlerinde yapay zekanın sağladığı kolaylıklar, tahsilat öngörüleri veya fotoğraflı arıza analizleri hakkında bana dilediğinizi sorabilirsiniz.`;
+      initialPrompts = [
+        "ApartAI nedir ve ne işe yarar?",
+        "Yönetici olarak nasıl denerim?",
+        "Sakinler aidatlarını nasıl öder?",
+        "Fotoğraflı arıza bildirimi nasıl çalışır?",
+      ];
+    } else if (isResident) {
+      initialText = `Merhaba ${safeText(name)}! Ben **ApartAI Akıllı Asistanınızım** 👋\n\nAidat borcunuz, otopark/plaka kaydınız, teknik arıza bildirimleriniz veya aktif anketlerle ilgili her şeyi bana sorabilirsiniz.`;
+      initialPrompts = [
+        "Aidat borcum ne kadar?",
+        "Kayıtlı araç plakam nedir?",
+        "Aktif bir anket var mı?",
+        "Arıza talebi nasıl açarım?",
+      ];
+    } else {
+      initialText = `Merhaba Sayın Yöneticim! Ben **ApartAI Akıllı Asistanınızım** 🤖\n\nSitenizin tahsilat performansı, arıza yoğunlukları, sakin profili ve duyuru hazırlama süreçlerinde 7/24 yanınızdayım. Size nasıl yardımcı olabilirim?`;
+      initialPrompts = [
+        "Aidat tahsilat durumu nasıl?",
+        "En çok hangi konuda arıza var?",
+        "Asansör bakımı için duyuru taslağı yaz",
+        "Sitede kaç kiracı, kaç ev sahibi var?",
+      ];
+    }
+
+    state.assistantMessages = [
+      {
+        role: "assistant",
+        content: initialText,
+        suggestedPrompts: initialPrompts,
+        time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+      },
+    ];
+  }
+  updateAssistantDOM();
+}
+
+async function sendAssistantMessage(customText) {
+  const inputEl = document.querySelector("#assistant-input");
+  const text = (customText !== undefined && customText !== null ? String(customText) : (inputEl ? inputEl.value : "")).trim();
+  if (!text || state.isAssistantLoading) return;
+
+  if (inputEl) inputEl.value = "";
+
+  const userMsg = {
+    role: "user",
+    content: text,
+    time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+  };
+
+  state.assistantMessages = [...(state.assistantMessages || []), userMsg];
+  state.isAssistantLoading = true;
+  updateAssistantDOM();
+  scrollAssistantToBottom();
+
+  try {
+    let reply = "";
+    let suggestedPrompts = [];
+
+    // Gerçekçi düşünme hissi vermek ve anında çat diye yanıtın sırıtmasını önlemek için min gecikme
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 750));
+
+    if (API_BASE) {
+      const siteParam = state.activeSiteId ? `?siteId=${encodeURIComponent(state.activeSiteId)}` : "";
+      const [res] = await Promise.all([
+        apiRequest(`/ai/assistant${siteParam}`, {
+          method: "POST",
+          body: JSON.stringify({ message: text }),
+        }),
+        minDelay,
+      ]);
+      reply = res.reply || "Yanıt alınamadı.";
+      suggestedPrompts = res.suggestedPrompts || [];
+    } else {
+      await minDelay;
+      reply = `ApartAI Asistanı: "${safeText(text)}" sorunuz incelendi. Sistem verileriyle senkronize çalışmaktadır.`;
+      suggestedPrompts = ["ApartAI nedir ve ne işe yarar?", "Yönetici olarak nasıl denerim?"];
+    }
+
+    state.assistantMessages = [
+      ...state.assistantMessages,
+      {
+        role: "assistant",
+        content: reply,
+        suggestedPrompts,
+        time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+      },
+    ];
+    state.isAssistantLoading = false;
+    updateAssistantDOM();
+    scrollAssistantToBottom();
+  } catch (error) {
+    state.assistantMessages = [
+      ...state.assistantMessages,
+      {
+        role: "assistant",
+        content: `⚠️ Yanıt oluşturulurken bir hata oluştu: ${safeText(error.message)}`,
+        time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+      },
+    ];
+    state.isAssistantLoading = false;
+    updateAssistantDOM();
+    scrollAssistantToBottom();
+  }
+}
+
+function assistantWidgetMarkup() {
+  const isOpen = state.isAssistantOpen;
+  const isLoading = state.isAssistantLoading;
+
+  return `
+    <div class="ai-widget-wrapper ${isOpen ? "open" : ""}">
+      <button type="button" class="ai-fab-btn" onclick="toggleAssistant()" aria-label="ApartAI Asistanı" title="ApartAI Akıllı Asistan">
+        ${isOpen ? `
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        ` : `
+          <div class="ai-fab-glow"></div>
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a8 8 0 0 0-8 8c0 3.3 2 6.2 5 7.4V20a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2.6c3-1.2 5-4.1 5-7.4a8 8 0 0 0-8-8z"></path>
+            <circle cx="9" cy="10" r="1"></circle>
+            <circle cx="15" cy="10" r="1"></circle>
+            <path d="M9.5 14a3.5 3.5 0 0 0 5 0"></path>
+          </svg>
+          <span class="ai-fab-badge">AI</span>
+        `}
+      </button>
+
+      ${isOpen ? `
+        <div class="ai-chat-window">
+          <div class="ai-chat-header">
+            <div class="ai-chat-brand">
+              <div class="ai-avatar-icon">✨</div>
+              <div>
+                <strong>ApartAI Asistanı</strong>
+                <span class="ai-chat-status"><span class="pulse-dot"></span> 7/24 Aktif & Bağlamsal</span>
+              </div>
+            </div>
+            <button type="button" class="ai-chat-close-btn" onclick="toggleAssistant()" aria-label="Kapat">×</button>
+          </div>
+
+          <div class="ai-chat-body">
+            ${renderAssistantMessagesHtml()}
+          </div>
+
+          <form class="ai-chat-footer" onsubmit="event.preventDefault(); sendAssistantMessage();">
+            <input
+              id="assistant-input"
+              type="text"
+              autocomplete="off"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAssistantMessage();}"
+              placeholder="${!state.sessionUser ? "ApartAI özellikleri veya demo hakkında sorun..." : (state.mode === "resident" ? "Aidat, arıza, araç plakanız hakkında sorun..." : "Tahsilat, arızalar, duyuru taslağı isteyin...")}"
+            />
+            <button type="submit" class="ai-send-btn" ${isLoading ? "disabled" : ""} aria-label="Gönder">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </form>
+        </div>
+      ` : ""}
+    </div>
+  `;
 }
 
 loadRemoteState();
