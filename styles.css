@@ -837,7 +837,7 @@ textarea:focus-visible {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 1000;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -5589,5 +5589,331 @@ tr.row-active > td {
   background: #ffffff;
   border-color: #0d9488;
   box-shadow: var(--shadow-xs);
+}
+
+/* ==========================================================================
+   13. KAPSAMLI MOBİL & TABLET UYARLAMASI (RESPONSIVE EXCELLENCE)
+   ========================================================================== */
+
+/* Genel Mobil Ayarları & Dokunmatik İyileştirmeleri */
+html, body {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+@media (max-width: 900px) {
+  /* Safe Area ve Alt Navigasyon Dolgusu */
+  .main {
+    padding: 14px 14px calc(86px + env(safe-area-inset-bottom, 0px)) 14px !important;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .mobile-bottom-nav {
+    display: flex !important;
+    height: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    z-index: 85 !important;
+  }
+
+  /* AI Widget - Mobilde Alt Navigasyonun Üstünde Sabit */
+  .ai-widget-wrapper {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 14px !important;
+    z-index: 88 !important;
+  }
+
+  .ai-chat-window {
+    position: fixed !important;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: none !important;
+    height: calc(100vh - 160px) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  /* Modallar Her Zaman Üstte */
+  .modal-backdrop {
+    z-index: 1000 !important;
+    padding: 12px !important;
+  }
+
+  .payment-modal-card,
+  .request-modal,
+  .warning-reminder-card {
+    width: 100% !important;
+    max-width: 540px !important;
+    max-height: calc(100vh - 32px) !important;
+    border-radius: 18px !important;
+  }
+
+  /* Tablolar İçin Dokunmatik Kaydırma */
+  .table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    margin: 8px 0;
+  }
+
+  .table-wrap table {
+    min-width: 600px;
+  }
+
+  /* Bildirim Paneli Mobilde Sabit Açılır */
+  .notification-drawer {
+    position: fixed !important;
+    top: 68px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: none !important;
+    border-radius: 16px !important;
+    box-shadow: 0 24px 50px rgba(15, 23, 42, 0.3) !important;
+    z-index: 1001 !important;
+  }
+
+  /* Topbar Mobilde Düzenli Dağılım */
+  .topbar {
+    padding: 10px 14px !important;
+    gap: 10px !important;
+  }
+
+  .topbar .title {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .session-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .mode-switch {
+    flex: 1;
+    display: flex;
+  }
+
+  .mode-switch button {
+    flex: 1;
+    text-align: center;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .user-chip {
+    padding: 5px 10px !important;
+  }
+
+  /* Aidatlar Mobilde Uyum */
+  .dues-filter-panel {
+    padding: 14px !important;
+    gap: 10px !important;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dues-filter-group {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .dues-filter-select {
+    width: 100% !important;
+  }
+
+  .apartment-central-card {
+    padding: 18px 16px !important;
+    border-radius: 14px !important;
+  }
+
+  .apt-central-stats {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  .apt-central-actions {
+    flex-direction: column;
+  }
+
+  .apt-central-actions button {
+    width: 100% !important;
+    justify-content: center;
+  }
+
+  /* Finans & Kasa Mobilde Uyum */
+  .finances-filter-bar {
+    padding: 14px !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .date-preset-pills {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    width: 100%;
+  }
+
+  .date-preset-btn {
+    text-align: center;
+    padding: 8px 4px !important;
+    font-size: 11.5px !important;
+  }
+
+  .custom-date-inputs {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .custom-date-inputs input[type="date"] {
+    flex: 1;
+    min-width: 0;
+    width: 100% !important;
+  }
+
+  .monthly-cashflow-container {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Talepler Mobilde Uyum */
+  .request-type-segmented {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+    width: 100%;
+  }
+
+  .req-type-btn {
+    justify-content: center !important;
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .toolbar label {
+    width: 100%;
+  }
+
+  .toolbar select {
+    width: 100% !important;
+  }
+
+  .toolbar .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Kurulum & Sihirbaz Mobilde Uyum */
+  .bulk-setup-banner {
+    padding: 16px !important;
+  }
+
+  #bulk-setup-form,
+  .form-grid.wide {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .block-filter-bar {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px !important;
+    padding-bottom: 6px !important;
+    scrollbar-width: none;
+  }
+
+  .block-filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Siteler Portföyü */
+  .sites-portfolio-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  /* Raporlama */
+  .report-hero-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .vendor-sla-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Sanal Kart ve Ödeme */
+  .virtual-card {
+    padding: 16px 18px !important;
+  }
+
+  .card-chip-row {
+    margin-bottom: 16px !important;
+  }
+
+  .card-num-row {
+    font-size: 16px !important;
+    letter-spacing: 2px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .installment-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* iOS Safari Input Otomatik Yakınlaştırma (Auto-zoom) Engellemesi */
+@media (max-width: 768px) {
+  input:not([type="radio"]):not([type="checkbox"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Küçük Ekranlar (Telefonlar: < 480px) */
+@media (max-width: 480px) {
+  .title h1 {
+    font-size: 20px !important;
+  }
+
+  .date-preset-pills {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .dial-circle {
+    width: 100px !important;
+    height: 100px !important;
+  }
+
+  .dial-score-num {
+    font-size: 32px !important;
+  }
+
+  .warning-channels-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 

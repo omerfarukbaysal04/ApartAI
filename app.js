@@ -2427,7 +2427,7 @@ function managerNav() {
     ["sites", "Tüm Siteler"],
     ["profile", "Profilim"],
   ];
-  return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
+  return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}', mobileNavOpen: false })">${label}</button>`).join("")}</nav>`;
 }
 
 function residentNav() {
@@ -2439,7 +2439,7 @@ function residentNav() {
     ["resident-surveys", "Anketler"],
     ["profile", "Profilim"],
   ];
-  return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
+  return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}', mobileNavOpen: false })">${label}</button>`).join("")}</nav>`;
 }
 
 function pageTitle() {
