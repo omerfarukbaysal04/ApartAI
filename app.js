@@ -1151,12 +1151,22 @@ function render() {
   ensureActiveSite();
   rebuildScope();
   if (!state.sessionUser) {
+    document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open");
     app.innerHTML = authView();
     return;
   }
+  document.body.classList.toggle("resident-mode", state.mode === "resident");
+  document.body.classList.toggle("manager-mode", state.mode === "manager");
+  document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
+
+  // Sakin hesabında mobilde sol menü gereksiz kalır (alt bar varken sol bar açılmaz)
+  if (state.mode === "resident" && state.mobileNavOpen) {
+    state.mobileNavOpen = false;
+  }
+
   const site = activeSite();
   app.innerHTML = `
-    <div class="shell">
+    <div class="shell ${state.mode === "resident" ? "resident-shell" : ""}">
       ${state.mobileNavOpen ? `<div class="sidebar-backdrop" onclick="setState({ mobileNavOpen: false })"></div>` : ""}
       <aside class="sidebar ${state.mobileNavOpen ? "mobile-open" : ""}">
         <div class="brand">
@@ -1177,7 +1187,7 @@ function render() {
       <main class="main">
         <div class="topbar">
           <div class="title" style="display:flex; align-items:center; gap:12px;">
-            <button class="mobile-menu-trigger" onclick="setState({ mobileNavOpen: true })" aria-label="Menü">☰</button>
+            ${state.mode === "manager" ? `<button class="mobile-menu-trigger" onclick="setState({ mobileNavOpen: true })" aria-label="Menü">☰</button>` : ""}
             <div>
               <h1>${pageTitle()}</h1>
               <p>${pageDescription()}</p>
@@ -1762,39 +1772,54 @@ function userNotifications() {
   if (user.role === "resident") {
     const apt = residentApartment();
     const reqs = scoped.requests.filter((r) => r.apartmentId === apt?.id);
-    reqs.slice(0, 3).forEach((r) => {
-      const notifId = `notif-req-${r.id}`;
+    // Sakin kendi açtığı 'yeni' talepleri bildirim kutusunda 'yeni' olarak almaz.
+    // Yalnızca yönetim durumu güncellediğinde (inceleniyor, firmaya_iletildi, cozuldu, vb.) bilgilendirilir.
+    const updatedReqs = reqs.filter((r) => r.status && r.status !== "yeni");
+    updatedReqs.forEach((r) => {
+      const notifId = `notif-req-${r.id}-${r.status}`;
       list.push({
         id: notifId,
         targetId: r.id,
         type: "request",
-        icon: r.entryType === "complaint" ? "⚠️" : r.entryType === "suggestion" ? "💡" : "🛠️",
-        title: `Talep: ${r.title}`,
+        icon: r.status === "cozuldu" ? "✅" : r.status === "firmaya_iletildi" ? "🔧" : r.status === "inceleniyor" ? "🔍" : r.entryType === "complaint" ? "⚠️" : r.entryType === "suggestion" ? "💡" : "🛠️",
+        title: `Talep Güncellemesi: ${r.title}`,
         desc: `Durum: ${requestStatusText(r.status)}${r.assignee ? ` • ${r.assignee}` : ""}`,
-        fullText: `${r.title}\n\nAçıklama: ${r.description}\nDurum: ${requestStatusText(r.status)}${r.adminNote ? `\nYönetim Notu: ${r.adminNote}` : ""}`,
-        date: r.createdAt,
+        fullText: `${r.title}\n\nAçıklama: ${r.description}\nGüncel Durum: ${requestStatusText(r.status)}${r.assignee ? `\nAtanan Firma/Usta: ${r.assignee}` : ""}${r.adminNote ? `\nYönetim Notu: ${r.adminNote}` : ""}`,
+        date: r.updatedAt || r.createdAt,
         view: "resident-home",
         unread: !readIds.includes(notifId),
       });
     });
   } else {
+    // YÖNETİCİ: Sakinlerin açtığı her yeni talep tek tek bildirim olarak admine gelir
     const newReqs = scoped.requests.filter((r) => r.status === "yeni");
-    if (newReqs.length > 0) {
-      const notifId = "notif-req-new";
+    newReqs.forEach((r) => {
+      const apt = scoped.apartments.find((a) => a.id === r.apartmentId);
+      const res = scoped.residents.find((x) => x.id === apt?.residentId);
+      const notifId = `notif-admin-new-req-${r.id}`;
+      const typeLabel = r.entryType === "complaint" ? "Şikayet" : r.entryType === "suggestion" ? "Öneri" : "Arıza Talebi";
+      const icon = r.urgency === "Acil" ? "🚨" : r.entryType === "complaint" ? "⚠️" : r.entryType === "suggestion" ? "💡" : "🛠️";
       list.push({
         id: notifId,
-        targetId: null,
+        targetId: r.id,
         type: "request",
-        icon: "🔔",
-        title: `${newReqs.length} Yeni Bildirim & Talep`,
-        desc: "İncelenmeyi ve atanmayı bekliyor.",
-        fullText: `Sakinler tarafından iletilen ${newReqs.length} adet yeni talep, arıza veya şikayet kaydı bulunmaktadır.`,
-        date: new Date().toISOString().slice(0, 10),
+        icon,
+        title: `Yeni ${typeLabel}: ${r.title}`,
+        desc: `${apt ? `Daire ${apt.no}` : "Sakin"}${res ? ` (${res.name})` : ""} • ${r.urgency || "Orta"} Öncelik`,
+        fullText: `Yeni Sakin Talebi:\nBaşlık: ${r.title}\nTür: ${typeLabel}\nKategori: ${r.category || "Genel"}\nÖncelik: ${r.urgency || "Orta"}\nDaire: ${apt ? `No ${apt.no}` : "Bilinmiyor"}\nAçıklama: ${r.description}`,
+        date: r.createdAt,
         view: "requests",
         unread: !readIds.includes(notifId),
       });
-    }
+    });
   }
+
+  // Bildirimleri her zaman en yeniden en eskiye sırala (en yeni bildirim daima en üstte)
+  list.sort((a, b) => {
+    const timeA = a.date ? new Date(a.date).getTime() : 0;
+    const timeB = b.date ? new Date(b.date).getTime() : 0;
+    return timeB - timeA;
+  });
 
   return list;
 }
@@ -5304,6 +5329,9 @@ function logoutUser() {
   state.sessionUser = null;
   state.mode = "manager";
   state.view = "dashboard";
+  state.isAssistantOpen = false;
+  state.mobileNavOpen = false;
+  document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open");
   render();
 }
 
@@ -5580,7 +5608,6 @@ async function createResidentRequest(event) {
     })
       .then((result) => {
         event.target.reset();
-        playNotificationSound();
         alert("Talebiniz başarıyla oluşturuldu ve site yönetimine iletildi.");
         applyServerData(result.data, { view: "resident-home" });
       })
@@ -5614,7 +5641,6 @@ async function createResidentRequest(event) {
   ];
   saveState();
   event.target.reset();
-  playNotificationSound();
   alert("Talebiniz başarıyla oluşturuldu.");
   setState({ view: "resident-home" });
 }
@@ -6326,6 +6352,7 @@ function scrollAssistantToBottom() {
 }
 
 function updateAssistantDOM() {
+  document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
   // 1. FAB widget'ı güncelle
   const container = document.querySelector("#ai-assistant-root");
   if (container) {
@@ -6369,6 +6396,7 @@ function sendAssistantPrompt(btn) {
 
 function toggleAssistant() {
   state.isAssistantOpen = !state.isAssistantOpen;
+  document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
   if (state.isAssistantOpen && (!state.assistantMessages || state.assistantMessages.length === 0)) {
     const saved = loadAssistantHistory();
     if (saved && saved.length > 0) {
@@ -6593,6 +6621,7 @@ function assistantWidgetMarkup() {
   const isLoading = state.isAssistantLoading;
 
   return `
+    ${isOpen ? `<div class="ai-chat-backdrop" onclick="toggleAssistant()" aria-label="Asistanı Kapat"></div>` : ""}
     <div class="ai-widget-wrapper ${isOpen ? "open" : ""}">
       <button type="button" class="ai-fab-btn" onclick="toggleAssistant()" aria-label="ApartAI Asistanı" title="ApartAI Akıllı Asistan">
         ${isOpen ? `
