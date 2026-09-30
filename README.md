@@ -83,6 +83,10 @@ Statik demo için `index.html` dosyasını tarayıcıda açmak yeterlidir. Bu mo
 Backend bağlantılı çalışma için:
 
 ```bash
+npm run dev
+# veya
+npm start
+# veya
 node server.js
 ```
 
