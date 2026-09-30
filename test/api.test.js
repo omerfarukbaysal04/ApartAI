@@ -764,6 +764,86 @@ test("PATCH /api/auth/profile kullanıcı ve sakin bilgilerini günceller", asyn
   assert.equal(anon.status, 401);
 });
 
+test("sakin kendi aidatını kredi kartı/3D secure ile öder ve dekont kaydı oluşur", async () => {
+  const resident = await residentToken("ayse@example.com"); // apt-1 sakini
+  // Yeni bekleyen aidat oluştur (apt-1)
+  const admin = await adminToken();
+  await api("POST", "/api/dues/bulk?siteId=site-1", {
+    token: admin,
+    body: { period: "2026-11", amount: 1500, dueDate: "2026-11-10" },
+  });
+
+  const stateRes = await api("GET", "/api/state", { token: resident });
+  const due = stateRes.body.dues.find((d) => d.period === "2026-11" && d.status === "pending");
+  assert.ok(due, "Bekleyen aidat bulunmalı");
+
+  const payRes = await api("POST", `/api/dues/${due.id}/pay`, {
+    token: resident,
+    body: {
+      method: "Kredi Kartı (3D Secure)",
+      cardLast4: "5520",
+      cardHolder: "Ayşe Demir",
+      installment: 1,
+      referenceCode: "PAY-3D-9988",
+    },
+  });
+  assert.equal(payRes.status, 200);
+  assert.equal(payRes.body.payment.method, "Kredi Kartı (3D Secure)");
+  assert.equal(payRes.body.payment.cardLast4, "5520");
+  assert.equal(payRes.body.payment.referenceCode, "PAY-3D-9988");
+
+  // Güncel aidat durumu paid olmalı
+  const paidDue = payRes.body.data.dues.find((d) => d.id === due.id);
+  assert.equal(paidDue.status, "paid");
+});
+
+test("sakin profil fotoğrafı (avatar) yükler", async () => {
+  const resident = await residentToken("ayse@example.com");
+  const avatarData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const res = await api("PATCH", "/api/auth/profile", {
+    token: resident,
+    body: { avatar: avatarData },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.user.avatar, avatarData);
+  assert.equal(res.body.resident.avatar, avatarData);
+});
+
+test("sakin şikayet ve öneri türünde bildirim oluşturur", async () => {
+  const resident = await residentToken("ayse@example.com");
+  const res = await api("POST", "/api/requests", {
+    token: resident,
+    body: {
+      apartmentId: "apt-1",
+      entryType: "complaint",
+      category: "other",
+      title: "Gece Yüksek Müzik Şikayeti",
+      description: "Geceleri komşu daireden yüksek sesli müzik geliyor.",
+      urgency: "high",
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.request.entryType, "complaint");
+  assert.equal(res.body.request.urgency, "high");
+});
+
+test("yönetici siteye bina ve daireleri toplu oluşturur (bulk-setup)", async () => {
+  const admin = await adminToken();
+  const res = await api("POST", "/api/sites/site-1/bulk-setup", {
+    token: admin,
+    body: {
+      blockPrefix: "Ç",
+      blockCount: 3,
+      flatPrefix: "ÇD",
+      flatsPerBlock: 5,
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.ok(res.body.blocksCount >= 3);
+  assert.ok(res.body.apartmentsCount >= 15);
+});
+
+
 
 
 

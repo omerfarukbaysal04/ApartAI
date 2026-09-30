@@ -971,6 +971,7 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
   const queryLower = (message || "").toLocaleLowerCase("tr-TR");
   let fallbackReply = "";
   let suggestedPrompts = [];
+  let suggestedRequest = null;
 
   if (isGuest) {
     suggestedPrompts = [
@@ -1025,9 +1026,55 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
       } else {
         fallbackReply = "Şu anda oylamaya açık aktif bir site anketi bulunmamaktadır.";
       }
-    } else if (queryLower.includes("talep") || queryLower.includes("arıza") || queryLower.includes("şikayet") || queryLower.includes("tamir") || queryLower.includes("bozuk")) {
-      fallbackReply = `Dairenize ait toplam ${residentContext.totalRequests} talep kaydı bulunuyor (${residentContext.openRequests.length} açık talep: ${residentContext.openRequests.join(", ") || "Yok"}).\n\n` +
-        `Yeni bir arıza veya bildirim iletmek için menüdeki **Talep Aç** sekmesini kullanabilir, fotoğraf ekleyerek anında iletebilirsiniz.`;
+    } else if (
+      queryLower.includes("talep") || queryLower.includes("arıza") || queryLower.includes("şikayet") ||
+      queryLower.includes("tamir") || queryLower.includes("bozuk") || queryLower.includes("ses") ||
+      queryLower.includes("gürültü") || queryLower.includes("koku") || queryLower.includes("çöp") ||
+      queryLower.includes("su") || queryLower.includes("musluk") || queryLower.includes("daml") ||
+      queryLower.includes("asansör") || queryLower.includes("öneri")
+    ) {
+      let entryType = "fault";
+      let category = "other";
+      let urgency = "normal";
+      let title = "Apartman İyileştirme Talebi";
+
+      if (/gürültü|ses|müzik|koku|çöp|sigara|komşu|rahatsız|köpek|kedi|otopark/.test(queryLower)) {
+        entryType = "complaint";
+        category = /çöp|koku/.test(queryLower) ? "cleaning" : (/otopark|park/.test(queryLower) ? "security" : "other");
+        title = queryLower.includes("gürültü") || queryLower.includes("ses") || queryLower.includes("müzik")
+          ? "Gürültü ve Rahatsızlık Şikayeti"
+          : (queryLower.includes("otopark") ? "Hatalı Park & Otopark İhlali" : "Komşuluk & Çevre Şikayeti");
+        urgency = queryLower.includes("gece") || queryLower.includes("acil") ? "high" : "normal";
+      } else if (/öneri|fikir|yapsak|olsa iyi olur|peyzaj|bahçe|çocuk parkı|bank/.test(queryLower)) {
+        entryType = "suggestion";
+        category = /bahçe|peyzaj|ağaç/.test(queryLower) ? "cleaning" : "other";
+        title = "Site Geliştirme ve İyileştirme Önerisi";
+        urgency = "normal";
+      } else {
+        entryType = "fault";
+        category = /su|musluk|daml|akı|sızıntı|boru|tıkan/.test(queryLower)
+          ? "plumbing"
+          : (/elektrik|lamba|ampul|ışık/.test(queryLower) ? "electrical" : (/asansör/.test(queryLower) ? "elevator" : "other"));
+        title = queryLower.includes("asansör")
+          ? "Asansör Arızası Bildirimi"
+          : (category === "plumbing" ? "Sıhhi Tesisat ve Su Sızıntısı Arızası" : (category === "electrical" ? "Aydınlatma ve Elektrik Arızası" : "Teknik Arıza ve Onarım Talebi"));
+        urgency = queryLower.includes("acil") || queryLower.includes("patla") || queryLower.includes("mahsur") ? "urgent" : "normal";
+      }
+
+      suggestedRequest = {
+        entryType,
+        category,
+        title,
+        description: message,
+        urgency,
+      };
+
+      fallbackReply = `İlettiğiniz durumu analiz edip sınıflandırdım:\n\n` +
+        `📌 **Bildirim Türü:** ${entryType === "complaint" ? "⚠️ Şikayet Bildirimi" : (entryType === "suggestion" ? "💡 Öneri & İyileştirme" : "🛠️ Arıza Bildirimi")}\n` +
+        `🏷️ **Başlık:** ${title}\n` +
+        `📂 **Kategori:** ${category}\n` +
+        `⚡ **Aciliyet:** ${urgency === "urgent" ? "Acil" : (urgency === "high" ? "Yüksek" : "Normal")}\n\n` +
+        `Bu talebi yöneticiye göndermek için aşağıdaki onay kutusunu kullanabilirsiniz.`;
     } else if (queryLower.includes("yönetim") || queryLower.includes("iletişim") || queryLower.includes("telefon") || queryLower.includes("acil")) {
       fallbackReply = `${site?.name || "Site"} Yönetimi ile görüşmek için sistem üzerinden talep oluşturabilir veya acil durumlarda bina görevlisine başvurabilirsiniz.\nKayıtlı Acil İrtibatınız: **${residentContext.emergencyContact}**.`;
     } else {
@@ -1082,9 +1129,9 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
   }
 
   const contextData = isGuest ? { info: "ApartAI Tanıtım & Demo" } : (isResident ? residentContext : adminContext);
-  return callAIJson({
+  const aiResult = await callAIJson({
     operation: "assistant_chat",
-    fallback: { reply: fallbackReply, suggestedPrompts },
+    fallback: { reply: fallbackReply, suggestedPrompts, suggestedRequest },
     instructions: `Sen ApartAI platformunun yapay zeka site yönetim asistanısın. 
 Kullanıcı rolü: ${isGuest ? "Ziyaretçi / Misafir" : (isResident ? "Site Sakini" : "Site Yöneticisi")}.
 Site gerçek verileri JSON olarak verildi. Kullanıcının sorusuna bu verilere sadık kalarak nazik, çözüm odaklı, net ve Türkçe yanıt ver. 
@@ -1096,6 +1143,10 @@ Eğer kullanıcı duyuru taslağı isterse şık, kurumsal ve yayınlanabilir bi
       contextData,
     },
   });
+  if (suggestedRequest && !aiResult.suggestedRequest) {
+    aiResult.suggestedRequest = suggestedRequest;
+  }
+  return aiResult;
 }
 
 function routeAccess(method, pathname) {
@@ -1113,6 +1164,8 @@ function routeAccess(method, pathname) {
   if (method === "PATCH" && pathname === "/api/auth/profile") return "auth";
   // Any authenticated user (resident or admin) may open a request.
   if (method === "POST" && pathname === "/api/requests") return "auth";
+  // Any authenticated user (resident or admin) may pay an allowed due.
+  if (method === "POST" && /^\/api\/dues\/[^/]+\/pay$/.test(pathname)) return "auth";
   // Any authenticated user may mark an announcement as read.
   if (method === "POST" && /^\/api\/announcements\/[^/]+\/read$/.test(pathname)) return "auth";
   // Any authenticated user may vote on a survey.
@@ -1245,11 +1298,14 @@ async function routeApi(req, res, url) {
         if (email) resident.email = email;
         if (body.plateNumber !== undefined) resident.plateNumber = clean(body.plateNumber);
         if (body.emergencyContact !== undefined) resident.emergencyContact = clean(body.emergencyContact);
-        if (body.occupancyType !== undefined) {
-          const occ = clean(body.occupancyType);
-          if (["owner", "tenant"].includes(occ)) resident.occupancyType = occ;
+        if (body.avatar !== undefined) {
+          resident.avatar = clean(body.avatar);
         }
       }
+    }
+
+    if (body.avatar !== undefined) {
+      user.avatar = clean(body.avatar);
     }
 
     await writeData(data);
@@ -1297,6 +1353,56 @@ async function routeApi(req, res, url) {
     if (owner && Array.isArray(owner.siteIds)) owner.siteIds.push(site.id);
     await writeData(data);
     json(res, 201, { site, data: stateForUser(data, owner || authUser) });
+    return;
+  }
+
+  const bulkSetupMatch = url.pathname.match(/^\/api\/sites\/([^/]+)\/bulk-setup$/);
+  if (method === "POST" && bulkSetupMatch) {
+    const siteId = bulkSetupMatch[1];
+    requireSiteAccess(siteId, authUser, data);
+    const body = await readBody(req);
+    const blockPrefix = clean(body.blockPrefix) || "Ç";
+    const blockCount = Math.min(50, Math.max(1, Number(body.blockCount) || 12));
+    const flatPrefix = clean(body.flatPrefix) || "ÇD";
+    const flatsPerBlock = Math.min(100, Math.max(1, Number(body.flatsPerBlock) || 20));
+
+    const createdBlocks = [];
+    const createdApartments = [];
+
+    for (let b = 1; b <= blockCount; b++) {
+      const blockName = `${blockPrefix}${b}`;
+      let block = data.blocks.find((blk) => blk.siteId === siteId && blk.name === blockName);
+      if (!block) {
+        block = { id: uid("block"), siteId, name: blockName };
+        data.blocks.push(block);
+        createdBlocks.push(block);
+      }
+
+      for (let f = 1; f <= flatsPerBlock; f++) {
+        const flatNo = `${flatPrefix}${f}`;
+        const existingApt = data.apartments.find((apt) => apt.siteId === siteId && apt.blockId === block.id && apt.no === flatNo);
+        if (!existingApt) {
+          const apt = {
+            id: uid("apt"),
+            siteId,
+            blockId: block.id,
+            no: flatNo,
+            floor: Math.ceil(f / 4),
+            residentId: null,
+          };
+          data.apartments.push(apt);
+          createdApartments.push(apt);
+        }
+      }
+    }
+
+    await writeData(data);
+    json(res, 201, {
+      message: `${blockCount} bina/blok ve her birinde ${flatsPerBlock} daire oluşturuldu.`,
+      blocksCount: createdBlocks.length,
+      apartmentsCount: createdApartments.length,
+      data: stateForUser(data, authUser),
+    });
     return;
   }
 
@@ -1358,20 +1464,33 @@ async function routeApi(req, res, url) {
       json(res, 404, { error: "Due not found" });
       return;
     }
-    requireSiteAccess(due.siteId, authUser, data);
+    if (authUser.role === "resident") {
+      const userApartment = data.apartments.find((apt) => apt.residentId === authUser.residentId);
+      ensure(userApartment && due.apartmentId === userApartment.id, "Yalnızca kendi dairenizin aidatını ödeyebilirsiniz.");
+    } else {
+      requireSiteAccess(due.siteId, authUser, data);
+    }
+
+    const body = await readBody(req).catch(() => ({}));
     due.status = "paid";
-    data.payments.push({
+    const methodStr = clean(body.method) || (authUser.role === "resident" ? "Kredi Kartı (3D Secure)" : "Manuel");
+    const payment = {
       id: uid("pay"),
       siteId: due.siteId,
       dueId: due.id,
       apartmentId: due.apartmentId,
       amount: due.amount,
       date: today(),
-      method: "Manuel",
-      note: "Yönetici tarafından işlendi",
-    });
+      method: methodStr,
+      cardLast4: clean(body.cardLast4) || "4543",
+      cardHolder: clean(body.cardHolder) || authUser.name,
+      installment: Number(body.installment) || 1,
+      referenceCode: clean(body.referenceCode) || `TX-${Date.now().toString(36).toUpperCase()}`,
+      note: clean(body.note) || (authUser.role === "resident" ? "Online Kredi Kartı (3D Secure) Ödemesi" : "Yönetici tarafından işlendi"),
+    };
+    data.payments.push(payment);
     await writeData(data);
-    json(res, 200, stateForUser(data, authUser));
+    json(res, 200, { payment, data: stateForUser(data, authUser) });
     return;
   }
 
@@ -1448,6 +1567,9 @@ async function routeApi(req, res, url) {
       requireSiteAccess(apartment.siteId, authUser, data);
     }
     const photoDataUrl = clean(body.photoDataUrl);
+    const entryType = clean(body.entryType) || "fault"; // fault, complaint, suggestion
+    const categoryOverride = clean(body.category);
+    const urgencyOverride = clean(body.urgency);
     const analysis = await analyzeComplaintWithAI({ data: siteScope(data, apartment.siteId), title, description, photoDataUrl });
     // Görseli AI'a verdikten sonra dosyaya yaz; db.json'da base64 tutma.
     const stored = await storage.saveDataUrl(photoDataUrl, "req");
@@ -1455,11 +1577,12 @@ async function routeApi(req, res, url) {
       id: uid("req"),
       siteId: apartment.siteId,
       apartmentId,
-      category: analysis.category,
+      entryType, // fault, complaint, suggestion
+      category: categoryOverride || analysis.category,
       title,
       description,
       photoUrl: stored?.url || "",
-      urgency: analysis.urgency,
+      urgency: urgencyOverride || analysis.urgency,
       status: "yeni",
       adminNote: "",
       aiSummary: analysis.summary,

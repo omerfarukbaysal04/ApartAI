@@ -44,6 +44,14 @@ const seedState = {
   reminderFallbackUsed: true,
   requestStatusFilter: "all",
   requestCategoryFilter: "all",
+  requestEntryTypeFilter: "all",
+  residentRequestType: "fault",
+  selectedNotificationDetailId: null,
+  activePaymentDueId: null,
+  paymentStep: "form",
+  paymentReceiptData: null,
+  setupBlockFilter: "all",
+  editingSurveyId: null,
   sessionUser: null,
   activeSiteId: "site-1",
   isAssistantOpen: false,
@@ -326,6 +334,15 @@ function applyServerData(data, patch = {}) {
     reminderFallbackUsed: state.reminderFallbackUsed,
     requestStatusFilter: state.requestStatusFilter,
     requestCategoryFilter: state.requestCategoryFilter,
+    requestEntryTypeFilter: state.requestEntryTypeFilter,
+    residentRequestType: state.residentRequestType,
+    selectedNotificationDetailId: state.selectedNotificationDetailId,
+    activePaymentDueId: state.activePaymentDueId,
+    paymentStep: state.paymentStep,
+    paymentReceiptData: state.paymentReceiptData,
+    setupBlockFilter: state.setupBlockFilter,
+    editingSurveyId: state.editingSurveyId,
+    assistantMessages: state.assistantMessages,
     sessionUser: state.sessionUser,
     activeSiteId: state.activeSiteId,
   };
@@ -923,6 +940,8 @@ function render() {
     </div>
     ${state.mode === "resident" ? residentBottomNav() : managerBottomNav()}
     ${printReportModal()}
+    ${notificationDetailModal()}
+    ${paymentGatewayModal()}
     <div id="ai-assistant-root">${assistantWidgetMarkup()}</div>
   `;
 }
@@ -1368,23 +1387,47 @@ function toggleSoundPreference(enabled) {
   }
 }
 
+const READ_NOTIFS_STORAGE_KEY = "apartai_read_notif_ids_v2";
+
+function getReadNotifIds() {
+  try {
+    return JSON.parse(localStorage.getItem(READ_NOTIFS_STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function markNotifAsRead(id) {
+  const ids = getReadNotifIds();
+  if (!ids.includes(id)) {
+    ids.push(id);
+    try {
+      localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(ids));
+    } catch {}
+  }
+}
+
 function userNotifications() {
   const list = [];
   const user = state.sessionUser;
   if (!user) return [];
+  const readIds = getReadNotifIds();
 
   // 1. Duyurular
   const unreadAnnouncements = unreadAnnouncementsForSession();
-  unreadAnnouncements.forEach((ann) => {
+  scoped.announcements.slice(-6).reverse().forEach((ann) => {
+    const isUnread = !readIds.includes(`notif-ann-${ann.id}`) && !(ann.readBy || []).some((entry) => entry.userId === user.id);
     list.push({
       id: `notif-ann-${ann.id}`,
+      targetId: ann.id,
       type: "announcement",
       icon: "📢",
-      title: "Yeni Duyuru: " + ann.title,
-      desc: ann.content.slice(0, 75) + "...",
+      title: "Yönetim Duyurusu: " + ann.title,
+      desc: ann.content.length > 70 ? ann.content.slice(0, 70) + "..." : ann.content,
+      fullText: ann.content,
       date: ann.date,
       view: user.role === "resident" ? "resident-announcements" : "announcements",
-      unread: true,
+      unread: isUnread,
     });
   });
 
@@ -1394,33 +1437,35 @@ function userNotifications() {
     const apt = residentApartment();
     activeSurveys.forEach((s) => {
       const hasVoted = (s.votes || []).some((v) => v.userId === user.id || (apt && v.apartmentId === apt.id));
-      if (!hasVoted) {
-        list.push({
-          id: `notif-survey-${s.id}`,
-          type: "survey",
-          icon: "🗳️",
-          title: "Oyunuz Bekleniyor: " + s.title,
-          desc: "Site karar anketine henüz oy vermediniz.",
-          date: s.createdAt,
-          view: "resident-surveys",
-          unread: true,
-        });
-      }
+      const notifId = `notif-survey-${s.id}`;
+      list.push({
+        id: notifId,
+        targetId: s.id,
+        type: "survey",
+        icon: "🗳️",
+        title: hasVoted ? "Karar Anketi: " + s.title : "Oyunuz Bekleniyor: " + s.title,
+        desc: hasVoted ? "Bu ankette oyunuz kaydedildi, dilerseniz tercihinizi güncelleyebilirsiniz." : "Site karar istişare anketine henüz oy vermediniz.",
+        fullText: s.description || (s.title + " konulu anket aktiftir."),
+        date: s.createdAt,
+        view: "resident-surveys",
+        unread: !readIds.includes(notifId) && !hasVoted,
+      });
     });
   } else {
     activeSurveys.forEach((s) => {
-      if ((s.votes || []).length > 0) {
-        list.push({
-          id: `notif-survey-admin-${s.id}`,
-          type: "survey",
-          icon: "🗳️",
-          title: "Aktif Karar Anketi: " + s.title,
-          desc: `${s.votes.length} daire oy kullandı.`,
-          date: s.createdAt,
-          view: "surveys",
-          unread: false,
-        });
-      }
+      const notifId = `notif-survey-admin-${s.id}`;
+      list.push({
+        id: notifId,
+        targetId: s.id,
+        type: "survey",
+        icon: "🗳️",
+        title: "Aktif Karar Anketi: " + s.title,
+        desc: `${(s.votes || []).length} daire oy kullandı.`,
+        fullText: `${s.title} anketine katılım devam ediyor. Toplam oy sayısı: ${(s.votes || []).length}.`,
+        date: s.createdAt,
+        view: "surveys",
+        unread: !readIds.includes(notifId),
+      });
     });
   }
 
@@ -1429,29 +1474,36 @@ function userNotifications() {
     const apt = residentApartment();
     const unpaid = scoped.dues.filter((d) => d.apartmentId === apt?.id && d.status !== "paid");
     if (unpaid.length > 0) {
+      const firstDue = unpaid[0];
+      const notifId = `notif-due-${firstDue.id}`;
       list.push({
-        id: "notif-dues-unpaid",
+        id: notifId,
+        targetId: firstDue.id,
         type: "due",
         icon: "💳",
         title: "Ödenmemiş Aidat Bakiyesi",
         desc: `${unpaid.length} döneme ait toplam ${money(unpaid.reduce((s, d) => s + Number(d.amount), 0))} borcunuz bulunmaktadır.`,
-        date: unpaid[0].dueDate || new Date().toISOString().slice(0, 10),
+        fullText: `${firstDue.period} dönemi ve önceki ödenmemiş aidatlarınız bulunmaktadır. ApartAI güvenli ödeme geçidi üzerinden kredi kartı veya banka kartınızla anında ödeyebilirsiniz.`,
+        date: firstDue.dueDate || new Date().toISOString().slice(0, 10),
         view: "resident-home",
-        unread: true,
+        unread: !readIds.includes(notifId),
       });
     }
   } else {
     const overdue = scoped.dues.filter((d) => d.status === "overdue");
     if (overdue.length > 0) {
+      const notifId = "notif-dues-overdue";
       list.push({
-        id: "notif-dues-overdue",
+        id: notifId,
+        targetId: null,
         type: "due",
         icon: "⚠️",
         title: "Gecikmiş Aidat Bildirimi",
         desc: `${overdue.length} dairenin aidat ödemesi gecikmede.`,
+        fullText: `Sitede ${overdue.length} dairenin aidat ödemesi vadesi geçmiş durumdadır. Hatırlatma SMS/WhatsApp mesajı gönderebilirsiniz.`,
         date: new Date().toISOString().slice(0, 10),
         view: "dues",
-        unread: true,
+        unread: !readIds.includes(notifId),
       });
     }
   }
@@ -1460,30 +1512,36 @@ function userNotifications() {
   if (user.role === "resident") {
     const apt = residentApartment();
     const reqs = scoped.requests.filter((r) => r.apartmentId === apt?.id);
-    reqs.slice(0, 2).forEach((r) => {
+    reqs.slice(0, 3).forEach((r) => {
+      const notifId = `notif-req-${r.id}`;
       list.push({
-        id: `notif-req-${r.id}`,
+        id: notifId,
+        targetId: r.id,
         type: "request",
-        icon: "🛠️",
+        icon: r.entryType === "complaint" ? "⚠️" : r.entryType === "suggestion" ? "💡" : "🛠️",
         title: `Talep: ${r.title}`,
-        desc: `Durum: ${requestStatusText(r.status)}`,
+        desc: `Durum: ${requestStatusText(r.status)}${r.assignee ? ` • ${r.assignee}` : ""}`,
+        fullText: `${r.title}\n\nAçıklama: ${r.description}\nDurum: ${requestStatusText(r.status)}${r.adminNote ? `\nYönetim Notu: ${r.adminNote}` : ""}`,
         date: r.createdAt,
         view: "resident-home",
-        unread: false,
+        unread: !readIds.includes(notifId),
       });
     });
   } else {
     const newReqs = scoped.requests.filter((r) => r.status === "yeni");
     if (newReqs.length > 0) {
+      const notifId = "notif-req-new";
       list.push({
-        id: "notif-req-new",
+        id: notifId,
+        targetId: null,
         type: "request",
         icon: "🔔",
-        title: `${newReqs.length} Yeni Arıza Talebi`,
-        desc: "İncelenmeyi ve anlaşmalı firmaya atanmayı bekliyor.",
+        title: `${newReqs.length} Yeni Bildirim & Talep`,
+        desc: "İncelenmeyi ve atanmayı bekliyor.",
+        fullText: `Sakinler tarafından iletilen ${newReqs.length} adet yeni talep, arıza veya şikayet kaydı bulunmaktadır.`,
         date: new Date().toISOString().slice(0, 10),
         view: "requests",
-        unread: true,
+        unread: !readIds.includes(notifId),
       });
     }
   }
@@ -1491,23 +1549,523 @@ function userNotifications() {
   return list;
 }
 
-function toggleNotificationDrawer() {
-  const opening = !state.showNotifications;
-  setState({ showNotifications: opening });
-  if (opening) {
-    playNotificationSound();
+function updateNotificationDrawerDom() {
+  const wrapper = document.querySelector(".notification-dropdown-wrapper");
+  if (!wrapper) return;
+  const notifs = userNotifications();
+  const unreadCount = notifs.filter((n) => n.unread).length;
+
+  const bellBtn = wrapper.querySelector(".notification-bell-btn");
+  if (bellBtn) {
+    if (unreadCount > 0) {
+      bellBtn.classList.add("has-unread");
+      let badge = bellBtn.querySelector(".notification-badge");
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "notification-badge";
+        bellBtn.appendChild(badge);
+      }
+      badge.textContent = unreadCount;
+    } else {
+      bellBtn.classList.remove("has-unread");
+      const badge = bellBtn.querySelector(".notification-badge");
+      if (badge) badge.remove();
+    }
+  }
+
+  const listContainer = wrapper.querySelector(".notification-list");
+  if (listContainer) {
+    listContainer.innerHTML = notifs.length
+      ? notifs.map((n) => `
+        <div class="notification-item ${n.unread ? "unread" : ""}" onclick="handleNotificationClick('${n.id}')">
+          <div class="notif-icon-col">${n.icon}</div>
+          <div class="notif-content-col">
+            <strong>${safeText(n.title)}</strong>
+            <p>${safeText(n.desc)}</p>
+            <small>${dateText(n.date)}</small>
+          </div>
+          ${n.unread ? `<span class="unread-dot"></span>` : ""}
+        </div>
+      `).join("")
+      : `<div class="empty" style="padding:20px; font-size:13px;">Yeni bildirim bulunmuyor.</div>`;
+  }
+
+  const headerStatus = wrapper.querySelector(".notif-drawer-unread-count");
+  if (headerStatus) {
+    headerStatus.innerHTML = unreadCount > 0 ? `<span class="status warn" style="font-size:11px;">${unreadCount} yeni</span>` : "";
   }
 }
 
-function handleNotificationClick(notifId, targetView) {
-  setState({ view: targetView, showNotifications: false });
+function toggleNotificationDrawer(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const wrapper = document.querySelector(".notification-dropdown-wrapper");
+  if (!wrapper) return;
+  const isOpen = wrapper.classList.toggle("is-open");
+  if (isOpen) {
+    updateNotificationDrawerDom();
+  }
+  // Bildirim ziline basıldığında ses ÇIKMAZ. Ses sadece yeni bildirim gelince çıkar.
 }
 
-function markAllNotificationsRead() {
+// Bildirim paneli dışına tıklandığında paneli kapatır (sayfayı yenilemeden)
+document.addEventListener("click", (e) => {
+  const wrapper = document.querySelector(".notification-dropdown-wrapper");
+  if (wrapper && wrapper.classList.contains("is-open") && !wrapper.contains(e.target)) {
+    wrapper.classList.remove("is-open");
+  }
+});
+
+function handleNotificationClick(notifId) {
+  markNotifAsRead(notifId);
+  const wrapper = document.querySelector(".notification-dropdown-wrapper");
+  if (wrapper) wrapper.classList.remove("is-open");
+  updateNotificationDrawerDom();
+  openNotificationDetail(notifId);
+}
+
+function markAllNotificationsRead(event) {
+  if (event) event.stopPropagation();
+  const notifs = userNotifications();
+  const ids = getReadNotifIds();
+  notifs.forEach((n) => {
+    if (!ids.includes(n.id)) ids.push(n.id);
+  });
+  try {
+    localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(ids));
+  } catch {}
   if (state.sessionUser?.role === "resident") {
     markAnnouncementsRead();
   }
-  setState({ showNotifications: false });
+  updateNotificationDrawerDom();
+}
+
+function openNotificationDetail(notifId) {
+  const notifs = userNotifications();
+  const found = notifs.find((n) => n.id === notifId);
+  if (found) {
+    state.selectedNotificationDetail = found;
+    render();
+  }
+}
+
+function closeNotificationDetail() {
+  state.selectedNotificationDetail = null;
+  render();
+}
+
+function notificationDetailModal() {
+  const notif = state.selectedNotificationDetail;
+  if (!notif) return "";
+  let actionBtn = "";
+  if (notif.type === "due") {
+    actionBtn = `<button type="button" class="btn primary" onclick="closeNotificationDetail(); openPaymentModal('${notif.targetId || ''}')">💳 Hemen Öde (Kredi Kartı)</button>`;
+  } else if (notif.type === "survey") {
+    actionBtn = `<button type="button" class="btn primary" onclick="closeNotificationDetail(); setState({ view: 'resident-surveys' })">🗳️ Ankete Git ve Oy Ver</button>`;
+  } else if (notif.type === "request") {
+    actionBtn = `<button type="button" class="btn primary" onclick="closeNotificationDetail(); setState({ view: state.sessionUser?.role === 'admin' ? 'requests' : 'resident-home', selectedRequestId: '${notif.targetId || ''}' })">🛠️ Talebi İncele</button>`;
+  } else if (notif.type === "announcement") {
+    actionBtn = `<button type="button" class="btn primary" onclick="closeNotificationDetail(); setState({ view: state.sessionUser?.role === 'admin' ? 'announcements' : 'resident-announcements' })">📢 Duyuruya Git</button>`;
+  }
+
+  return `
+    <div class="modal-backdrop" onclick="closeNotificationDetail()">
+      <div class="notif-detail-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeNotificationDetail()" aria-label="Kapat">×</button>
+        <div class="notif-detail-head">
+          <div class="notif-detail-icon">${notif.icon}</div>
+          <div>
+            <span class="status info" style="font-size:11px; text-transform:uppercase;">${notif.type === "due" ? "Aidat & Finans" : notif.type === "survey" ? "Karar Anketi" : notif.type === "request" ? "Talep Bildirimi" : "Resmi Duyuru"}</span>
+            <h3 style="margin:4px 0 0; font-size:17px; color:var(--text);">${safeText(notif.title)}</h3>
+            <small style="color:var(--muted);">${dateText(notif.date)}</small>
+          </div>
+        </div>
+        <div class="notif-detail-body">
+          <p style="margin:0; font-size:14px; line-height:1.6; white-space:pre-wrap;">${safeText(notif.fullText || notif.desc)}</p>
+        </div>
+        <div class="notif-detail-actions">
+          <button type="button" class="btn text-btn" onclick="closeNotificationDetail()">Kapat</button>
+          ${actionBtn}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   ÖDEME GEÇİDİ (DEMO CREDIT CARD PAYMENT & 3D SECURE & DEKONT)
+   ========================================================================== */
+function openPaymentModal(dueId) {
+  const apt = residentApartment();
+  const targetDue = scoped.dues.find((d) => d.id === dueId) || scoped.dues.find((d) => d.status !== "paid" && d.apartmentId === apt?.id);
+  if (!targetDue) {
+    alert("Ödenecek aidat kaydı bulunamadı.");
+    return;
+  }
+  state.activePaymentDueId = targetDue.id;
+  state.paymentStep = "form";
+  state.paymentReceiptData = null;
+  render();
+}
+
+function closePaymentModal() {
+  state.activePaymentDueId = null;
+  state.paymentStep = "form";
+  state.paymentReceiptData = null;
+  state.tempPaymentPayload = null;
+  render();
+}
+
+function handleCardNumberInput(input) {
+  let val = input.value.replace(/\D/g, "").slice(0, 16);
+  let formatted = val.match(/.{1,4}/g)?.join(" ") || val;
+  input.value = formatted;
+  const displayEl = document.getElementById("virtual-card-number");
+  if (displayEl) {
+    displayEl.textContent = formatted || "•••• •••• •••• ••••";
+  }
+}
+
+function handleCardHolderInput(input) {
+  const displayEl = document.getElementById("virtual-card-holder");
+  if (displayEl) {
+    displayEl.textContent = (input.value || "AD SOYAD").toUpperCase();
+  }
+}
+
+function handleCardExpiryInput(input) {
+  let val = input.value.replace(/\D/g, "").slice(0, 4);
+  if (val.length >= 3) {
+    val = val.slice(0, 2) + "/" + val.slice(2);
+  }
+  input.value = val;
+  const displayEl = document.getElementById("virtual-card-expiry");
+  if (displayEl) {
+    displayEl.textContent = val || "AA/YY";
+  }
+}
+
+async function submitPaymentForm(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const cardHolder = (form.get("cardHolder") || state.sessionUser?.name || "Kart Sahibi").trim();
+  const cardNumber = (form.get("cardNumber") || "").replace(/\s/g, "");
+  const expiry = form.get("expiry") || "";
+  const cvv = form.get("cvv") || "";
+  const installment = parseInt(form.get("installment") || "1", 10);
+  const is3d = Boolean(form.get("is3d"));
+
+  if (cardNumber.length < 15) {
+    alert("Lütfen 16 haneli geçerli kart numarasını giriniz.");
+    return;
+  }
+
+  state.tempPaymentPayload = {
+    dueId: state.activePaymentDueId,
+    cardLast4: cardNumber.slice(-4),
+    cardHolder,
+    installment,
+    referenceCode: "PAY-" + Date.now().toString(36).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000),
+  };
+
+  if (is3d) {
+    state.paymentStep = "3d_otp";
+    render();
+  } else {
+    await executeDuePayment(state.tempPaymentPayload);
+  }
+}
+
+async function verify3dOtp(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const code = (form.get("otpCode") || "").trim();
+  if (code.length < 4) {
+    alert("Lütfen telefonunuza gelen 6 haneli doğrulama kodunu giriniz (Demo: 123456).");
+    return;
+  }
+  if (!state.tempPaymentPayload) {
+    alert("Ödeme oturumu zaman aşımına uğradı.");
+    closePaymentModal();
+    return;
+  }
+  await executeDuePayment(state.tempPaymentPayload);
+}
+
+async function executeDuePayment(payload) {
+  const due = scoped.dues.find((d) => d.id === payload.dueId);
+  const apt = residentApartment();
+  const resident = currentResident();
+
+  if (API_BASE) {
+    try {
+      const res = await apiRequest(`/dues/${payload.dueId}/pay`, {
+        method: "POST",
+        body: JSON.stringify({
+          method: "credit_card",
+          cardLast4: payload.cardLast4,
+          cardHolder: payload.cardHolder,
+          installment: payload.installment,
+          referenceCode: payload.referenceCode,
+        }),
+      });
+      state.paymentReceiptData = res.receipt || {
+        referenceCode: payload.referenceCode,
+        amount: due?.amount || 0,
+        paidAt: new Date().toISOString(),
+        cardLast4: payload.cardLast4,
+        cardHolder: payload.cardHolder,
+        apartmentNo: apt?.no || "-",
+        residentName: resident?.name || state.sessionUser?.name || "Sakin",
+        period: due?.period || "-",
+        authCode: "AUTH-" + Math.floor(100000 + Math.random() * 900000),
+      };
+      playNotificationSound();
+      applyServerData(res.data, { paymentStep: "success_receipt" });
+    } catch (err) {
+      alert("Ödeme işlemi tamamlanamadı: " + err.message);
+    }
+  } else {
+    // Offline / Local state simulation
+    if (due) due.status = "paid";
+    state.paymentReceiptData = {
+      referenceCode: payload.referenceCode,
+      amount: due?.amount || 0,
+      paidAt: new Date().toISOString(),
+      cardLast4: payload.cardLast4,
+      cardHolder: payload.cardHolder,
+      apartmentNo: apt?.no || "-",
+      residentName: resident?.name || state.sessionUser?.name || "Sakin",
+      period: due?.period || "-",
+      authCode: "AUTH-" + Math.floor(100000 + Math.random() * 900000),
+    };
+    playNotificationSound();
+    state.paymentStep = "success_receipt";
+    render();
+  }
+}
+
+function showReceiptModal(dueId) {
+  const due = scoped.dues.find((d) => d.id === dueId);
+  const apt = residentApartment();
+  const resident = currentResident();
+  state.activePaymentDueId = dueId;
+  state.paymentStep = "success_receipt";
+  state.paymentReceiptData = {
+    referenceCode: "REC-" + dueId.slice(-6).toUpperCase() + "-" + Math.floor(100 + Math.random() * 900),
+    amount: due?.amount || 0,
+    paidAt: due?.paidAt || new Date().toISOString(),
+    cardLast4: "9010",
+    cardHolder: resident?.name || state.sessionUser?.name || "Kart Sahibi",
+    apartmentNo: apt?.no || "-",
+    residentName: resident?.name || state.sessionUser?.name || "Sakin",
+    period: due?.period || "-",
+    authCode: "AUTH-892411",
+  };
+  render();
+}
+
+function paymentGatewayModal() {
+  if (!state.activePaymentDueId) return "";
+  const due = scoped.dues.find((d) => d.id === state.activePaymentDueId);
+  if (!due && state.paymentStep !== "success_receipt") return "";
+  const step = state.paymentStep || "form";
+  const resident = currentResident();
+  const apt = residentApartment();
+  const amount = Number(due?.amount || state.paymentReceiptData?.amount || 0);
+
+  return `
+    <div class="modal-backdrop" onclick="closePaymentModal()">
+      <div class="payment-modal-card" onclick="event.stopPropagation()">
+        <div class="payment-modal-header">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:22px;">🔒</span>
+            <div>
+              <strong style="font-size:16px;">ApartAI Güvenli Ödeme Geçidi</strong>
+              <div style="font-size:11px; opacity:0.85;">256-Bit SSL Şifreli • PCI-DSS Seviye 1 Uyumlu</div>
+            </div>
+          </div>
+          <button class="modal-close" style="color:#ffffff;" onclick="closePaymentModal()" aria-label="Kapat">×</button>
+        </div>
+
+        <div class="payment-modal-body">
+          ${step === "form" ? `
+            <!-- Sanal Kart Önizlemesi -->
+            <div class="virtual-card-wrapper">
+              <div class="virtual-card">
+                <div class="card-chip-row">
+                  <div class="card-emv-chip"></div>
+                  <div class="card-brand-logo">ApartPay</div>
+                </div>
+                <div id="virtual-card-number" class="card-number-display">5400 1234 5678 9010</div>
+                <div class="card-meta-row">
+                  <div>
+                    <span>Kart Sahibi</span>
+                    <div id="virtual-card-holder" class="card-holder-name">${safeText((resident?.name || state.sessionUser?.name || "Ayşe Demir").toUpperCase())}</div>
+                  </div>
+                  <div>
+                    <span>Son Kullanma</span>
+                    <div id="virtual-card-expiry" class="card-expiry-val">08/28</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bilgilendirme -->
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong>${due.period} Dönemi Aidat Borcu</strong>
+                <div style="font-size:12px; color:var(--muted);">${apartmentLabel(due.apartmentId)} • Son Ödeme: ${dateText(due.dueDate)}</div>
+              </div>
+              <div style="text-align:right;">
+                <span style="font-size:12px; color:var(--muted);">Ödenecek Tutar</span>
+                <div style="font-size:20px; font-weight:800; color:var(--accent);">${money(amount)}</div>
+              </div>
+            </div>
+
+            <!-- Kart Formu -->
+            <form class="grid" onsubmit="submitPaymentForm(event)">
+              <label>
+                <span>Kart Üzerindeki İsim</span>
+                <input name="cardHolder" required value="${safeText(resident?.name || state.sessionUser?.name || "Ayşe Demir")}" oninput="handleCardHolderInput(this)" placeholder="Ad Soyad" />
+              </label>
+
+              <label>
+                <span>Kart Numarası</span>
+                <input name="cardNumber" required value="5400 1234 5678 9010" maxlength="19" oninput="handleCardNumberInput(this)" placeholder="•••• •••• •••• ••••" style="font-family:monospace; font-size:15px; letter-spacing:1px;" />
+              </label>
+
+              <div class="form-row-2">
+                <label>
+                  <span>Son Kullanma (AA/YY)</span>
+                  <input name="expiry" required value="08/28" maxlength="5" oninput="handleCardExpiryInput(this)" placeholder="MM/YY" style="font-family:monospace;" />
+                </label>
+                <label>
+                  <span>CVV / Güvenlik Kodu</span>
+                  <input name="cvv" type="password" required value="884" maxlength="4" placeholder="•••" style="font-family:monospace;" />
+                </label>
+              </div>
+
+              <div>
+                <span style="font-size:12.5px; font-weight:600; color:var(--text);">Taksit Seçenekleri:</span>
+                <div class="installment-grid">
+                  <label class="installment-opt">
+                    <input type="radio" name="installment" value="1" checked />
+                    <strong>Tek Çekim</strong>
+                    <span>${money(amount)}</span>
+                    <small style="color:var(--accent);">Vade farksız</small>
+                  </label>
+                  <label class="installment-opt">
+                    <input type="radio" name="installment" value="3" />
+                    <strong>3 Taksit</strong>
+                    <span>${money(Math.round(amount / 3))} x 3</span>
+                    <small style="color:var(--muted);">Toplam: ${money(amount)}</small>
+                  </label>
+                  <label class="installment-opt">
+                    <input type="radio" name="installment" value="6" />
+                    <strong>6 Taksit</strong>
+                    <span>${money(Math.round(amount / 6))} x 6</span>
+                    <small style="color:var(--muted);">Toplam: ${money(amount)}</small>
+                  </label>
+                </div>
+              </div>
+
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500; margin-bottom:10px;">
+                <input type="checkbox" name="is3d" checked style="width:16px; height:16px;" />
+                <span>3D Secure ile Güvenli Doğrulama Yap (SMS Kodu İle)</span>
+              </label>
+
+              <div style="display:flex; gap:10px; margin-top:8px;">
+                <button type="button" class="btn text-btn" onclick="closePaymentModal()" style="flex:1;">İptal</button>
+                <button type="submit" class="btn primary" style="flex:2; padding:12px; font-size:15px; font-weight:700;">
+                  🔒 ${money(amount)} Güvenli Öde
+                </button>
+              </div>
+            </form>
+          ` : step === "3d_otp" ? `
+            <!-- 3D Secure SMS Ekranı -->
+            <div class="secure-otp-box">
+              <div class="bank-badge">🏛️ Türkiye Finans / Banka 3D Secure Doğrulama</div>
+              <h3 style="margin:0 0 6px; font-size:18px;">Tek Kullanımlık Şifre Doğrulama</h3>
+              <p style="font-size:13px; color:var(--muted); margin:0 0 16px;">
+                <strong>${safeText(state.tempPaymentPayload?.cardHolder || "Ayşe Demir")}</strong> adına kayıtlı <strong>05** *** 22 33</strong> numaralı cep telefonunuza 6 haneli güvenlik kodu gönderilmiştir.
+              </p>
+
+              <div style="background:#e0f2fe; border:1px solid #bae6fd; border-radius:8px; padding:8px 12px; font-size:12px; color:#0369a1; margin-bottom:14px;">
+                💡 <strong>Demo Test İpucu:</strong> Test için kutuya <strong>123456</strong> veya dilediğiniz 6 haneyi giriniz.
+              </div>
+
+              <form onsubmit="verify3dOtp(event)">
+                <div style="display:flex; justify-content:center; margin:16px 0;">
+                  <input name="otpCode" value="123456" maxlength="6" autofocus required class="otp-digit" style="width:180px; letter-spacing:8px; font-size:26px;" />
+                </div>
+                <div style="font-size:12px; color:var(--muted); margin-bottom:18px;">
+                  ⏳ Kalan Süre: <strong>02:45</strong> • İşlem Tutarı: <strong>${money(amount)}</strong>
+                </div>
+                <div style="display:flex; gap:10px;">
+                  <button type="button" class="btn text-btn" onclick="state.paymentStep = 'form'; render();" style="flex:1;">Geri</button>
+                  <button type="submit" class="btn primary" style="flex:2; padding:12px; font-weight:700;">
+                    ✓ Onayla ve Ödemeyi Bitir
+                  </button>
+                </div>
+              </form>
+            </div>
+          ` : `
+            <!-- Başarılı Ödeme ve Resmi Dekont Görünümü -->
+            <div class="receipt-paper">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+                <div>
+                  <div class="receipt-stamp">✓ ÖDENDİ / TAHSİL EDİLDİ</div>
+                  <h3 style="margin:4px 0 2px; font-size:20px;">Resmi Tahsilat Dekontu</h3>
+                  <small style="color:var(--muted);">ApartAI Akıllı Tahsilat ve Kasa Altyapısı</small>
+                </div>
+                <div style="text-align:right;">
+                  <code style="font-size:13px; font-weight:800; background:#f1f5f9; padding:4px 8px; border-radius:6px;">${state.paymentReceiptData?.referenceCode || "PAY-2026-X892"}</code>
+                  <div style="font-size:11px; color:var(--muted); margin-top:4px;">${new Date().toLocaleString("tr-TR")}</div>
+                </div>
+              </div>
+
+              <div class="receipt-line">
+                <span>Ödeme Yapan:</span>
+                <strong>${safeText(state.paymentReceiptData?.residentName || resident?.name || state.sessionUser?.name || "Ayşe Demir")}</strong>
+              </div>
+              <div class="receipt-line">
+                <span>Site & Daire:</span>
+                <strong>${safeText(activeSite()?.name || "Çınar Apartmanı")} — Daire No: ${safeText(state.paymentReceiptData?.apartmentNo || apt?.no || "1")}</strong>
+              </div>
+              <div class="receipt-line">
+                <span>Dönem / Açıklama:</span>
+                <strong>${safeText(state.paymentReceiptData?.period || due?.period || "Eylül 2026")} Aidat Tahakkuku</strong>
+              </div>
+              <div class="receipt-line">
+                <span>Ödeme Yöntemi:</span>
+                <strong>Kredi Kartı (**** ${state.paymentReceiptData?.cardLast4 || "9010"})</strong>
+              </div>
+              <div class="receipt-line">
+                <span>Banka Onay Kodu:</span>
+                <code>${state.paymentReceiptData?.authCode || "AUTH-892411"}</code>
+              </div>
+              <div class="receipt-line total">
+                <span>Tahsil Edilen Toplam:</span>
+                <span style="color:var(--accent);">${money(state.paymentReceiptData?.amount || amount)}</span>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; margin-top:24px; gap:10px;">
+                <button type="button" class="btn" onclick="window.print()" style="display:flex; align-items:center; gap:6px;">
+                  🖨️ Dekontu Yazdır / PDF
+                </button>
+                <button type="button" class="btn primary" onclick="closePaymentModal()">
+                  ✓ Tamamla ve Kapat
+                </button>
+              </div>
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function sessionActions() {
@@ -1528,58 +2086,57 @@ function sessionActions() {
     <div class="session-bar">
       ${switcher}
 
-      <!-- Bildirim Kutusu & Zili -->
+      <!-- Bildirim Kutusu & Zili (Flicker-Free, No sound on click) -->
       <div class="notification-dropdown-wrapper">
-        <button type="button" class="notification-bell-btn ${unreadCount > 0 ? "has-unread" : ""}" onclick="toggleNotificationDrawer()" aria-label="Bildirim Kutusu" title="Bildirimler">
+        <button type="button" class="notification-bell-btn ${unreadCount > 0 ? "has-unread" : ""}" onclick="toggleNotificationDrawer(event)" aria-label="Bildirim Kutusu" title="Bildirimler">
           <span class="bell-icon">🔔</span>
           ${unreadCount > 0 ? `<span class="notification-badge">${unreadCount}</span>` : ""}
         </button>
 
-        ${
-          state.showNotifications
-            ? `
-            <div class="notification-drawer" onclick="event.stopPropagation()">
-              <div class="notification-drawer-header">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <strong>🔔 Bildirimler & Mesajlar</strong>
-                  ${unreadCount > 0 ? `<span class="status warn" style="font-size:11px;">${unreadCount} yeni</span>` : ""}
-                </div>
-                <div style="display:flex; gap:6px;">
-                  <button type="button" class="btn text-btn" style="font-size:11.5px; padding:2px 6px;" onclick="markAllNotificationsRead()" title="Tümünü okundu say">Tümünü Oku</button>
-                  <button type="button" class="btn text-btn" style="font-size:14px; padding:2px 6px;" onclick="setState({ showNotifications: false })" title="Kapat">×</button>
-                </div>
-              </div>
-              <div class="notification-list">
-                ${
-                  notifs.length
-                    ? notifs.map((n) => `
-                      <div class="notification-item ${n.unread ? "unread" : ""}" onclick="handleNotificationClick('${n.id}', '${n.view}')">
-                        <div class="notif-icon-col">${n.icon}</div>
-                        <div class="notif-content-col">
-                          <strong>${safeText(n.title)}</strong>
-                          <p>${safeText(n.desc)}</p>
-                          <small>${dateText(n.date)}</small>
-                        </div>
-                        ${n.unread ? `<span class="unread-dot"></span>` : ""}
-                      </div>
-                    `).join("")
-                    : `<div class="empty" style="padding:20px; font-size:13px;">Yeni bildirim bulunmuyor.</div>`
-                }
-              </div>
-              <div class="notification-drawer-footer">
-                <button type="button" class="btn text-btn" onclick="playNotificationSound()" style="font-size:11.5px;">🔊 Bildirim Sesi Dinle</button>
-                <button type="button" class="btn text-btn" onclick="setState({ view: 'profile', showNotifications: false })" style="font-size:11.5px;">Profil & Ayarlar →</button>
-              </div>
+        <div class="notification-drawer" onclick="event.stopPropagation()">
+          <div class="notification-drawer-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong>🔔 Bildirimler & Mesajlar</strong>
+              <span class="notif-drawer-unread-count">
+                ${unreadCount > 0 ? `<span class="status warn" style="font-size:11px;">${unreadCount} yeni</span>` : ""}
+              </span>
             </div>
-            `
-            : ""
-        }
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn text-btn" style="font-size:11.5px; padding:2px 6px;" onclick="markAllNotificationsRead(event)" title="Tümünü okundu say">Tümünü Oku</button>
+              <button type="button" class="btn text-btn" style="font-size:14px; padding:2px 6px;" onclick="document.querySelector('.notification-dropdown-wrapper')?.classList.remove('is-open')" title="Kapat">×</button>
+            </div>
+          </div>
+          <div class="notification-list">
+            ${
+              notifs.length
+                ? notifs.map((n) => `
+                  <div class="notification-item ${n.unread ? "unread" : ""}" onclick="handleNotificationClick('${n.id}')">
+                    <div class="notif-icon-col">${n.icon}</div>
+                    <div class="notif-content-col">
+                      <strong>${safeText(n.title)}</strong>
+                      <p>${safeText(n.desc)}</p>
+                      <small>${dateText(n.date)}</small>
+                    </div>
+                    ${n.unread ? `<span class="unread-dot"></span>` : ""}
+                  </div>
+                `).join("")
+                : `<div class="empty" style="padding:20px; font-size:13px;">Yeni bildirim bulunmuyor.</div>`
+            }
+          </div>
+          <div class="notification-drawer-footer">
+            <button type="button" class="btn text-btn" onclick="playNotificationSound()" style="font-size:11.5px;">🔊 Bildirim Sesi Dinle</button>
+            <button type="button" class="btn text-btn" onclick="setState({ view: 'profile' }); document.querySelector('.notification-dropdown-wrapper')?.classList.remove('is-open');" style="font-size:11.5px;">Profil & Ayarlar →</button>
+          </div>
+        </div>
       </div>
 
       <!-- Kullanıcı Çipi & Profil Linki -->
-      <div class="user-chip clickable ${state.view === "profile" ? "active" : ""}" onclick="setState({ view: 'profile', showNotifications: false })" title="Profil & Daire Bilgilerini Düzenle">
+      <div class="user-chip clickable ${state.view === "profile" ? "active" : ""}" onclick="setState({ view: 'profile' })" title="Profil & Daire Bilgilerini Düzenle">
         <div class="user-avatar-circle">
-          <span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>
+          ${user.avatar
+            ? `<img src="${escapeAttr(user.avatar)}" class="user-chip-avatar-img" alt="${safeText(user.name)}" />`
+            : `<span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>`
+          }
         </div>
         <div class="user-chip-text">
           <strong>${safeText(user.name)}</strong>
@@ -1615,6 +2172,7 @@ function managerNav() {
     ["announcements", "Duyurular"],
     ["surveys", "Anketler"],
     ["setup", "Site Kurulumu"],
+    ["ai-assistant", "✨ AI Asistan"],
     ["reports", "Rapor"],
     ["sites", "Tüm Siteler"],
     ["profile", "Profilim"],
@@ -1626,6 +2184,7 @@ function residentNav() {
   const items = [
     ["resident-home", "Özet"],
     ["resident-request", "Talep Aç"],
+    ["ai-assistant", "✨ AI Asistan"],
     ["resident-announcements", "Duyurular"],
     ["resident-surveys", "Anketler"],
     ["profile", "Profilim"],
@@ -1638,15 +2197,16 @@ function pageTitle() {
     dashboard: "Yönetici Paneli",
     dues: "Aidat Takibi",
     finances: "Apartman Kasası & Gider Yönetimi",
-    requests: "Arıza ve Şikayet Talepleri",
+    requests: "Arıza, Şikayet ve Öneri Talepleri",
     announcements: "Duyurular",
     surveys: "Site Anketleri ve Kararlar",
     setup: "Site Kurulumu",
+    "ai-assistant": "ApartAI Akıllı Asistan",
     reports: "Aylık Rapor & Faaliyet Özeti",
     sites: "Tüm Siteler",
     profile: "Profil & Daire Ayarları",
     "resident-home": "Sakin Ekranı",
-    "resident-request": "Talep Aç",
+    "resident-request": "Talep, Şikayet & Öneri Bildir",
     "resident-announcements": "Duyurular",
     "resident-surveys": "Site Anketleri",
   };
@@ -1662,13 +2222,14 @@ function pageDescription() {
     announcements: "Duyuru yayınla ve AI ile metni sakin bir tona getir.",
     surveys: "Site geneli oylama ve anketler ile şeffaf karar alma süreci.",
     setup: "Blok, daire, mülkiyet ve araç plaka kayıtlarını yönet.",
+    "ai-assistant": "Arıza, şikayet veya önerinizi yapay zeka ile analiz edip otomatik onaylayarak yönetime iletin.",
     reports: "Aylık faaliyet bülteni yazdır, tedarikçi karnesi ve analizleri incele.",
     sites: "Yönettiğin tüm siteleri karşılaştır ve yeni site ekle.",
     profile: "Kişisel bilgiler, daire statüsü, araç plaka ve hesap güvenlik ayarları.",
     "resident-home": "Borcunu, ödeme geçmişini ve açık taleplerini gör.",
-    "resident-request": "Arıza veya şikayetini yönetime ilet.",
+    "resident-request": "Arıza, şikayet veya önerinizi kategori seçerek yönetime iletin.",
     "resident-announcements": "Yönetim duyurularını takip et.",
-    "resident-surveys": "Site kararlarına oy vererek görüşünü bildir.",
+    "resident-surveys": "Site kararlarına oy vererek görüşünü bildir veya oyunu düzenle.",
   };
   return descriptions[state.view] ?? "";
 }
@@ -1682,6 +2243,7 @@ function managerView() {
     announcements: announcementsView,
     surveys: surveysView,
     setup: setupView,
+    "ai-assistant": aiAssistantPageView,
     reports: reportsView,
     sites: sitesView,
     profile: profileView,
@@ -1693,6 +2255,7 @@ function residentView() {
   return ({
     "resident-home": residentHomeView,
     "resident-request": residentRequestView,
+    "ai-assistant": aiAssistantPageView,
     "resident-announcements": residentAnnouncementsView,
     "resident-surveys": residentSurveysView,
     profile: profileView,
@@ -2200,25 +2763,58 @@ function managerFinancesView() {
   `;
 }
 
+function requestEntryTypeBadge(entryType) {
+  if (entryType === "complaint") return `<span class="status complaint" style="font-size:11px;">⚠️ Şikayet</span>`;
+  if (entryType === "suggestion") return `<span class="status suggestion" style="font-size:11px;">💡 Öneri</span>`;
+  return `<span class="status fault" style="font-size:11px;">🛠️ Arıza</span>`;
+}
+
 function requestsView() {
   const categories = [...new Set(scoped.requests.map((request) => request.category))];
   const statusOptions = ["yeni", "inceleniyor", "firmaya_iletildi", "cozuldu", "reddedildi"];
   const statusFilter = statusOptions.includes(state.requestStatusFilter) ? state.requestStatusFilter : "all";
   const categoryFilter = categories.includes(state.requestCategoryFilter) ? state.requestCategoryFilter : "all";
+  const entryTypeFilter = state.requestEntryTypeFilter || "all";
+
+  const faultCount = scoped.requests.filter((r) => !r.entryType || r.entryType === "fault").length;
+  const complaintCount = scoped.requests.filter((r) => r.entryType === "complaint").length;
+  const suggestionCount = scoped.requests.filter((r) => r.entryType === "suggestion").length;
+
   const filteredRequests = scoped.requests.filter((request) => {
     const statusOk = statusFilter === "all" || request.status === statusFilter;
     const categoryOk = categoryFilter === "all" || request.category === categoryFilter;
-    return statusOk && categoryOk;
+    const entryTypeOk =
+      entryTypeFilter === "all" ||
+      (entryTypeFilter === "fault" ? (!request.entryType || request.entryType === "fault") : request.entryType === entryTypeFilter);
+    return statusOk && categoryOk && entryTypeOk;
   });
   const selectedRequest = scoped.requests.find((request) => request.id === state.selectedRequestId);
+
   return `
     <section class="section">
       <div class="section-header">
         <div>
-          <h2>Talep Listesi</h2>
-          <p>AI özetleri ve durum takibi aynı ekranda.</p>
+          <h2>Arıza, Şikayet ve Öneri Talepleri</h2>
+          <p>Yapay zeka analizleri, otomatik kategori sınıflandırması ve durum takibi.</p>
         </div>
       </div>
+
+      <!-- Talep Türü Filtre Butonları -->
+      <div class="request-type-segmented" style="margin-bottom:16px;">
+        <button type="button" class="req-type-btn ${entryTypeFilter === "all" ? "active" : ""}" onclick="setState({ requestEntryTypeFilter: 'all' })">
+          📋 Tümü (${scoped.requests.length})
+        </button>
+        <button type="button" class="req-type-btn ${entryTypeFilter === "fault" ? "active" : ""}" data-type="fault" onclick="setState({ requestEntryTypeFilter: 'fault' })">
+          🛠️ Arızalar (${faultCount})
+        </button>
+        <button type="button" class="req-type-btn ${entryTypeFilter === "complaint" ? "active" : ""}" data-type="complaint" onclick="setState({ requestEntryTypeFilter: 'complaint' })">
+          ⚠️ Şikayetler (${complaintCount})
+        </button>
+        <button type="button" class="req-type-btn ${entryTypeFilter === "suggestion" ? "active" : ""}" data-type="suggestion" onclick="setState({ requestEntryTypeFilter: 'suggestion' })">
+          💡 Öneriler (${suggestionCount})
+        </button>
+      </div>
+
       <div class="toolbar">
         <label>Durum
           <select onchange="setState({ requestStatusFilter: this.value })">
@@ -2232,17 +2828,20 @@ function requestsView() {
             ${categories.map((category) => `<option value="${category}" ${categoryFilter === category ? "selected" : ""}>${category}</option>`).join("")}
           </select>
         </label>
-        <button class="btn" onclick="setState({ requestStatusFilter: 'all', requestCategoryFilter: 'all' })">Filtreleri Temizle</button>
+        <button class="btn" onclick="setState({ requestStatusFilter: 'all', requestCategoryFilter: 'all', requestEntryTypeFilter: 'all' })">Filtreleri Temizle</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Talep</th><th>Daire</th><th>Kategori</th><th>Aciliyet</th><th>AI Özeti</th><th>Durum</th><th>İşlem</th></tr></thead>
+          <thead><tr><th>Tür & Talep</th><th>Daire</th><th>Kategori</th><th>Aciliyet</th><th>AI Özeti</th><th>Durum</th><th>İşlem</th></tr></thead>
           <tbody>
             ${filteredRequests.map((request) => `
               <tr>
-                <td><strong>${request.title}</strong><br>${request.description}<br><small>${dateText(request.createdAt)} - ${request.location}</small></td>
+                <td>
+                  <div style="margin-bottom:4px;">${requestEntryTypeBadge(request.entryType)}</div>
+                  <strong>${request.title}</strong><br>${request.description}<br><small>${dateText(request.createdAt)} - ${request.location || ""}</small>
+                </td>
                 <td>${apartmentLabel(request.apartmentId)}</td>
-                <td>${request.category}</td>
+                <td><span style="font-weight:600; font-size:12.5px;">${request.category}</span></td>
                 <td><span class="status ${request.urgency === "Yüksek" ? "danger" : request.urgency === "Orta" ? "warn" : "info"}">${request.urgency}</span></td>
                 <td>${request.aiSummary}<br>${aiBadge(request)}${requestPhotoSrc(request) ? ` <span class="status info">Fotoğraflı</span>` : ""}</td>
                 <td><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span>${request.assignee ? `<br><small>${safeText(request.assignee)}</small>` : ""}</td>
@@ -2267,6 +2866,7 @@ function requestDetailModal(request) {
         <button class="modal-close" onclick="setState({ selectedRequestId: null })" aria-label="Kapat">×</button>
         <div class="section-header">
           <div>
+            <div style="margin-bottom:6px;">${requestEntryTypeBadge(request.entryType)}</div>
             <h2>${request.title}</h2>
             <p>${apartmentLabel(request.apartmentId)} - ${dateText(request.createdAt)}</p>
           </div>
@@ -2412,66 +3012,178 @@ function announcementsView() {
   `;
 }
 
+async function bulkSetupSite(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const prefix = (form.get("prefix") || "Ç").trim();
+  const buildingCount = parseInt(form.get("buildingCount") || "12", 10);
+  const flatsPerBuilding = parseInt(form.get("flatsPerBuilding") || "20", 10);
+  const flatPrefix = (form.get("flatPrefix") || "ÇD").trim();
+  const duesAmount = parseFloat(form.get("duesAmount") || "750");
+
+  const siteId = state.activeSiteId;
+  if (!siteId) {
+    alert("Lütfen önce bir site seçiniz.");
+    return;
+  }
+
+  if (API_BASE) {
+    try {
+      const res = await apiRequest(`/sites/${siteId}/bulk-setup`, {
+        method: "POST",
+        body: JSON.stringify({ prefix, buildingCount, flatsPerBuilding, flatPrefix, duesAmount }),
+      });
+      alert(`Toplu kurulum başarılı! ${res.blocksCreated} bina/blok ve ${res.apartmentsCreated} daire oluşturuldu.`);
+      applyServerData(res.data);
+    } catch (err) {
+      alert("Toplu kurulum hatası: " + err.message);
+    }
+  } else {
+    alert(`Toplu kurulum simüle edildi: ${buildingCount} bina ve ${buildingCount * flatsPerBuilding} daire.`);
+  }
+}
+
+function fillBulkSetupPreset() {
+  const form = document.getElementById("bulk-setup-form");
+  if (!form) return;
+  form.querySelector('input[name="prefix"]').value = "Ç";
+  form.querySelector('input[name="buildingCount"]').value = "12";
+  form.querySelector('input[name="flatsPerBuilding"]').value = "20";
+  form.querySelector('input[name="flatPrefix"]').value = "ÇD";
+  form.querySelector('input[name="duesAmount"]').value = "750";
+}
+
 function setupView() {
+  const currentBlockFilter = state.setupBlockFilter || "all";
+  const filteredApts = scoped.apartments.filter((apt) => currentBlockFilter === "all" || apt.blockId === currentBlockFilter);
+
   return `
-    <div class="split">
-      <section class="section">
-        <div class="section-header"><h2>Daire ve Sakin Ekle</h2></div>
-        <form class="form-grid wide" onsubmit="createApartment(event)">
-          <label>Blok
-            <select name="blockId">${scoped.blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</select>
-          </label>
-          <label>Daire No<input name="no" required placeholder="Örn: 12" /></label>
-          <label>Kat<input name="floor" type="number" value="1" required /></label>
-          <label>Mülkiyet Durumu
-            <select name="occupancyType">
-              <option value="owner">Ev Sahibi</option>
-              <option value="tenant">Kiracı</option>
-            </select>
-          </label>
-          <label>Sakin Adı<input name="residentName" required placeholder="Ad Soyad" /></label>
-          <label>Telefon<input name="phone" placeholder="05xx" /></label>
-          <label>E-posta<input name="email" type="email" placeholder="ornek@apartai.com" /></label>
-          <label>Araç Plakası<input name="plateNumber" placeholder="34 ABC 123" /></label>
-          <label class="full">Acil Durum İrtibatı<input name="emergencyContact" placeholder="İsim ve Telefon (Örn: Yakını 0532...)" /></label>
-          <button class="btn primary" type="submit" style="margin-top:8px;">Kaydı Ekle</button>
-        </form>
-        ${
-          API_BASE
-            ? `<div class="section-header" style="margin-top:1.8rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
-              <p class="muted" style="font-size:13px; line-height:1.5;">Başlıklar: <code>Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat</code>. Otomatik blok eşleşir, mükerrer daireler atlanır.</p>
-              <form class="form-grid wide" onsubmit="importApartmentsCsv(event)">
-                <label class="full">CSV içeriği<textarea name="csv" rows="5" placeholder="Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat&#10;D Blok,3,2,Ali Veli,05xx,ali@example.com,Ev Sahibi,34 ABC 123,0532 xxx&#10;D Blok,4,2,Ayşe Yılmaz,05xx,ayse@example.com,Kiracı,34 DEF 456,0533 xxx"></textarea></label>
-                <label>veya dosya seç<input name="csvFile" type="file" accept=".csv,text/csv" onchange="loadCsvFileIntoTextarea(this)" /></label>
-                <button class="btn primary" type="submit">İçeri Aktar</button>
-              </form>`
-            : ""
-        }
-      </section>
-      <section class="section">
-        <div class="section-header"><h2>Mevcut Daireler & Sakin Profili</h2></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Daire</th><th>Kat</th><th>Mülkiyet</th><th>Sakin</th><th>Plaka</th><th>Acil İrtibat</th></tr></thead>
-            <tbody>
-              ${scoped.apartments.map((apt) => {
-                const resident = scoped.residents.find((item) => item.id === apt.residentId);
-                const isTenant = resident?.occupancyType === "tenant";
-                return `
-                  <tr>
-                    <td><strong>${apartmentLabel(apt.id)}</strong></td>
-                    <td>${apt.floor}</td>
-                    <td><span class="status ${isTenant ? "warn" : "info"}">${isTenant ? "Kiracı" : "Ev Sahibi"}</span></td>
-                    <td>${resident?.name ?? "-"}<br><small style="color:var(--muted);">${resident?.phone ?? ""}</small></td>
-                    <td><code style="font-size:12px; font-weight:700;">${safeText(resident?.plateNumber || "-")}</code></td>
-                    <td><small>${safeText(resident?.emergencyContact || "-")}</small></td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <!-- 🏗️ Toplu Bina & Daire Sihirbazı (Bulk Setup) -->
+      <section class="bulk-setup-banner">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:24px;">🏗️</span>
+              <h3 style="margin:0; font-size:18px; color:#0f766e;">Toplu Site, Bina (Ç1..Ç12) ve Daire (ÇD1..ÇD20) Sihirbazı</h3>
+            </div>
+            <p style="margin:4px 0 0; font-size:13px; color:#334155;">
+              Büyük siteler için tüm binaları, kat dağılımlarını ve daire numaralarını saniyeler içinde topluca oluşturun.
+            </p>
+          </div>
+          <button type="button" class="btn text-btn btn-sm" onclick="fillBulkSetupPreset()" style="background:#ffffff; border:1px solid #5eead4; border-radius:8px; font-weight:700;">
+            ⚡ 12 Bina & 20 Daire Örneğini Doldur
+          </button>
         </div>
+
+        <form id="bulk-setup-form" class="form-grid wide" onsubmit="bulkSetupSite(event)" style="background:#ffffff; padding:18px; border-radius:12px; border:1px solid #ccfbf1;">
+          <label>
+            <span>Bina / Blok Ön Eki</span>
+            <input name="prefix" value="Ç" required placeholder="Örn: Ç veya Blok-" />
+          </label>
+          <label>
+            <span>Bina / Blok Sayısı</span>
+            <input name="buildingCount" type="number" min="1" max="50" value="12" required placeholder="Örn: 12" />
+          </label>
+          <label>
+            <span>Bina Başına Daire Sayısı</span>
+            <input name="flatsPerBuilding" type="number" min="1" max="100" value="20" required placeholder="Örn: 20" />
+          </label>
+          <label>
+            <span>Daire Numarası Ön Eki</span>
+            <input name="flatPrefix" value="ÇD" required placeholder="Örn: ÇD veya D" />
+          </label>
+          <label>
+            <span>Varsayılan Aylık Aidat (TL)</span>
+            <input name="duesAmount" type="number" min="0" value="750" required placeholder="750" />
+          </label>
+          <div style="display:flex; align-items:flex-end;">
+            <button class="btn primary" type="submit" style="width:100%; height:42px; font-weight:700;">
+              🚀 Toplu Binaları ve Daireleri Oluştur
+            </button>
+          </div>
+        </form>
       </section>
+
+      <div class="split">
+        <!-- Manuel Tek Daire Ekleme -->
+        <section class="section">
+          <div class="section-header"><h2>Tek Daire ve Sakin Ekle</h2></div>
+          <form class="form-grid wide" onsubmit="createApartment(event)">
+            <label>Bina / Blok
+              <select name="blockId">${scoped.blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</select>
+            </label>
+            <label>Daire No<input name="no" required placeholder="Örn: ÇD12" /></label>
+            <label>Kat<input name="floor" type="number" value="1" required /></label>
+            <label>Mülkiyet Durumu
+              <select name="occupancyType">
+                <option value="owner">Ev Sahibi</option>
+                <option value="tenant">Kiracı</option>
+              </select>
+            </label>
+            <label>Sakin Adı<input name="residentName" required placeholder="Ad Soyad" /></label>
+            <label>Telefon<input name="phone" placeholder="05xx" /></label>
+            <label>E-posta<input name="email" type="email" placeholder="ornek@apartai.com" /></label>
+            <label>Araç Plakası<input name="plateNumber" placeholder="34 ABC 123" /></label>
+            <label class="full">Acil Durum İrtibatı<input name="emergencyContact" placeholder="İsim ve Telefon (Örn: Yakını 0532...)" /></label>
+            <button class="btn primary" type="submit" style="margin-top:8px;">Kaydı Ekle</button>
+          </form>
+          ${
+            API_BASE
+              ? `<div class="section-header" style="margin-top:1.8rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
+                <p class="muted" style="font-size:13px; line-height:1.5;">Başlıklar: <code>Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat</code>.</p>
+                <form class="form-grid wide" onsubmit="importApartmentsCsv(event)">
+                  <label class="full">CSV içeriği<textarea name="csv" rows="4" placeholder="Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat&#10;Ç1,ÇD1,1,Ali Veli,05xx,ali@example.com,Ev Sahibi,34 ABC 123,0532 xxx"></textarea></label>
+                  <label>veya dosya seç<input name="csvFile" type="file" accept=".csv,text/csv" onchange="loadCsvFileIntoTextarea(this)" /></label>
+                  <button class="btn primary" type="submit">İçeri Aktar</button>
+                </form>`
+              : ""
+          }
+        </section>
+
+        <!-- Mevcut Daireler & Blok Filtresi -->
+        <section class="section">
+          <div class="section-header">
+            <div>
+              <h2>Mevcut Daireler & Sakin Profili</h2>
+              <p style="margin:2px 0 0; font-size:12.5px; color:var(--muted);">Toplam ${scoped.apartments.length} daire listeleniyor.</p>
+            </div>
+          </div>
+
+          <!-- Bina / Blok Filtreleme Sekmeleri -->
+          <div class="block-filter-bar">
+            <button type="button" class="block-pill ${currentBlockFilter === "all" ? "active" : ""}" onclick="setState({ setupBlockFilter: 'all' })">
+              Tüm Bloklar (${scoped.apartments.length})
+            </button>
+            ${scoped.blocks.map((b) => {
+              const count = scoped.apartments.filter((a) => a.blockId === b.id).length;
+              return `<button type="button" class="block-pill ${currentBlockFilter === b.id ? "active" : ""}" onclick="setState({ setupBlockFilter: '${b.id}' })">${safeText(b.name)} (${count})</button>`;
+            }).join("")}
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Daire</th><th>Kat</th><th>Mülkiyet</th><th>Sakin</th><th>Plaka</th><th>Acil İrtibat</th></tr></thead>
+              <tbody>
+                ${filteredApts.map((apt) => {
+                  const resident = scoped.residents.find((item) => item.id === apt.residentId);
+                  const isTenant = resident?.occupancyType === "tenant";
+                  return `
+                    <tr>
+                      <td><strong>${apartmentLabel(apt.id)}</strong></td>
+                      <td>${apt.floor}</td>
+                      <td><span class="status ${isTenant ? "warn" : "info"}">${isTenant ? "Kiracı" : "Ev Sahibi"}</span></td>
+                      <td>${resident?.name ?? "-"}<br><small style="color:var(--muted);">${resident?.phone ?? ""}</small></td>
+                      <td><code style="font-size:12px; font-weight:700;">${safeText(resident?.plateNumber || "-")}</code></td>
+                      <td><small>${safeText(resident?.emergencyContact || "-")}</small></td>
+                    </tr>
+                  `;
+                }).join("") || `<tr><td colspan="6">Bu blokta kayıtlı daire bulunamadı.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   `;
 }
@@ -2839,14 +3551,20 @@ function residentHomeView() {
               ${
                 dues.length
                   ? dues.map((due) => `
-                    <div class="notice" style="display:flex; justify-content:space-between; align-items:center; margin:0;">
+                    <div class="notice" style="display:flex; justify-content:space-between; align-items:center; margin:0; flex-wrap:wrap; gap:8px;">
                       <div>
                         <strong>${due.period} Dönemi</strong>
                         <div style="color:var(--muted); font-size:12px;">Son Ödeme: ${dateText(due.dueDate)}</div>
                       </div>
-                      <div style="text-align:right;">
+                      <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
                         <div style="font-weight:700; font-size:15px;">${money(due.amount)}</div>
-                        <span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                          <span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span>
+                          ${due.status !== "paid"
+                            ? `<button type="button" class="btn primary btn-sm" onclick="openPaymentModal('${due.id}')" style="padding:3px 10px; font-size:11.5px; border-radius:6px; font-weight:700;">💳 Kartla Öde</button>`
+                            : `<button type="button" class="btn text-btn btn-sm" onclick="showReceiptModal('${due.id}')" style="padding:2px 8px; font-size:11px; border:1px solid var(--line); border-radius:6px;">🧾 Dekont Gör</button>`
+                          }
+                        </div>
                       </div>
                     </div>
                   `).join("")
@@ -2929,6 +3647,61 @@ function residentHomeView() {
   `;
 }
 
+async function uploadProfilePhoto(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    alert("Lütfen geçerli bir görsel dosyası seçin (PNG, JPG, WEBP).");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    alert("Fotoğraf boyutu 5 MB'dan küçük olmalıdır.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const avatarUrl = e.target.result;
+    const token = getToken();
+    if (token && API_BASE) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/profile`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ avatar: avatarUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Fotoğraf yüklenemedi.");
+        if (data.user) {
+          state.sessionUser = { ...state.sessionUser, ...data.user };
+          localStorage.setItem(SESSION_KEY, JSON.stringify(state.sessionUser));
+        }
+        if (data.resident) {
+          const idx = state.residents.findIndex((r) => r.id === data.resident.id);
+          if (idx !== -1) {
+            state.residents[idx] = { ...state.residents[idx], ...data.resident };
+          }
+        }
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+    } else {
+      if (state.sessionUser) {
+        state.sessionUser.avatar = avatarUrl;
+        localStorage.setItem(SESSION_KEY, JSON.stringify(state.sessionUser));
+      }
+      const resObj = currentResident();
+      if (resObj) resObj.avatar = avatarUrl;
+    }
+    playNotificationSound();
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
 function profileView() {
   const user = state.sessionUser || {
     name: "Misafir Kullanıcı",
@@ -2946,13 +3719,24 @@ function profileView() {
       <!-- Profil Başlık Kartı / Hero -->
       <section class="profile-hero-card modern-card">
         <div class="profile-hero-content">
-          <div class="profile-avatar-large">
-            <span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>
+          <div class="profile-avatar-large" title="Profil Fotoğrafı">
+            ${user.avatar
+              ? `<img src="${escapeAttr(user.avatar)}" class="profile-avatar-img" alt="${safeText(user.name)}" />`
+              : `<span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>`
+            }
+            <label class="avatar-upload-overlay" title="Fotoğraf Değiştir">
+              <span>📷 Değiştir</span>
+              <input type="file" accept="image/*" style="display:none;" onchange="uploadProfilePhoto(this)" />
+            </label>
           </div>
           <div class="profile-hero-info">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <h2 style="margin:0; font-size:22px; font-weight:700;">${safeText(user.name || "Kullanıcı")}</h2>
               <span class="status ${isResident ? "ok" : "info"}">${isResident ? "Sakin & Daire Sakini" : "Yönetici & Admin"}</span>
+              <label class="btn text-btn btn-sm" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:6px; font-size:11px; padding:3px 8px;">
+                📷 Fotoğraf Yükle
+                <input type="file" accept="image/*" style="display:none;" onchange="uploadProfilePhoto(this)" />
+              </label>
             </div>
             <p style="margin:4px 0 0; color:var(--muted); font-size:13.5px;">${safeText(user.email)} • ${safeText(user.phone || "Telefon belirtilmedi")}</p>
             ${
@@ -3215,25 +3999,126 @@ async function saveProfile(event) {
 }
 
 
+const REQUEST_CATEGORY_TEMPLATES = {
+  fault: [
+    { label: "🛗 Asansör Arızası", category: "Asansör", defaultTitle: "Asansör Çalışmıyor / Arızalandı", placeholder: "Asansör hangi katta kaldı? Ses veya sarsıntı var mı?" },
+    { label: "💧 Su Kaçağı & Tesisat", category: "Sıhhi Tesisat", defaultTitle: "Bina Tesisatında Su Kaçağı", placeholder: "Su sızıntısının yeri ve akış yoğunluğu nedir?" },
+    { label: "⚡ Ortak Alan Aydınlatması", category: "Elektrik", defaultTitle: "Merdiven / Otopark Aydınlatması Yanmıyor", placeholder: "Hangi blok ve katın lambası sönük?" },
+    { label: "🚪 Giriş Kapısı & İnterkom", category: "İnterkom & Kapı", defaultTitle: "Bina Ana Giriş Kapısı Kapanmıyor", placeholder: "Manyetik kilit veya otomatikte sorun nedir?" },
+    { label: "🧱 Çatı & İzolasyon", category: "Çatı", defaultTitle: "Yağmur Suyu / Çatı İzolasyon Sızıntısı", placeholder: "Hangi alana su sızıyor?" },
+    { label: "🏊 Havuz & Peyzaj", category: "Havuz & Peyzaj", defaultTitle: "Havuz Bakımı / Bahçe Sulama Sorunu", placeholder: "Havuz veya yeşil alandaki arıza detayı:" },
+  ],
+  complaint: [
+    { label: "🔊 Gürültü ve Saat Dışı Rahatsızlık", category: "Gürültü ve Huzursuzluk", defaultTitle: "Saat Dışı Yüksek Müzik ve Gürültü Şikayeti", placeholder: "Gürültünün saati, geldiği tahmini daire veya alan:" },
+    { label: "🚗 Otopark & Hatalı Park", category: "Otopark İhlali", defaultTitle: "Hatalı Araç Parkı ve Yol Engelleme", placeholder: "Araç plakası ve kapattığı geçiş alanı:" },
+    { label: "🗑️ Çöp & Hijyen / Koridor", category: "Çöp & Hijyen", defaultTitle: "Kat Koridorunda Çöp ve Koku Şikayeti", placeholder: "Sorunun yaşandığı kat veya ortak alan:" },
+    { label: "🐕 Evcil Hayvan Kuralları", category: "Evcil Hayvan Kuralları", defaultTitle: "Ortak Alanda Tasma/Temizlik İhlali", placeholder: "Yaşanan ihlali ve yeri belirtiniz:" },
+    { label: "📦 Ortak Alan İşgali", category: "Ortak Alan İşgali", defaultTitle: "Yangın Merdiveni / Koridor İşgali", placeholder: "Geçişi engelleyen eşyalar ve kat bilgisi:" },
+    { label: "👮 Güvenlik & Bina Girişi", category: "Güvenlik İhlali", defaultTitle: "Yabancı Kişilerin Girişi / Güvenlik Zaafiyeti", placeholder: "Gözlemlenen güvenlik açığı:" },
+  ],
+  suggestion: [
+    { label: "🌿 Bahçe & Peyzaj İyileştirmesi", category: "Peyzaj & Bahçe", defaultTitle: "Site Bahçesine Yeni Ağaç ve Çiçeklendirme Önerisi", placeholder: "Planlanan peyzaj fikriniz:" },
+    { label: "💡 Sensörlü Aydınlatma & Enerji", category: "Enerji Tasarrufu", defaultTitle: "Ortak Alanlara LED/Sensörlü Lamba Önerisi", placeholder: "Enerji tasarrufu sağlayacak fikir:" },
+    { label: "📹 Güvenlik Kamerası Takviyesi", category: "Güvenlik Kamerası", defaultTitle: "Kör Noktalara Ek Kamera Konulması Önerisi", placeholder: "Kamera yerleştirilmesi önerilen noktalar:" },
+    { label: "♻️ Geri Dönüşüm / Sıfır Atık", category: "Sıfır Atık & Geri Dönüşüm", defaultTitle: "Siteye Sıfır Atık / Geri Dönüşüm Kutusu Önerisi", placeholder: "Atık kutuları için önerilen yer:" },
+    { label: "🚲 Bisiklet Park Yeri", category: "Sosyal Alanlar", defaultTitle: "Kapalı Bisiklet Park Alanı Düzenleme Önerisi", placeholder: "Bisiklet alanı için düşünülen nokta:" },
+    { label: "☕ Sosyal Alan & Çocuk Parkı", category: "Sosyal Alanlar", defaultTitle: "Çocuk Oyun Parkının Zemin Yenileme Önerisi", placeholder: "Sosyal alan iyileştirme tavsiyeniz:" },
+  ],
+};
+
+function selectRequestTemplate(entryType, template) {
+  const form = document.getElementById("resident-request-form");
+  if (!form) return;
+  const titleInput = form.querySelector('input[name="title"]');
+  const catInput = form.querySelector('input[name="category"]');
+  const descTextarea = form.querySelector('textarea[name="description"]');
+  if (titleInput) titleInput.value = template.defaultTitle;
+  if (catInput) catInput.value = template.category;
+  if (descTextarea) {
+    descTextarea.placeholder = template.placeholder;
+    descTextarea.focus();
+  }
+}
+
 function residentRequestView() {
   const apt = residentApartment();
+  const currentType = state.residentRequestType || "fault";
+  const templates = REQUEST_CATEGORY_TEMPLATES[currentType] || REQUEST_CATEGORY_TEMPLATES.fault;
+
   return `
     <div class="resident-shell">
-      <section class="section">
+      <section class="section modern-card">
         <div class="section-header">
           <div>
-            <h2>Yeni Talep</h2>
-            <p>${apartmentLabel(apt?.id)} adına kayıt açılır.</p>
+            <h2>Talep, Şikayet ve Öneri Bildir</h2>
+            <p>${apartmentLabel(apt?.id)} adına resmi kayıt oluşturulur.</p>
           </div>
         </div>
-        <form class="grid" onsubmit="createResidentRequest(event)">
-          <label>Başlık<input name="title" required placeholder="Örn. Asansör çalışmıyor" /></label>
-          <label>Açıklama<textarea name="description" required placeholder="Sorunu kısa ve net yazın"></textarea></label>
-          <label>Fotoğraf
+
+        <!-- 1. Talep Türü Seçimi (Arıza / Şikayet / Öneri) -->
+        <div class="request-type-segmented">
+          <button type="button" class="req-type-btn ${currentType === "fault" ? "active" : ""}" data-type="fault" onclick="setState({ residentRequestType: 'fault' })">
+            🛠️ Arıza Bildirimi
+          </button>
+          <button type="button" class="req-type-btn ${currentType === "complaint" ? "active" : ""}" data-type="complaint" onclick="setState({ residentRequestType: 'complaint' })">
+            ⚠️ Şikayet Bildirimi
+          </button>
+          <button type="button" class="req-type-btn ${currentType === "suggestion" ? "active" : ""}" data-type="suggestion" onclick="setState({ residentRequestType: 'suggestion' })">
+            💡 Öneri & İyileştirme
+          </button>
+        </div>
+
+        <!-- 2. Hızlı Kategori Seçimi -->
+        <div style="margin-bottom:14px;">
+          <span style="font-size:12.5px; font-weight:600; color:var(--text); display:block; margin-bottom:8px;">Hızlı Kategori Seçimi (Otomatik Başlık ve Alan Doldurur):</span>
+          <div class="category-chip-group">
+            ${templates.map((tpl, i) => `
+              <button type="button" class="category-chip" onclick='selectRequestTemplate("${currentType}", ${JSON.stringify(tpl)})'>
+                ${tpl.label}
+              </button>
+            `).join("")}
+          </div>
+        </div>
+
+        <!-- 3. Form -->
+        <form id="resident-request-form" class="grid" onsubmit="createResidentRequest(event)">
+          <input type="hidden" name="entryType" value="${currentType}" />
+          <input type="hidden" name="category" value="${templates[0]?.category || "Genel"}" />
+
+          <label>
+            <span>Başlık</span>
+            <input name="title" required value="${safeText(templates[0]?.defaultTitle || "")}" placeholder="Örn: Asansör çalışmıyor veya Koridorda gürültü var" />
+          </label>
+
+          <label>
+            <span>Öncelik Derecesi</span>
+            <div style="display:flex; gap:12px; margin-top:4px;">
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                <input type="radio" name="urgency" value="Düşük" /> Düşük
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                <input type="radio" name="urgency" value="Orta" checked /> Normal / Orta
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; font-weight:700; color:var(--danger);">
+                <input type="radio" name="urgency" value="Yüksek" /> 🚨 Acil
+              </label>
+            </div>
+          </label>
+
+          <label>
+            <span>Açıklama</span>
+            <textarea name="description" rows="4" required placeholder="${escapeAttr(templates[0]?.placeholder || "Sorunu veya talebinizi detaylıca açıklayınız...")}"></textarea>
+          </label>
+
+          <label>
+            <span>Fotoğraf Ekle (Opsiyonel)</span>
             <input name="photo" type="file" accept="image/*" onchange="previewRequestPhoto(this)" />
           </label>
           <div id="request-photo-preview" class="upload-preview"></div>
-          <button class="btn primary" type="submit">AI ile Analiz Et ve Gönder</button>
+
+          <button class="btn primary" type="submit" style="padding:12px; font-size:15px; font-weight:700; margin-top:6px;">
+            🚀 AI ile Analiz Et ve Yönetime Gönder
+          </button>
         </form>
       </section>
     </div>
@@ -3742,6 +4627,9 @@ async function createResidentRequest(event) {
   const form = new FormData(event.target);
   const title = safeText(form.get("title"));
   const description = safeText(form.get("description"));
+  const entryType = safeText(form.get("entryType") || state.residentRequestType || "fault");
+  const category = safeText(form.get("category") || "Genel");
+  const urgency = safeText(form.get("urgency") || "Orta");
   let photoDataUrl = "";
   try {
     photoDataUrl = await fileToDataUrl(form.get("photo"));
@@ -3757,10 +4645,12 @@ async function createResidentRequest(event) {
   if (API_BASE) {
     apiRequest("/requests", {
       method: "POST",
-      body: JSON.stringify({ apartmentId: apartment.id, title, description, photoDataUrl }),
+      body: JSON.stringify({ apartmentId: apartment.id, title, description, photoDataUrl, entryType, category, urgency }),
     })
       .then((result) => {
         event.target.reset();
+        playNotificationSound();
+        alert("Talebiniz başarıyla oluşturuldu ve site yönetimine iletildi.");
         applyServerData(result.data, { view: "resident-home" });
       })
       .catch((error) => alert(error.message));
@@ -3773,11 +4663,12 @@ async function createResidentRequest(event) {
       id: id("req"),
       siteId: apartment.siteId,
       apartmentId: apartment.id,
-      category: ai.category,
+      entryType,
+      category: category || ai.category,
       title,
       description,
       photoDataUrl,
-      urgency: ai.urgency,
+      urgency: urgency || ai.urgency,
       status: "yeni",
       adminNote: "",
       aiSummary: ai.summary,
@@ -3792,6 +4683,8 @@ async function createResidentRequest(event) {
   ];
   saveState();
   event.target.reset();
+  playNotificationSound();
+  alert("Talebiniz başarıyla oluşturuldu.");
   setState({ view: "resident-home" });
 }
 
@@ -4068,7 +4961,7 @@ function residentSurveysView() {
       <div class="section-header" style="margin-bottom:16px;">
         <div>
           <h2>Site Karar & İstişare Anketleri</h2>
-          <p>Yönetim tarafından sitemiz için açılan anketlere oy verin, kararlara doğrudan katılın.</p>
+          <p>Yönetim tarafından sitemiz için açılan anketlere oy verin, kararlara doğrudan katılın veya tercihinizi güncelleyin.</p>
         </div>
       </div>
 
@@ -4083,6 +4976,7 @@ function residentSurveysView() {
           const hasVoted = Boolean(userVote);
           const isClosed = survey.status === "closed";
           const totalVotes = votes.length;
+          const isEditing = state.editingSurveyId === survey.id;
 
           const optionCounts = (survey.options || []).map((opt, idx) => {
             const count = votes.filter(v => v.optionIndex === idx || v.option === opt).length;
@@ -4104,21 +4998,40 @@ function residentSurveysView() {
               </div>
               <p style="margin:10px 0 16px; font-size:14px; color:var(--text-sub);">${safeText(survey.description)}</p>
 
-              ${!isClosed && !hasVoted ? `
+              ${!isClosed && (!hasVoted || isEditing) ? `
                 <form onsubmit="castVote(event, '${survey.id}')">
                   <div class="survey-vote-options">
-                    ${survey.options.map((opt, idx) => `
-                      <label class="survey-vote-label" style="display:flex; align-items:center; gap:10px; padding:10px 14px; margin-bottom:8px; background:var(--surface-sunken); border:1px solid var(--border); border-radius:10px; cursor:pointer;">
-                        <input type="radio" name="optionIndex" value="${idx}" required ${idx === 0 ? 'checked' : ''} />
-                        <span style="font-weight:500;">${safeText(opt)}</span>
-                      </label>
-                    `).join('')}
+                    ${survey.options.map((opt, idx) => {
+                      const isPreChecked = isEditing && userVote ? (userVote.optionIndex === idx || userVote.option === opt) : idx === 0;
+                      return `
+                        <label class="survey-vote-label" style="display:flex; align-items:center; gap:10px; padding:10px 14px; margin-bottom:8px; background:var(--surface-sunken); border:1px solid var(--border); border-radius:10px; cursor:pointer;">
+                          <input type="radio" name="optionIndex" value="${idx}" required ${isPreChecked ? 'checked' : ''} />
+                          <span style="font-weight:500;">${safeText(opt)}</span>
+                        </label>
+                      `;
+                    }).join('')}
                   </div>
-                  <button class="btn primary" type="submit" style="margin-top:10px;">✓ Oyu Kaydet</button>
+                  <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+                    <button class="btn primary" type="submit">
+                      ${isEditing ? '💾 Güncellenmiş Oyu Kaydet' : '✓ Oyu Kaydet'}
+                    </button>
+                    ${isEditing ? `<button type="button" class="btn text-btn" onclick="setState({ editingSurveyId: null })">Vazgeç</button>` : ''}
+                  </div>
                 </form>
               ` : `
                 <div class="survey-results">
-                  ${userVote ? `<div style="font-size:13.5px; font-weight:600; color:var(--primary); margin-bottom:12px;">Sizin Tercihiniz: "${safeText(userVote.option || (survey.options && survey.options[userVote.optionIndex]) || 'Oyunuz Kaydedildi')}"</div>` : ''}
+                  ${userVote ? `
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; background:#f0fdfa; padding:8px 12px; border-radius:8px; border:1px solid #ccfbf1;">
+                      <span style="font-size:13px; font-weight:600; color:var(--primary);">
+                        Sizin Tercihiniz: <strong>"${safeText(userVote.option || (survey.options && survey.options[userVote.optionIndex]) || 'Oyunuz Kaydedildi')}"</strong>
+                      </span>
+                      ${!isClosed ? `
+                        <button type="button" class="btn text-btn btn-sm" onclick="setState({ editingSurveyId: '${survey.id}' })" style="border:1px solid var(--line); border-radius:6px; padding:3px 10px; font-size:11.5px; font-weight:700;">
+                          ✏️ Oyu Güncelle / Değiştir
+                        </button>
+                      ` : ''}
+                    </div>
+                  ` : ''}
                   ${optionCounts.map(item => `
                     <div class="survey-option-bar ${item.isVoted ? 'highlight-vote' : ''}">
                       <div class="survey-bar-meta">
@@ -4210,6 +5123,8 @@ function castVote(event, surveyId) {
       body: JSON.stringify({ optionIndex }),
     })
       .then((result) => {
+        state.editingSurveyId = null;
+        playNotificationSound();
         applyServerData(result);
       })
       .catch((error) => alert(error.message));
@@ -4235,7 +5150,9 @@ function castVote(event, surveyId) {
   } else {
     survey.votes.push(voteRecord);
   }
+  state.editingSurveyId = null;
   saveState();
+  playNotificationSound();
   render();
 }
 
@@ -4316,9 +5233,94 @@ function managerBottomNav() {
   `;
 }
 
+function getAssistantHistoryKey() {
+  const uid = state.sessionUser?.id || "guest";
+  return `apartai_chat_v2_${uid}`;
+}
+
+function loadAssistantHistory() {
+  try {
+    const raw = localStorage.getItem(getAssistantHistoryKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAssistantHistory() {
+  try {
+    localStorage.setItem(getAssistantHistoryKey(), JSON.stringify(state.assistantMessages || []));
+  } catch {}
+}
+
+function clearAssistantChat() {
+  state.assistantMessages = [];
+  try {
+    localStorage.removeItem(getAssistantHistoryKey());
+  } catch {}
+  initAssistantWelcome();
+  updateAssistantDOM();
+  if (state.view === "ai-assistant") render();
+}
+
+function initAssistantWelcome() {
+  const isResident = state.mode === "resident";
+  const isGuest = !state.sessionUser;
+  const name = state.sessionUser?.name || "Ziyaretçi";
+  let initialText = "";
+  let initialPrompts = [];
+
+  if (isGuest) {
+    initialText = `Merhaba! Ben **ApartAI Akıllı Asistanıyım** 👋\n\nApartman ve site yönetim süreçlerinde yapay zekanın sağladığı kolaylıklar, tahsilat öngörüleri veya fotoğraflı arıza analizleri hakkında bana dilediğinizi sorabilirsiniz.`;
+    initialPrompts = [
+      "ApartAI nedir ve ne işe yarar?",
+      "Yönetici olarak nasıl denerim?",
+      "Sakinler aidatlarını nasıl öder?",
+      "Fotoğraflı arıza bildirimi nasıl çalışır?",
+    ];
+  } else if (isResident) {
+    initialText = `Merhaba ${safeText(name)}! Ben **ApartAI Akıllı Asistanınızım** 👋\n\nAidat borcunuz, arıza bildirimleriniz, şikayet veya önerilerinizle ilgili bana yazabilirsiniz. Talebinizi otomatik analiz edip yönetime iletirim.`;
+    initialPrompts = [
+      "Aidat borcum ne kadar?",
+      "Asansör 3. katta kaldı ve ses yapıyor",
+      "Üst kattan gece yüksek ses ve gürültü geliyor",
+      "Bahçeye kedi evi ve kuş yemliği konulmasını öneriyorum",
+    ];
+  } else {
+    initialText = `Merhaba Sayın Yöneticim! Ben **ApartAI Akıllı Asistanınızım** 🤖\n\nSitenizin tahsilat performansı, arıza yoğunlukları, sakin profili ve duyuru hazırlama süreçlerinde 7/24 yanınızdayım. Size nasıl yardımcı olabilirim?`;
+    initialPrompts = [
+      "Aidat tahsilat durumu nasıl?",
+      "En çok hangi konuda arıza ve şikayet var?",
+      "Asansör bakımı için duyuru taslağı yaz",
+      "Sitede kaç kiracı, kaç ev sahibi var?",
+    ];
+  }
+
+  state.assistantMessages = [
+    {
+      id: "aimsg-init",
+      role: "assistant",
+      content: initialText,
+      suggestedPrompts: initialPrompts,
+      time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+    },
+  ];
+  saveAssistantHistory();
+}
+
 function renderAssistantMessagesHtml() {
+  if (!state.assistantMessages || state.assistantMessages.length === 0) {
+    const saved = loadAssistantHistory();
+    if (saved && saved.length > 0) {
+      state.assistantMessages = saved;
+    } else {
+      initAssistantWelcome();
+    }
+  }
+
   const messages = state.assistantMessages || [];
   const isLoading = state.isAssistantLoading;
+
   return `
     ${messages.map((msg) => `
       <div class="ai-chat-msg-row ${msg.role}">
@@ -4327,6 +5329,38 @@ function renderAssistantMessagesHtml() {
           <span class="ai-msg-time">${msg.time || ""}</span>
         </div>
       </div>
+
+      <!-- AI Tarafından Algılanan Talep & Şikayet & Öneri Onay Kartı -->
+      ${msg.suggestedRequest ? `
+        <div class="ai-suggested-card">
+          <div class="ai-suggested-header">
+            <span class="status ${msg.suggestedRequest.entryType === "complaint" ? "complaint" : msg.suggestedRequest.entryType === "suggestion" ? "suggestion" : "fault"}">
+              ${msg.suggestedRequest.entryType === "complaint" ? "⚠️ Şikayet Bildirimi Tespit Edildi" : msg.suggestedRequest.entryType === "suggestion" ? "💡 Öneri Bildirimi Tespit Edildi" : "🛠️ Arıza Bildirimi Tespit Edildi"}
+            </span>
+            <strong>${safeText(msg.suggestedRequest.title)}</strong>
+          </div>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--text); line-height:1.5;">${safeText(msg.suggestedRequest.description)}</p>
+          <div class="ai-suggested-meta">
+            <span>Kategori: <strong>${safeText(msg.suggestedRequest.category)}</strong></span>
+            <span>Öncelik: <strong>${safeText(msg.suggestedRequest.urgency)}</strong></span>
+          </div>
+          ${!msg.requestConfirmed ? `
+            <div class="ai-suggested-actions">
+              <button type="button" class="btn primary btn-sm" onclick="confirmAiSuggestedRequest('${msg.id}')">
+                ✅ Onayla ve Yönetime Gönder
+              </button>
+              <button type="button" class="btn text-btn btn-sm" onclick="dismissAiSuggestedRequest('${msg.id}')">
+                Vazgeç
+              </button>
+            </div>
+          ` : `
+            <div style="font-size:12px; color:var(--accent); font-weight:700; display:flex; align-items:center; gap:6px;">
+              <span>✓</span> Resmi talep olarak site yönetimine iletildi.
+            </div>
+          `}
+        </div>
+      ` : ""}
+
       ${msg.suggestedPrompts && msg.suggestedPrompts.length > 0 ? `
         <div class="ai-chips-container">
           ${msg.suggestedPrompts.map((p) => `
@@ -4350,36 +5384,39 @@ function renderAssistantMessagesHtml() {
 
 function scrollAssistantToBottom() {
   const container = document.querySelector("#ai-assistant-root");
-  if (!container) return;
-  const bodyEl = container.querySelector(".ai-chat-body");
-  if (bodyEl) {
-    bodyEl.scrollTop = bodyEl.scrollHeight;
-    requestAnimationFrame(() => {
-      bodyEl.scrollTop = bodyEl.scrollHeight;
-    });
-    setTimeout(() => {
-      bodyEl.scrollTop = bodyEl.scrollHeight;
-    }, 60);
+  if (container) {
+    const bodyEl = container.querySelector(".ai-chat-body");
+    if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
+  }
+  const pageContainer = document.querySelector("#ai-page-messages-container");
+  if (pageContainer) {
+    pageContainer.scrollTop = pageContainer.scrollHeight;
   }
 }
 
 function updateAssistantDOM() {
+  // 1. FAB widget'ı güncelle
   const container = document.querySelector("#ai-assistant-root");
-  if (!container) return;
-
-  const existingWindow = container.querySelector(".ai-chat-window");
-  const existingBody = container.querySelector(".ai-chat-body");
-
-  // Eğer sohbet penceresi zaten açıksa, tüm widget'ı silip baştan render ETME (titremeyi önler)
-  if (state.isAssistantOpen && existingWindow && existingBody) {
-    existingBody.innerHTML = renderAssistantMessagesHtml();
-    scrollAssistantToBottom();
-    const sendBtn = container.querySelector(".ai-send-btn");
-    if (sendBtn) sendBtn.disabled = Boolean(state.isAssistantLoading);
-    return;
+  if (container) {
+    const existingWindow = container.querySelector(".ai-chat-window");
+    const existingBody = container.querySelector(".ai-chat-body");
+    if (state.isAssistantOpen && existingWindow && existingBody) {
+      existingBody.innerHTML = renderAssistantMessagesHtml();
+      const sendBtn = container.querySelector(".ai-send-btn");
+      if (sendBtn) sendBtn.disabled = Boolean(state.isAssistantLoading);
+    } else {
+      container.innerHTML = assistantWidgetMarkup();
+    }
   }
 
-  container.innerHTML = assistantWidgetMarkup();
+  // 2. Eğer kullanıcı dedicated AI sayfasındaysa, orayı da anında güncelle
+  const pageContainer = document.querySelector("#ai-page-messages-container");
+  if (pageContainer) {
+    pageContainer.innerHTML = renderAssistantMessagesHtml();
+    const pageSendBtn = document.querySelector("#ai-page-send-btn");
+    if (pageSendBtn) pageSendBtn.disabled = Boolean(state.isAssistantLoading);
+  }
+
   scrollAssistantToBottom();
 }
 
@@ -4402,58 +5439,28 @@ function sendAssistantPrompt(btn) {
 function toggleAssistant() {
   state.isAssistantOpen = !state.isAssistantOpen;
   if (state.isAssistantOpen && (!state.assistantMessages || state.assistantMessages.length === 0)) {
-    const isResident = state.mode === "resident";
-    const isGuest = !state.sessionUser;
-    const name = state.sessionUser?.name || "Ziyaretçi";
-    let initialText = "";
-    let initialPrompts = [];
-
-    if (isGuest) {
-      initialText = `Merhaba! Ben **ApartAI Akıllı Asistanıyım** 👋\n\nApartman ve site yönetim süreçlerinde yapay zekanın sağladığı kolaylıklar, tahsilat öngörüleri veya fotoğraflı arıza analizleri hakkında bana dilediğinizi sorabilirsiniz.`;
-      initialPrompts = [
-        "ApartAI nedir ve ne işe yarar?",
-        "Yönetici olarak nasıl denerim?",
-        "Sakinler aidatlarını nasıl öder?",
-        "Fotoğraflı arıza bildirimi nasıl çalışır?",
-      ];
-    } else if (isResident) {
-      initialText = `Merhaba ${safeText(name)}! Ben **ApartAI Akıllı Asistanınızım** 👋\n\nAidat borcunuz, otopark/plaka kaydınız, teknik arıza bildirimleriniz veya aktif anketlerle ilgili her şeyi bana sorabilirsiniz.`;
-      initialPrompts = [
-        "Aidat borcum ne kadar?",
-        "Kayıtlı araç plakam nedir?",
-        "Aktif bir anket var mı?",
-        "Arıza talebi nasıl açarım?",
-      ];
+    const saved = loadAssistantHistory();
+    if (saved && saved.length > 0) {
+      state.assistantMessages = saved;
     } else {
-      initialText = `Merhaba Sayın Yöneticim! Ben **ApartAI Akıllı Asistanınızım** 🤖\n\nSitenizin tahsilat performansı, arıza yoğunlukları, sakin profili ve duyuru hazırlama süreçlerinde 7/24 yanınızdayım. Size nasıl yardımcı olabilirim?`;
-      initialPrompts = [
-        "Aidat tahsilat durumu nasıl?",
-        "En çok hangi konuda arıza var?",
-        "Asansör bakımı için duyuru taslağı yaz",
-        "Sitede kaç kiracı, kaç ev sahibi var?",
-      ];
+      initAssistantWelcome();
     }
-
-    state.assistantMessages = [
-      {
-        role: "assistant",
-        content: initialText,
-        suggestedPrompts: initialPrompts,
-        time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
-      },
-    ];
   }
   updateAssistantDOM();
 }
 
 async function sendAssistantMessage(customText) {
-  const inputEl = document.querySelector("#assistant-input");
+  const inputEl = document.querySelector("#assistant-input") || document.querySelector("#ai-page-input");
   const text = (customText !== undefined && customText !== null ? String(customText) : (inputEl ? inputEl.value : "")).trim();
   if (!text || state.isAssistantLoading) return;
 
-  if (inputEl) inputEl.value = "";
+  const pageInput = document.querySelector("#ai-page-input");
+  const widgetInput = document.querySelector("#assistant-input");
+  if (pageInput) pageInput.value = "";
+  if (widgetInput) widgetInput.value = "";
 
   const userMsg = {
+    id: "msg-" + Date.now(),
     role: "user",
     content: text,
     time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
@@ -4461,15 +5468,16 @@ async function sendAssistantMessage(customText) {
 
   state.assistantMessages = [...(state.assistantMessages || []), userMsg];
   state.isAssistantLoading = true;
+  saveAssistantHistory();
   updateAssistantDOM();
   scrollAssistantToBottom();
 
   try {
     let reply = "";
     let suggestedPrompts = [];
+    let suggestedRequest = null;
 
-    // Gerçekçi düşünme hissi vermek ve anında çat diye yanıtın sırıtmasını önlemek için min gecikme
-    const minDelay = new Promise((resolve) => setTimeout(resolve, 750));
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 600));
 
     if (API_BASE) {
       const siteParam = state.activeSiteId ? `?siteId=${encodeURIComponent(state.activeSiteId)}` : "";
@@ -4482,37 +5490,171 @@ async function sendAssistantMessage(customText) {
       ]);
       reply = res.reply || "Yanıt alınamadı.";
       suggestedPrompts = res.suggestedPrompts || [];
+      suggestedRequest = res.suggestedRequest || null;
     } else {
       await minDelay;
-      reply = `ApartAI Asistanı: "${safeText(text)}" sorunuz incelendi. Sistem verileriyle senkronize çalışmaktadır.`;
-      suggestedPrompts = ["ApartAI nedir ve ne işe yarar?", "Yönetici olarak nasıl denerim?"];
+      reply = `ApartAI Asistanı: "${safeText(text)}" sorunuz incelendi. Talebiniz analiz edilmiştir.`;
+      suggestedPrompts = ["Aidat borcum ne kadar?", "Yeni arıza bildir"];
     }
 
-    state.assistantMessages = [
-      ...state.assistantMessages,
-      {
-        role: "assistant",
-        content: reply,
-        suggestedPrompts,
-        time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
-      },
-    ];
+    const assistantMsg = {
+      id: "aimsg-" + Date.now(),
+      role: "assistant",
+      content: reply,
+      suggestedPrompts,
+      suggestedRequest,
+      time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    state.assistantMessages = [...state.assistantMessages, assistantMsg];
     state.isAssistantLoading = false;
+    saveAssistantHistory();
     updateAssistantDOM();
     scrollAssistantToBottom();
   } catch (error) {
     state.assistantMessages = [
       ...state.assistantMessages,
       {
+        id: "aimsg-err-" + Date.now(),
         role: "assistant",
         content: `⚠️ Yanıt oluşturulurken bir hata oluştu: ${safeText(error.message)}`,
         time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
       },
     ];
     state.isAssistantLoading = false;
+    saveAssistantHistory();
     updateAssistantDOM();
     scrollAssistantToBottom();
   }
+}
+
+async function confirmAiSuggestedRequest(msgId) {
+  const msg = (state.assistantMessages || []).find((m) => m.id === msgId);
+  if (!msg || !msg.suggestedRequest) return;
+  const apt = residentApartment();
+  if (!apt) {
+    alert("Kayıtlı daire bulunamadı.");
+    return;
+  }
+
+  const { entryType, category, title, description, urgency } = msg.suggestedRequest;
+
+  if (API_BASE) {
+    try {
+      const res = await apiRequest("/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          apartmentId: apt.id,
+          title,
+          description,
+          entryType: entryType || "fault",
+          category: category || "Genel",
+          urgency: urgency || "Orta",
+        }),
+      });
+      msg.requestConfirmed = true;
+      const confirmReply = {
+        id: "aimsg-confirm-" + Date.now(),
+        role: "assistant",
+        content: `✅ **Talebiniz başarıyla oluşturuldu ve site yönetimine iletildi!**\n\nTakip Kodu: \`${res.data?.requests?.[0]?.id || "REQ-OK"}\`\nYönetici incelediğinde veya bir teknik firma yönlendirildiğinde bildirim kutunuza bilgi iletilecektir.`,
+        time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+      };
+      state.assistantMessages = [...state.assistantMessages, confirmReply];
+      saveAssistantHistory();
+      playNotificationSound();
+      applyServerData(res.data);
+      updateAssistantDOM();
+    } catch (err) {
+      alert("Talep iletilemedi: " + err.message);
+    }
+  } else {
+    msg.requestConfirmed = true;
+    const reqId = id("req");
+    state.requests = [
+      ...state.requests,
+      {
+        id: reqId,
+        siteId: apt.siteId,
+        apartmentId: apt.id,
+        entryType: entryType || "fault",
+        category: category || "Genel",
+        title,
+        description,
+        urgency: urgency || "Orta",
+        status: "yeni",
+        createdAt: new Date().toISOString().slice(0, 10),
+      },
+    ];
+    const confirmReply = {
+      id: "aimsg-confirm-" + Date.now(),
+      role: "assistant",
+      content: `✅ **Talebiniz başarıyla oluşturuldu ve site yönetimine iletildi!**\n\nTakip Kodu: \`${reqId}\`\nYönetim incelediğinde bildirim kutunuza bilgi düşecektir.`,
+      time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+    };
+    state.assistantMessages = [...state.assistantMessages, confirmReply];
+    saveAssistantHistory();
+    playNotificationSound();
+    saveState();
+    render();
+    updateAssistantDOM();
+  }
+}
+
+function dismissAiSuggestedRequest(msgId) {
+  const msg = (state.assistantMessages || []).find((m) => m.id === msgId);
+  if (msg) {
+    delete msg.suggestedRequest;
+    saveAssistantHistory();
+    updateAssistantDOM();
+  }
+}
+
+/* ==========================================================================
+   DEDICATED AI ASİSTAN SAYFASI (SOL MENÜ)
+   ========================================================================== */
+function aiAssistantPageView() {
+  const isLoading = state.isAssistantLoading;
+  const isResident = state.mode === "resident";
+
+  return `
+    <div class="ai-page-shell">
+      <div class="ai-page-header">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="ai-avatar-icon" style="font-size:24px;">✨</div>
+          <div>
+            <h3 style="margin:0; font-size:17px; color:var(--text);">ApartAI Akıllı Asistan</h3>
+            <span style="font-size:12px; color:var(--accent); font-weight:600; display:flex; align-items:center; gap:5px;">
+              <span class="pulse-dot"></span> 7/24 Aktif • Otomatik Arıza, Şikayet & Öneri Sınıflandırıcısı
+            </span>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn text-btn btn-sm" onclick="clearAssistantChat()" title="Sohbet geçmişini sıfırla">
+            🗑️ Sohbeti Sıfırla
+          </button>
+        </div>
+      </div>
+
+      <div id="ai-page-messages-container" class="ai-page-messages">
+        ${renderAssistantMessagesHtml()}
+      </div>
+
+      <div class="ai-page-footer">
+        <form onsubmit="event.preventDefault(); sendAssistantMessage(document.querySelector('#ai-page-input')?.value);" style="display:flex; gap:10px;">
+          <input
+            id="ai-page-input"
+            type="text"
+            autocomplete="off"
+            style="flex:1; padding:12px 16px; border-radius:12px; border:1px solid #cbd5e1; font-size:14px;"
+            placeholder="${isResident ? "Örn: Üst komşu gece çok yüksek sesle müzik dinliyor, ne yapmalıyım?" : "Örn: Aidat tahsilat oranı nedir? Asansör bakımı için duyuru yaz..."}"
+          />
+          <button id="ai-page-send-btn" type="submit" class="btn primary" ${isLoading ? "disabled" : ""} style="padding:12px 20px; font-weight:700;">
+            Gönder 🚀
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
 }
 
 function assistantWidgetMarkup() {
@@ -4546,7 +5688,10 @@ function assistantWidgetMarkup() {
                 <span class="ai-chat-status"><span class="pulse-dot"></span> 7/24 Aktif & Bağlamsal</span>
               </div>
             </div>
-            <button type="button" class="ai-chat-close-btn" onclick="toggleAssistant()" aria-label="Kapat">×</button>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button type="button" class="btn text-btn btn-sm" onclick="clearAssistantChat()" title="Temizle" style="color:#ffffff; font-size:11px;">🗑️</button>
+              <button type="button" class="ai-chat-close-btn" onclick="toggleAssistant()" aria-label="Kapat">×</button>
+            </div>
           </div>
 
           <div class="ai-chat-body">
@@ -4585,12 +5730,5 @@ window.addEventListener("hashchange", () => {
       state.view = validView;
       render();
     }
-  }
-});
-
-// Bildirim çekmecesini dışarı tıklandığında otomatik kapat
-document.addEventListener("click", (event) => {
-  if (state.showNotifications && !event.target.closest(".notification-dropdown-wrapper")) {
-    setState({ showNotifications: false });
   }
 });
