@@ -1109,6 +1109,8 @@ function routeAccess(method, pathname) {
   if (publicRoutes.some(([m, p]) => m === method && p === pathname)) return "public";
   // Any authenticated user (resident or admin) may view finances (transparency).
   if (method === "GET" && pathname === "/api/finances") return "auth";
+  // Any authenticated user may update their profile.
+  if (method === "PATCH" && pathname === "/api/auth/profile") return "auth";
   // Any authenticated user (resident or admin) may open a request.
   if (method === "POST" && pathname === "/api/requests") return "auth";
   // Any authenticated user may mark an announcement as read.
@@ -1198,6 +1200,60 @@ async function routeApi(req, res, url) {
     await writeData(data);
     const token = signToken({ sub: user.id, role: user.role });
     json(res, 201, { user: publicUser(user), token, data: stateForUser(data, user) });
+    return;
+  }
+
+  if (method === "PATCH" && url.pathname === "/api/auth/profile") {
+    const body = await readBody(req);
+    const user = data.users.find((u) => u.id === authUser.id);
+    if (!user) {
+      json(res, 404, { error: "Kullanıcı bulunamadı" });
+      return;
+    }
+    const name = clean(body.name);
+    const phone = clean(body.phone);
+    const email = clean(body.email).toLocaleLowerCase("tr-TR");
+
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (email && email !== user.email) {
+      ensure(isEmail(email), "Geçerli bir e-posta adresi girin.");
+      if (data.users.some((u) => u.id !== user.id && u.email.toLocaleLowerCase("tr-TR") === email)) {
+        json(res, 409, { error: "Bu e-posta başka bir hesap tarafından kullanılıyor" });
+        return;
+      }
+      user.email = email;
+    }
+
+    // Parola değişikliği (opsiyonel)
+    const newPassword = clean(body.newPassword);
+    if (newPassword) {
+      const currentPassword = clean(body.currentPassword);
+      ensure(currentPassword, "Mevcut şifrenizi girmelisiniz.");
+      ensure(verifyPassword(currentPassword, user.passwordHash), "Mevcut şifreniz hatalı.");
+      ensure(newPassword.length >= 6, "Yeni şifre en az 6 karakter olmalıdır.");
+      user.passwordHash = hashPassword(newPassword);
+    }
+
+    // Sakin için resident kaydı güncellemesi (plaka, acil durum vb.)
+    let resident = null;
+    if (user.role === "resident" && user.residentId) {
+      resident = data.residents.find((r) => r.id === user.residentId);
+      if (resident) {
+        if (name) resident.name = name;
+        if (phone) resident.phone = phone;
+        if (email) resident.email = email;
+        if (body.plateNumber !== undefined) resident.plateNumber = clean(body.plateNumber);
+        if (body.emergencyContact !== undefined) resident.emergencyContact = clean(body.emergencyContact);
+        if (body.occupancyType !== undefined) {
+          const occ = clean(body.occupancyType);
+          if (["owner", "tenant"].includes(occ)) resident.occupancyType = occ;
+        }
+      }
+    }
+
+    await writeData(data);
+    json(res, 200, { user: publicUser(user), resident, data: stateForUser(data, user) });
     return;
   }
 

@@ -729,5 +729,41 @@ test("POST ve DELETE /api/expenses gider kaydını yönetir", async () => {
   assert.ok(!delRes.body.data.expenses.some((e) => e.id === expenseId));
 });
 
+test("PATCH /api/auth/profile kullanıcı ve sakin bilgilerini günceller", async () => {
+  const resident = await residentToken("ayse@example.com");
+
+  // Sakin profilini (telefon, plaka, acil durum) günceller
+  const updateRes = await api("PATCH", "/api/auth/profile", {
+    token: resident,
+    body: {
+      phone: "0555 123 45 67",
+      plateNumber: "34 APART 01",
+      emergencyContact: "Ahmet Yılmaz (0555 999 88 77)",
+      occupancyType: "owner",
+    },
+  });
+  assert.equal(updateRes.status, 200);
+  assert.equal(updateRes.body.user.phone, "0555 123 45 67");
+  assert.equal(updateRes.body.resident.plateNumber, "34 APART 01");
+  assert.equal(updateRes.body.resident.emergencyContact, "Ahmet Yılmaz (0555 999 88 77)");
+
+  // Hatalı mevcut şifre ile parola güncelleme denenirse 400
+  const badPass = await api("PATCH", "/api/auth/profile", {
+    token: resident,
+    body: {
+      currentPassword: "yanlis-sifre",
+      newPassword: "yeni-sifre-123",
+    },
+  });
+  assert.equal(badPass.status, 400);
+
+  // Oturumsuz erişim 401
+  const anon = await api("PATCH", "/api/auth/profile", {
+    body: { phone: "0555 000 00 00" },
+  });
+  assert.equal(anon.status, 401);
+});
+
+
 
 

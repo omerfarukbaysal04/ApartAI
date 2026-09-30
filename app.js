@@ -1270,23 +1270,278 @@ function closeAuthModal(event) {
   }
 }
 
+let audioCtx = null;
+function playNotificationSound() {
+  if (state.soundDisabled) return;
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+    const now = audioCtx.currentTime;
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc1.type = "sine";
+    osc2.type = "triangle";
+
+    // Kristalline 2-tonlu chime (C6: 1046Hz -> E6: 1318Hz)
+    osc1.frequency.setValueAtTime(523.25, now);
+    osc1.frequency.exponentialRampToValueAtTime(659.25, now + 0.12);
+
+    osc2.frequency.setValueAtTime(1046.5, now);
+    osc2.frequency.exponentialRampToValueAtTime(1318.5, now + 0.12);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.52);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.54);
+    osc2.stop(now + 0.54);
+  } catch (e) {
+    // Ses engeli durumunda sessiz devam et
+  }
+}
+
+function toggleSoundPreference(enabled) {
+  setState({ soundDisabled: !enabled });
+  if (enabled) {
+    playNotificationSound();
+  }
+}
+
+function userNotifications() {
+  const list = [];
+  const user = state.sessionUser;
+  if (!user) return [];
+
+  // 1. Duyurular
+  const unreadAnnouncements = unreadAnnouncementsForSession();
+  unreadAnnouncements.forEach((ann) => {
+    list.push({
+      id: `notif-ann-${ann.id}`,
+      type: "announcement",
+      icon: "📢",
+      title: "Yeni Duyuru: " + ann.title,
+      desc: ann.content.slice(0, 75) + "...",
+      date: ann.date,
+      view: user.role === "resident" ? "resident-announcements" : "announcements",
+      unread: true,
+    });
+  });
+
+  // 2. Anketler
+  const activeSurveys = (scoped.surveys || []).filter((s) => s.status === "active");
+  if (user.role === "resident") {
+    const apt = residentApartment();
+    activeSurveys.forEach((s) => {
+      const hasVoted = (s.votes || []).some((v) => v.userId === user.id || (apt && v.apartmentId === apt.id));
+      if (!hasVoted) {
+        list.push({
+          id: `notif-survey-${s.id}`,
+          type: "survey",
+          icon: "🗳️",
+          title: "Oyunuz Bekleniyor: " + s.title,
+          desc: "Site karar anketine henüz oy vermediniz.",
+          date: s.createdAt,
+          view: "resident-surveys",
+          unread: true,
+        });
+      }
+    });
+  } else {
+    activeSurveys.forEach((s) => {
+      if ((s.votes || []).length > 0) {
+        list.push({
+          id: `notif-survey-admin-${s.id}`,
+          type: "survey",
+          icon: "🗳️",
+          title: "Aktif Karar Anketi: " + s.title,
+          desc: `${s.votes.length} daire oy kullandı.`,
+          date: s.createdAt,
+          view: "surveys",
+          unread: false,
+        });
+      }
+    });
+  }
+
+  // 3. Aidat / Kasa
+  if (user.role === "resident") {
+    const apt = residentApartment();
+    const unpaid = scoped.dues.filter((d) => d.apartmentId === apt?.id && d.status !== "paid");
+    if (unpaid.length > 0) {
+      list.push({
+        id: "notif-dues-unpaid",
+        type: "due",
+        icon: "💳",
+        title: "Ödenmemiş Aidat Bakiyesi",
+        desc: `${unpaid.length} döneme ait toplam ${money(unpaid.reduce((s, d) => s + Number(d.amount), 0))} borcunuz bulunmaktadır.`,
+        date: unpaid[0].dueDate || new Date().toISOString().slice(0, 10),
+        view: "resident-home",
+        unread: true,
+      });
+    }
+  } else {
+    const overdue = scoped.dues.filter((d) => d.status === "overdue");
+    if (overdue.length > 0) {
+      list.push({
+        id: "notif-dues-overdue",
+        type: "due",
+        icon: "⚠️",
+        title: "Gecikmiş Aidat Bildirimi",
+        desc: `${overdue.length} dairenin aidat ödemesi gecikmede.`,
+        date: new Date().toISOString().slice(0, 10),
+        view: "dues",
+        unread: true,
+      });
+    }
+  }
+
+  // 4. Talepler
+  if (user.role === "resident") {
+    const apt = residentApartment();
+    const reqs = scoped.requests.filter((r) => r.apartmentId === apt?.id);
+    reqs.slice(0, 2).forEach((r) => {
+      list.push({
+        id: `notif-req-${r.id}`,
+        type: "request",
+        icon: "🛠️",
+        title: `Talep: ${r.title}`,
+        desc: `Durum: ${requestStatusText(r.status)}`,
+        date: r.createdAt,
+        view: "resident-home",
+        unread: false,
+      });
+    });
+  } else {
+    const newReqs = scoped.requests.filter((r) => r.status === "yeni");
+    if (newReqs.length > 0) {
+      list.push({
+        id: "notif-req-new",
+        type: "request",
+        icon: "🔔",
+        title: `${newReqs.length} Yeni Arıza Talebi`,
+        desc: "İncelenmeyi ve anlaşmalı firmaya atanmayı bekliyor.",
+        date: new Date().toISOString().slice(0, 10),
+        view: "requests",
+        unread: true,
+      });
+    }
+  }
+
+  return list;
+}
+
+function toggleNotificationDrawer() {
+  const opening = !state.showNotifications;
+  setState({ showNotifications: opening });
+  if (opening) {
+    playNotificationSound();
+  }
+}
+
+function handleNotificationClick(notifId, targetView) {
+  setState({ view: targetView, showNotifications: false });
+}
+
+function markAllNotificationsRead() {
+  if (state.sessionUser?.role === "resident") {
+    markAnnouncementsRead();
+  }
+  setState({ showNotifications: false });
+}
+
 function sessionActions() {
   const user = state.sessionUser;
+  if (!user) return "";
+  const notifs = userNotifications();
+  const unreadCount = notifs.filter((n) => n.unread).length;
+
   const switcher =
     user.role === "admin"
       ? `<div class="mode-switch" aria-label="Ekran tipi">
           <button class="${state.mode === "manager" ? "active" : ""}" onclick="setState({ mode: 'manager', view: 'dashboard' })">Yönetici</button>
           <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${scoped.residents[0]?.id ?? ""}' })">Sakin</button>
         </div>`
-      : `<span class="status info">Sakin hesabı</span>`;
+      : `<span class="status info">Sakin Hesabı</span>`;
+
   return `
     <div class="session-bar">
       ${switcher}
-      <div class="user-chip">
-        <strong>${user.name}</strong>
-        <span>${user.email}</span>
+
+      <!-- Bildirim Kutusu & Zili -->
+      <div class="notification-dropdown-wrapper">
+        <button type="button" class="notification-bell-btn ${unreadCount > 0 ? "has-unread" : ""}" onclick="toggleNotificationDrawer()" aria-label="Bildirim Kutusu" title="Bildirimler">
+          <span class="bell-icon">🔔</span>
+          ${unreadCount > 0 ? `<span class="notification-badge">${unreadCount}</span>` : ""}
+        </button>
+
+        ${
+          state.showNotifications
+            ? `
+            <div class="notification-drawer" onclick="event.stopPropagation()">
+              <div class="notification-drawer-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <strong>🔔 Bildirimler & Mesajlar</strong>
+                  ${unreadCount > 0 ? `<span class="status warn" style="font-size:11px;">${unreadCount} yeni</span>` : ""}
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <button type="button" class="btn text-btn" style="font-size:11.5px; padding:2px 6px;" onclick="markAllNotificationsRead()" title="Tümünü okundu say">Tümünü Oku</button>
+                  <button type="button" class="btn text-btn" style="font-size:14px; padding:2px 6px;" onclick="setState({ showNotifications: false })" title="Kapat">×</button>
+                </div>
+              </div>
+              <div class="notification-list">
+                ${
+                  notifs.length
+                    ? notifs.map((n) => `
+                      <div class="notification-item ${n.unread ? "unread" : ""}" onclick="handleNotificationClick('${n.id}', '${n.view}')">
+                        <div class="notif-icon-col">${n.icon}</div>
+                        <div class="notif-content-col">
+                          <strong>${safeText(n.title)}</strong>
+                          <p>${safeText(n.desc)}</p>
+                          <small>${dateText(n.date)}</small>
+                        </div>
+                        ${n.unread ? `<span class="unread-dot"></span>` : ""}
+                      </div>
+                    `).join("")
+                    : `<div class="empty" style="padding:20px; font-size:13px;">Yeni bildirim bulunmuyor.</div>`
+                }
+              </div>
+              <div class="notification-drawer-footer">
+                <button type="button" class="btn text-btn" onclick="playNotificationSound()" style="font-size:11.5px;">🔊 Bildirim Sesi Dinle</button>
+                <button type="button" class="btn text-btn" onclick="setState({ view: 'profile', showNotifications: false })" style="font-size:11.5px;">Profil & Ayarlar →</button>
+              </div>
+            </div>
+            `
+            : ""
+        }
       </div>
-      <button class="btn" onclick="logoutUser()">Çıkış</button>
+
+      <!-- Kullanıcı Çipi & Profil Linki -->
+      <div class="user-chip clickable ${state.view === "profile" ? "active" : ""}" onclick="setState({ view: 'profile', showNotifications: false })" title="Profil & Daire Bilgilerini Düzenle">
+        <div class="user-avatar-circle">
+          <span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>
+        </div>
+        <div class="user-chip-text">
+          <strong>${safeText(user.name)}</strong>
+          <span>${safeText(user.email)}</span>
+        </div>
+        <span class="user-chip-arrow">⚙️</span>
+      </div>
+
+      <button class="btn logout-btn" onclick="logoutUser()" title="Oturumu Kapat">Çıkış</button>
     </div>
   `;
 }
@@ -1315,6 +1570,7 @@ function managerNav() {
     ["setup", "Site Kurulumu"],
     ["reports", "Rapor"],
     ["sites", "Tüm Siteler"],
+    ["profile", "Profilim"],
   ];
   return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
 }
@@ -1325,6 +1581,7 @@ function residentNav() {
     ["resident-request", "Talep Aç"],
     ["resident-announcements", "Duyurular"],
     ["resident-surveys", "Anketler"],
+    ["profile", "Profilim"],
   ];
   return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}' })">${label}</button>`).join("")}</nav>`;
 }
@@ -1340,6 +1597,7 @@ function pageTitle() {
     setup: "Site Kurulumu",
     reports: "Aylık Rapor & Faaliyet Özeti",
     sites: "Tüm Siteler",
+    profile: "Profil & Daire Ayarları",
     "resident-home": "Sakin Ekranı",
     "resident-request": "Talep Aç",
     "resident-announcements": "Duyurular",
@@ -1359,6 +1617,7 @@ function pageDescription() {
     setup: "Blok, daire, mülkiyet ve araç plaka kayıtlarını yönet.",
     reports: "Aylık faaliyet bülteni yazdır, tedarikçi karnesi ve analizleri incele.",
     sites: "Yönettiğin tüm siteleri karşılaştır ve yeni site ekle.",
+    profile: "Kişisel bilgiler, daire statüsü, araç plaka ve hesap güvenlik ayarları.",
     "resident-home": "Borcunu, ödeme geçmişini ve açık taleplerini gör.",
     "resident-request": "Arıza veya şikayetini yönetime ilet.",
     "resident-announcements": "Yönetim duyurularını takip et.",
@@ -1378,6 +1637,7 @@ function managerView() {
     setup: setupView,
     reports: reportsView,
     sites: sitesView,
+    profile: profileView,
   };
   return (views[state.view] || dashboardView)();
 }
@@ -1388,59 +1648,154 @@ function residentView() {
     "resident-request": residentRequestView,
     "resident-announcements": residentAnnouncementsView,
     "resident-surveys": residentSurveysView,
+    profile: profileView,
   }[state.view] || residentHomeView)();
 }
 
 function dashboardView() {
   const health = calculateHealthScore();
-  const paid = scoped.dues.filter((due) => due.status === "paid").length;
+  const dues = dueSummary();
   const openRequests = scoped.requests.filter((request) => !["cozuldu", "reddedildi"].includes(request.status));
   const avgResolution = openRequests.length ? "Açık takip" : "2.5 gün";
+  const expenses = scoped.expenses || [];
+  const totalExpense = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const vaultBalance = dues.paid - totalExpense;
+  const activeSurveys = (scoped.surveys || []).filter((s) => s.status === "active");
+
   return `
     <div class="grid dashboard-grid">
-      <section class="section">
+      <!-- 1. Sağlık Skoru Kartı -->
+      <section class="section interactive-dash-card card-health" onclick="setState({ view: 'reports' })" title="Detaylı Sağlık Raporuna Git">
         <div class="section-header">
           <div>
-            <h2>Site Sağlık Skoru</h2>
-            <p>Operasyonel durumun tek bakış özeti.</p>
+            <h2 style="font-size:16px;">🏆 Site Sağlık Skoru</h2>
+            <p>Operasyonel durum özeti</p>
           </div>
-          <span class="score-status">${health.status}</span>
+          <span class="score-status ${health.score >= 80 ? "ok" : "warn"}">${health.status}</span>
         </div>
         <div class="score">
           <div class="score-ring" style="--score: ${health.score}">
             <strong>${health.score}</strong>
           </div>
           <div>
-            <ul class="plain-list">
-              ${health.reasons.map((reason) => `<li>${reason}</li>`).join("")}
+            <ul class="plain-list" style="margin:0; padding:0;">
+              ${health.reasons.slice(0, 3).map((reason) => `<li>${reason}</li>`).join("")}
             </ul>
           </div>
         </div>
+        <div class="card-action-hint">Rapor & Bülten Detayı →</div>
       </section>
-      <section class="section metric">
-        <span>Bu ay tahsilat</span>
-        <strong>%${Math.round((paid / Math.max(scoped.dues.length, 1)) * 100)}</strong>
-        <small>${paid}/${scoped.dues.length} aidat ödendi</small>
+
+      <!-- 2. Aidat Tahsilat Kartı -->
+      <section class="section metric interactive-dash-card card-metric-dues" onclick="setState({ view: 'dues' })" title="Aidatlar Ekranına Git">
+        <div class="metric-top-row">
+          <span class="metric-icon-badge">💳</span>
+          <span class="metric-label">Tahsilat Oranı</span>
+        </div>
+        <strong class="metric-number text-accent">%${dues.collectionRate}</strong>
+        <div class="progress-bar-thin">
+          <div class="progress-fill-thin" style="width: ${dues.collectionRate}%;"></div>
+        </div>
+        <small class="metric-sub">${money(dues.paid)} tahsil edildi (${dues.paidCount}/${scoped.dues.length})</small>
+        <div class="card-action-hint">Aidat Takibine Git →</div>
       </section>
-      <section class="section metric">
-        <span>Açık talep</span>
-        <strong>${openRequests.length}</strong>
-        <small>Ortalama çözüm: ${avgResolution}</small>
+
+      <!-- 3. Kasa & Bakiye Kartı -->
+      <section class="section metric interactive-dash-card card-metric-vault" onclick="setState({ view: 'finances' })" title="Kasa ve Giderler Ekranına Git">
+        <div class="metric-top-row">
+          <span class="metric-icon-badge">💰</span>
+          <span class="metric-label">Kasa Bakiyesi</span>
+        </div>
+        <strong class="metric-number ${vaultBalance >= 0 ? "text-emerald" : "text-danger"}">${money(vaultBalance)}</strong>
+        <div class="progress-bar-thin">
+          <div class="progress-fill-thin" style="width: ${Math.min(100, Math.max(10, Math.round((dues.paid / Math.max(totalExpense, 1)) * 100)))}%; background:${vaultBalance >= 0 ? "var(--ok)" : "var(--danger)"};"></div>
+        </div>
+        <small class="metric-sub">Toplam Gider: ${money(totalExpense)} (${expenses.length} fatura)</small>
+        <div class="card-action-hint">Kasa & Gider Yönetimi →</div>
+      </section>
+
+      <!-- 4. Açık Talepler Kartı -->
+      <section class="section metric interactive-dash-card card-metric-reqs" onclick="setState({ view: 'requests' })" title="Talepler Ekranına Git">
+        <div class="metric-top-row">
+          <span class="metric-icon-badge">🛠️</span>
+          <span class="metric-label">Açık Talepler</span>
+        </div>
+        <strong class="metric-number ${openRequests.length > 0 ? "text-warning" : "text-ok"}">${openRequests.length}</strong>
+        <div class="progress-bar-thin">
+          <div class="progress-fill-thin" style="width: ${Math.round(((scoped.requests.length - openRequests.length) / Math.max(scoped.requests.length, 1)) * 100)}%; background:var(--accent);"></div>
+        </div>
+        <small class="metric-sub">Ortalama Çözüm: ${avgResolution}</small>
+        <div class="card-action-hint">Talepleri İncele & Ata →</div>
       </section>
     </div>
-    <div class="split" style="margin-top:16px">
-      <section class="section">
-        <div class="section-header"><h2>AI Aksiyon Önerileri</h2></div>
-        <ul class="actions-list">
-          ${health.actions.map((action) => `<li>${action}</li>`).join("")}
+
+    <!-- Alt İkili Kolon -->
+    <div class="split" style="margin-top:20px;">
+      <!-- AI Aksiyon Önerileri Kartı -->
+      <section class="section modern-card">
+        <div class="section-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">⚡</span>
+            <div>
+              <h3 style="margin:0;">AI Akıllı Aksiyon Önerileri</h3>
+              <p style="margin:2px 0 0; font-size:12.5px; color:var(--muted);">Sitenizin öncelikli operasyonel adımları.</p>
+            </div>
+          </div>
+          <span class="badge-ai-smart">AI Analiz</span>
+        </div>
+        <ul class="actions-list" style="margin-top:10px;">
+          ${health.actions.map((action) => `
+            <li class="action-item-modern">
+              <span class="action-bullet">✦</span>
+              <div class="action-text">${action}</div>
+            </li>
+          `).join("")}
         </ul>
       </section>
-      <section class="section">
-        <div class="section-header"><h2>Son Duyurular</h2></div>
-        <ul class="plain-list">
-          ${scoped.announcements.slice(-3).reverse().map((item) => `<li><strong>${item.title}</strong><br>${item.aiContent || item.content}</li>`).join("")}
-        </ul>
-      </section>
+
+      <!-- Son Duyurular & Anketler -->
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <section class="section modern-card interactive-dash-card" onclick="setState({ view: 'announcements' })" title="Tüm Duyuruları Yönet">
+          <div class="section-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:18px;">📢</span>
+              <h3 style="margin:0; font-size:15px;">Yayınlanan Son Duyurular</h3>
+            </div>
+            <span class="card-action-hint" style="margin:0;">Duyurulara Git →</span>
+          </div>
+          <div class="dash-mini-announcements">
+            ${
+              scoped.announcements.length
+                ? scoped.announcements.slice(-2).reverse().map((item) => `
+                  <div class="dash-mini-ann-item">
+                    <strong>${safeText(item.title)}</strong>
+                    <p>${safeText(item.aiContent || item.content)}</p>
+                    <small>${dateText(item.date)}</small>
+                  </div>
+                `).join("")
+                : `<div class="empty">Yayınlanmış duyuru yok.</div>`
+            }
+          </div>
+        </section>
+
+        <section class="section modern-card interactive-dash-card" onclick="setState({ view: 'surveys' })" title="Site Anketlerini Yönet">
+          <div class="section-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:18px;">🗳️</span>
+              <h3 style="margin:0; font-size:15px;">Site Karar Oylamaları</h3>
+            </div>
+            <span class="card-action-hint" style="margin:0;">Anketlere Git →</span>
+          </div>
+          <div style="font-size:13px; color:var(--text-sub);">
+            ${
+              activeSurveys.length > 0
+                ? `<p style="margin:0;">Şu anda yayında <strong>${activeSurveys.length} adet</strong> aktif karar anketi bulunuyor.</p>
+                   <small style="color:var(--muted);">${activeSurveys[0].title}</small>`
+                : `<p style="margin:0; color:var(--muted);">Aktif anket bulunmuyor. Yeni bir istişare oylaması başlatabilirsiniz.</p>`
+            }
+          </div>
+        </section>
+      </div>
     </div>
   `;
 }
@@ -2317,7 +2672,15 @@ function residentApartment() {
 function residentHomeView() {
   const apt = residentApartment();
   const dues = scoped.dues.filter((due) => due.apartmentId === apt?.id);
+  const unpaidDues = dues.filter((due) => due.status !== "paid");
+  const totalUnpaid = unpaidDues.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
   const requests = scoped.requests.filter((request) => request.apartmentId === apt?.id);
+  const openRequests = requests.filter((r) => !["cozuldu", "reddedildi"].includes(r.status));
+  const announcements = scoped.announcements || [];
+  const unreadAnnouncements = unreadAnnouncementsForSession();
+  const activeSurveys = (scoped.surveys || []).filter((s) => s.status === "active");
+  const user = state.sessionUser;
+  const userVotedSurveys = activeSurveys.filter((s) => (s.votes || []).some((v) => v.userId === user?.id || (apt && v.apartmentId === apt.id)));
 
   // Finansal Şeffaflık
   const totalSiteIncome = scoped.dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (d.amount || 0), 0);
@@ -2325,67 +2688,485 @@ function residentHomeView() {
   const totalSiteExpense = siteExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const siteVaultBalance = totalSiteIncome - totalSiteExpense;
   const recentExpenses = siteExpenses.slice(0, 3);
+  const res = currentResident();
+  const block = scoped.blocks.find((b) => b.id === apt?.blockId);
 
   return `
     <div class="resident-shell">
-      <section class="mobile-preview">
-        <div class="resident-header">
-          <h1>${safeText(currentResident()?.name || "Sakin")}</h1>
-          <span>${apartmentLabel(apt?.id)}</span>
+      <!-- Sakin Karşılama Kartı -->
+      <section class="resident-welcome-card modern-card">
+        <div class="resident-welcome-main">
+          <div class="user-avatar-circle" style="width:48px; height:48px; font-size:18px;">
+            <span>${(res?.name || "S").slice(0, 2).toUpperCase()}</span>
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <h2 style="margin:0; font-size:18px;">Hoş Geldiniz, ${safeText(res?.name || "Sakin")}</h2>
+              <span class="status ok" style="font-size:11.5px;">${res?.occupancyType === "tenant" ? "Kiracı" : "Kat Maliki"}</span>
+            </div>
+            <p style="margin:4px 0 0; font-size:13px; color:var(--text-sub);">
+              🏢 ${safeText(block?.name || "Blok")}, No: ${apt?.no || "-"} (Kat: ${apt?.floor || "-"}) • ${safeText(activeSite()?.name || "Apartman")}
+            </p>
+          </div>
         </div>
-        <div class="resident-body">
-          <section class="section">
-            <div class="section-header"><h2>Borç Durumu</h2></div>
-            ${dues.map((due) => `<div class="notice"><strong>${due.period} - ${money(due.amount)}</strong><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span><p>Son ödeme: ${dateText(due.dueDate)}</p></div>`).join("")}
+        <button type="button" class="btn text-btn" onclick="setState({ view: 'profile' })" style="font-size:12.5px; border:1px solid var(--line); padding:6px 12px; border-radius:8px;">
+          👤 Daire & Profilimi Düzenle →
+        </button>
+      </section>
+
+      <!-- 4 İnteraktif Metrik Kartı -->
+      <div class="stats-grid" style="margin-top:16px;">
+        <!-- Aidat Kartı -->
+        <section class="stat-card modern-card interactive-dash-card ${totalUnpaid > 0 ? "card-metric-due-warn" : "card-metric-dues"}" onclick="document.getElementById('resident-dues-section')?.scrollIntoView({ behavior: 'smooth' })" title="Aidat Detaylarına Git">
+          <div class="stat-card-top">
+            <span class="stat-icon">💳</span>
+            <span class="badge ${totalUnpaid > 0 ? "warn" : "ok"}">${totalUnpaid > 0 ? `${unpaidDues.length} Dönem Borç` : "Ödemeler Tamam"}</span>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Toplam Borç Bakiyesi</span>
+            <div class="stat-value" style="color:${totalUnpaid > 0 ? 'var(--danger)' : 'var(--accent)'};">${money(totalUnpaid)}</div>
+          </div>
+          <small class="metric-sub">${totalUnpaid > 0 ? `Son ödeme: ${dateText(unpaidDues[0]?.dueDate)}` : "Tüm aidatlarınız ödendi"}</small>
+          <div class="card-action-hint">Borç Dökümünü İncele ↓</div>
+        </section>
+
+        <!-- Açık Talepler Kartı -->
+        <section class="stat-card modern-card interactive-dash-card card-metric-reqs" onclick="setState({ view: 'resident-request' })" title="Arıza ve Talep Bildir">
+          <div class="stat-card-top">
+            <span class="stat-icon">🛠️</span>
+            <span class="badge ${openRequests.length > 0 ? "info" : "neutral"}">${openRequests.length > 0 ? `${openRequests.length} Açık` : "Sorun Yok"}</span>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Taleplerim & Bildirimler</span>
+            <div class="stat-value">${requests.length} Kayıt</div>
+          </div>
+          <small class="metric-sub">${openRequests.length > 0 ? "Yönetim inceliyor / usta yönlendirildi" : "Aktif arıza talebiniz yok"}</small>
+          <div class="card-action-hint">Yeni Talep Aç →</div>
+        </section>
+
+        <!-- Duyurular Kartı -->
+        <section class="stat-card modern-card interactive-dash-card card-metric-ann" onclick="setState({ view: 'resident-announcements' })" title="Duyuruları Görüntüle">
+          <div class="stat-card-top">
+            <span class="stat-icon">📢</span>
+            <span class="badge ${unreadAnnouncements.length > 0 ? "warn" : "neutral"}">${unreadAnnouncements.length > 0 ? `${unreadAnnouncements.length} Yeni` : "Hepsi Okundu"}</span>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Yönetim Duyuruları</span>
+            <div class="stat-value">${announcements.length} Duyuru</div>
+          </div>
+          <small class="metric-sub">${announcements.length ? safeText(announcements[announcements.length - 1]?.title.slice(0, 28)) + "..." : "Yayınlanmış duyuru"}</small>
+          <div class="card-action-hint">Duyuruları Oku →</div>
+        </section>
+
+        <!-- Anket & Kararlar Kartı -->
+        <section class="stat-card modern-card interactive-dash-card card-metric-surv" onclick="setState({ view: 'resident-surveys' })" title="Anketlere Oy Ver">
+          <div class="stat-card-top">
+            <span class="stat-icon">🗳️</span>
+            <span class="badge ${activeSurveys.length > userVotedSurveys.length ? "warn" : "ok"}">${activeSurveys.length > userVotedSurveys.length ? "Oyunuz Bekleniyor" : "Oylar Verildi"}</span>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Site Karar Anketleri</span>
+            <div class="stat-value">${activeSurveys.length} Aktif Anket</div>
+          </div>
+          <small class="metric-sub">${activeSurveys.length > userVotedSurveys.length ? "1 karar oylamasına henüz oy vermediniz" : "Görüşleriniz yönetime iletildi"}</small>
+          <div class="card-action-hint">Anketlere Katıl →</div>
+        </section>
+      </div>
+
+      <!-- Alt Detay Bölümleri -->
+      <div class="split" style="margin-top:20px; align-items:start;">
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Borç Durumu & Ödeme Listesi -->
+          <section id="resident-dues-section" class="section modern-card">
+            <div class="section-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px;">💳</span>
+                <div>
+                  <h3 style="margin:0; font-size:16px;">Aidat ve Borç Geçmişim</h3>
+                  <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">${apartmentLabel(apt?.id)} için kayıtlı tahakkuklar.</p>
+                </div>
+              </div>
+              ${totalUnpaid > 0 ? `<span class="status warn">${money(totalUnpaid)} Borç</span>` : `<span class="status ok">Borç Yok</span>`}
+            </div>
+            <div class="resident-dues-list" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+              ${
+                dues.length
+                  ? dues.map((due) => `
+                    <div class="notice" style="display:flex; justify-content:space-between; align-items:center; margin:0;">
+                      <div>
+                        <strong>${due.period} Dönemi</strong>
+                        <div style="color:var(--muted); font-size:12px;">Son Ödeme: ${dateText(due.dueDate)}</div>
+                      </div>
+                      <div style="text-align:right;">
+                        <div style="font-weight:700; font-size:15px;">${money(due.amount)}</div>
+                        <span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span>
+                      </div>
+                    </div>
+                  `).join("")
+                  : `<div class="empty">Kayıtlı aidat bilgisi bulunamadı.</div>`
+              }
+            </div>
           </section>
 
-          <section class="section resident-vault-card">
+          <!-- Açık Taleplerim -->
+          <section class="section modern-card interactive-dash-card" onclick="setState({ view: 'resident-request' })" title="Talepler Sayfasına Git">
             <div class="section-header">
-              <div>
-                <h2>💰 Site Kasası & Şeffaf Gider Özeti</h2>
-                <small style="color:var(--muted); font-size:12px;">Yönetim harcamaları tüm sakinlerle şeffaf olarak paylaşılır.</small>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px;">🛠️</span>
+                <div>
+                  <h3 style="margin:0; font-size:16px;">Açık Destek Taleplerim</h3>
+                  <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Apartman yönetimine ilettiğiniz arıza veya şikayetler.</p>
+                </div>
               </div>
-            </div>
-            <div class="resident-vault-grid">
-              <div class="resident-vault-stat">
-                <span>Güncel Kasa Bakiyesi</span>
-                <strong style="color: ${siteVaultBalance >= 0 ? 'var(--accent)' : 'var(--danger)'};">${money(siteVaultBalance)}</strong>
-              </div>
-              <div class="resident-vault-stat">
-                <span>Toplam Yapılan Harcama</span>
-                <strong>${money(totalSiteExpense)}</strong>
-              </div>
+              <span class="card-action-hint" style="margin:0;">Tümünü Yönet →</span>
             </div>
             ${
-              recentExpenses.length
-                ? `
-                <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
-                  <span style="font-size:11.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Son Ortak Harcamalar:</span>
-                  <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
-                    ${recentExpenses.map((exp) => `
-                      <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:6px 8px; background:rgba(255,255,255,0.6); border-radius:6px; border:1px solid var(--line);">
-                        <div>
-                          <strong>${safeText(exp.title)}</strong>
-                          <div style="color:var(--muted); font-size:11px;">${dateText(exp.date)} ${exp.vendor ? `• ${safeText(exp.vendor)}` : ""}</div>
-                        </div>
-                        <span style="font-weight:700; color:var(--danger); white-space:nowrap;">-${money(exp.amount)}</span>
-                      </div>
-                    `).join("")}
+              requests.length
+                ? requests.slice(-2).reverse().map((request) => `
+                  <div class="notice" style="margin-top:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <strong>${safeText(request.title)}</strong>
+                      <span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span>
+                    </div>
+                    <p style="margin:4px 0 0; font-size:12.5px; color:var(--text-sub);">${safeText(request.aiSummary || request.description)}</p>
                   </div>
-                </div>`
-                : `<div class="empty" style="margin-top:10px; font-size:12px;">Henüz kaydedilmiş harcama yok.</div>`
+                `).join("")
+                : `<div class="empty" style="padding:14px;">Açık talep bulunmuyor. Yeni bir arıza veya öneri bildirebilirsiniz.</div>`
             }
           </section>
-
-          <section class="section">
-            <div class="section-header"><h2>Açık Taleplerim</h2></div>
-            ${requests.length ? requests.map((request) => `<div class="notice"><strong>${request.title}</strong><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span><p>${request.aiSummary}</p></div>`).join("") : `<div class="empty">Açık talep bulunmuyor.</div>`}
-          </section>
         </div>
-      </section>
+
+        <!-- Şeffaf Kasa & Ortak Harcama Özeti -->
+        <section class="section modern-card resident-vault-card">
+          <div class="section-header">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:20px;">💰</span>
+                <h3 style="margin:0; font-size:16px;">Site Kasası & Şeffaf Gider Özeti</h3>
+              </div>
+              <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Yönetim harcamaları tüm sakinlerle şeffaf olarak paylaşılır.</p>
+            </div>
+          </div>
+          <div class="resident-vault-grid">
+            <div class="resident-vault-stat">
+              <span>Güncel Kasa Bakiyesi</span>
+              <strong style="color: ${siteVaultBalance >= 0 ? 'var(--accent)' : 'var(--danger)'};">${money(siteVaultBalance)}</strong>
+            </div>
+            <div class="resident-vault-stat">
+              <span>Toplam Yapılan Harcama</span>
+              <strong>${money(totalSiteExpense)}</strong>
+            </div>
+          </div>
+          ${
+            recentExpenses.length
+              ? `
+              <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:10px;">
+                <span style="font-size:11.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Son Ortak Harcamalar:</span>
+                <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                  ${recentExpenses.map((exp) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:8px 10px; background:rgba(255,255,255,0.7); border-radius:8px; border:1px solid var(--line);">
+                      <div>
+                        <strong>${safeText(exp.title)}</strong>
+                        <div style="color:var(--muted); font-size:11px;">${dateText(exp.date)} ${exp.vendor ? `• ${safeText(exp.vendor)}` : ""}</div>
+                      </div>
+                      <span style="font-weight:700; color:var(--danger); white-space:nowrap;">-${money(exp.amount)}</span>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>`
+              : `<div class="empty" style="margin-top:10px; font-size:12px;">Henüz kaydedilmiş harcama yok.</div>`
+          }
+        </section>
+      </div>
     </div>
   `;
 }
+
+function profileView() {
+  const user = state.sessionUser || {
+    name: "Misafir Kullanıcı",
+    email: "user@apartai.local",
+    role: state.mode === "manager" ? "admin" : "resident",
+  };
+  const isResident = user.role === "resident";
+  const resident = currentResident() || {};
+  const apt = residentApartment();
+  const block = scoped.blocks.find((b) => b.id === apt?.blockId);
+  const site = activeSite();
+
+  return `
+    <div class="profile-container">
+      <!-- Profil Başlık Kartı / Hero -->
+      <section class="profile-hero-card modern-card">
+        <div class="profile-hero-content">
+          <div class="profile-avatar-large">
+            <span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>
+          </div>
+          <div class="profile-hero-info">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <h2 style="margin:0; font-size:22px; font-weight:700;">${safeText(user.name || "Kullanıcı")}</h2>
+              <span class="status ${isResident ? "ok" : "info"}">${isResident ? "Sakin & Daire Sakini" : "Yönetici & Admin"}</span>
+            </div>
+            <p style="margin:4px 0 0; color:var(--muted); font-size:13.5px;">${safeText(user.email)} • ${safeText(user.phone || "Telefon belirtilmedi")}</p>
+            ${
+              isResident && apt
+                ? `<div class="profile-hero-badges">
+                    <span class="profile-tag">🏢 ${safeText(site?.name || "Apartman")}</span>
+                    <span class="profile-tag">🚪 ${safeText(block?.name || "Blok")} - No: ${apt.no} (Kat: ${apt.floor})</span>
+                    <span class="profile-tag">🔑 ${resident.occupancyType === "tenant" ? "Kiracı" : "Ev Sahibi (Kat Maliki)"}</span>
+                    ${resident.plateNumber ? `<span class="profile-tag">🚗 ${safeText(resident.plateNumber)}</span>` : ""}
+                  </div>`
+                : `<div class="profile-hero-badges">
+                    <span class="profile-tag">🏢 Yönetilen Site: ${safeText(site?.name || "Tüm Siteler")}</span>
+                    <span class="profile-tag">⚡ Sistem Yetkilisi</span>
+                  </div>`
+            }
+          </div>
+        </div>
+      </section>
+
+      <!-- Daire & Blok Bilgi Özeti (Sadece Sakin İçin) -->
+      ${
+        isResident
+          ? `
+          <div class="profile-info-grid">
+            <div class="profile-info-box">
+              <span class="info-label">Bağlı Olduğu Site</span>
+              <strong class="info-val">${safeText(site?.name || "Apartman")}</strong>
+              <small>${safeText(site?.address || "Kadıköy / İstanbul")}</small>
+            </div>
+            <div class="profile-info-box">
+              <span class="info-label">Blok & Kat</span>
+              <strong class="info-val">${safeText(block?.name || "-")}, Kat ${apt?.floor ?? "-"}</strong>
+              <small>Daire Numarası: ${apt?.no ?? "-"}</small>
+            </div>
+            <div class="profile-info-box">
+              <span class="info-label">Mülkiyet Durumu</span>
+              <strong class="info-val" style="color:var(--accent);">${resident.occupancyType === "tenant" ? "Kiracı" : "Kat Maliki (Ev Sahibi)"}</strong>
+              <small>Temsil yetkisi aktiftir</small>
+            </div>
+            <div class="profile-info-box">
+              <span class="info-label">Kayıtlı Araç Plakası</span>
+              <strong class="info-val">${safeText(resident.plateNumber || "Plaka Girilmedi")}</strong>
+              <small>Otopark otomatik tanıma</small>
+            </div>
+          </div>
+          `
+          : ""
+      }
+
+      <div class="split" style="margin-top:20px; align-items:start;">
+        <!-- Profil & Kişisel / Daire Bilgileri Düzenleme -->
+        <section class="section modern-card">
+          <div class="section-header">
+            <div>
+              <h3>👤 Kişisel ve Daire Bilgilerini Güncelle</h3>
+              <p style="margin:2px 0 0; font-size:12.5px; color:var(--muted);">İletişim, araç ve acil durum irtibatlarınızı güncel tutun.</p>
+            </div>
+          </div>
+
+          <form class="grid" onsubmit="saveProfile(event)">
+            <div class="form-row-2">
+              <label>
+                <span>Ad Soyad</span>
+                <input name="name" required value="${safeText(user.name || "")}" placeholder="Adınız Soyadınız" />
+              </label>
+              <label>
+                <span>Telefon</span>
+                <input name="phone" required value="${safeText(user.phone || "")}" placeholder="05xx xxx xx xx" />
+              </label>
+            </div>
+
+            <label>
+              <span>E-posta Adresi</span>
+              <input name="email" type="email" required value="${safeText(user.email || "")}" placeholder="ornek@posta.com" />
+            </label>
+
+            ${
+              isResident
+                ? `
+                <div class="form-row-2">
+                  <label>
+                    <span>Mülkiyet Statüsü</span>
+                    <select name="occupancyType">
+                      <option value="owner" ${resident.occupancyType !== "tenant" ? "selected" : ""}>Ev Sahibi (Kat Maliki)</option>
+                      <option value="tenant" ${resident.occupancyType === "tenant" ? "selected" : ""}>Kiracı</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Araç Plakası</span>
+                    <input name="plateNumber" value="${safeText(resident.plateNumber || "")}" placeholder="34 ABC 123" />
+                  </label>
+                </div>
+
+                <label>
+                  <span>Acil Durum İrtibatı (Kişi ve Telefon)</span>
+                  <input name="emergencyContact" value="${safeText(resident.emergencyContact || "")}" placeholder="Örn: Ahmet Yılmaz (0532 000 00 00)" />
+                  <small style="color:var(--muted); font-size:11.5px; margin-top:3px; display:block;">Su baskını, yangın, deprem vb. acil durumlarda ulaşılabilecek yakın.</small>
+                </label>
+                `
+                : ""
+            }
+
+            <div style="border-top:1px solid var(--line); padding-top:16px; margin-top:8px;">
+              <h4 style="margin:0 0 10px; font-size:14px; color:var(--text); display:flex; align-items:center; gap:6px;">
+                <span>🔒</span> Şifre Değiştir (İsteğe Bağlı)
+              </h4>
+              <div class="form-row-3">
+                <label>
+                  <span style="font-size:12px;">Mevcut Şifre</span>
+                  <input name="currentPassword" type="password" placeholder="••••••" />
+                </label>
+                <label>
+                  <span style="font-size:12px;">Yeni Şifre</span>
+                  <input name="newPassword" type="password" placeholder="En az 6 karakter" />
+                </label>
+                <label>
+                  <span style="font-size:12px;">Yeni Şifre Tekrar</span>
+                  <input name="confirmPassword" type="password" placeholder="En az 6 karakter" />
+                </label>
+              </div>
+            </div>
+
+            <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+              <button type="submit" class="btn btn-primary" style="padding:10px 22px; font-weight:600;">
+                💾 Değişiklikleri Kaydet
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Güvenlik & Bildirim Tercihleri Kartı -->
+        <section class="section modern-card">
+          <div class="section-header">
+            <div>
+              <h3>🔔 Bildirim & Tercihler</h3>
+              <p style="margin:2px 0 0; font-size:12.5px; color:var(--muted);">Sesli uyarı ve oturum tercihlerinizi yönetin.</p>
+            </div>
+          </div>
+
+          <div class="preference-list">
+            <div class="preference-item">
+              <div>
+                <strong>🔊 Sesli Bildirim Uyarısı</strong>
+                <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Yeni duyuru ve talep bildirimlerinde akustik zil çal.</p>
+              </div>
+              <button type="button" class="btn text-btn" onclick="playNotificationSound()" style="font-size:12px; border:1px solid var(--line); padding:4px 8px;">
+                🔔 Sesi Sına
+              </button>
+            </div>
+
+            <div class="preference-item">
+              <div>
+                <strong>📱 Mobil Hızlı Erişim (PWA)</strong>
+                <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Uygulamayı telefon ana ekranına ekleyerek tek tıkla açın.</p>
+              </div>
+              <button type="button" class="btn text-btn" onclick="alert('ApartAI mobil uyumlu bir web uygulamasıdır. Tarayıcınızın Paylaş/Menü kısmından \'Ana Ekrana Ekle\' diyerek uygulama gibi kullanabilirsiniz.')" style="font-size:12px;">Bilgi</button>
+            </div>
+
+            <div class="preference-item" style="border-top:1px solid var(--line); padding-top:12px;">
+              <div>
+                <strong style="color:var(--danger);">🚪 Oturumu Kapat</strong>
+                <p style="margin:2px 0 0; font-size:12px; color:var(--muted);">Mevcut hesaptan güvenli bir şekilde çıkış yapın.</p>
+              </div>
+              <button type="button" class="btn" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5; font-size:12px; font-weight:600;" onclick="logout()">Çıkış Yap</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const name = (formData.get("name") || "").trim();
+  const phone = (formData.get("phone") || "").trim();
+  const email = (formData.get("email") || "").trim();
+  const occupancyType = formData.get("occupancyType") || undefined;
+  const plateNumber = (formData.get("plateNumber") || "").trim();
+  const emergencyContact = (formData.get("emergencyContact") || "").trim();
+  const currentPassword = (formData.get("currentPassword") || "").trim();
+  const newPassword = (formData.get("newPassword") || "").trim();
+  const confirmPassword = (formData.get("confirmPassword") || "").trim();
+
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      alert("Yeni şifre en az 6 karakter olmalıdır.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert("Yeni şifreler birbiriyle uyuşmuyor.");
+      return;
+    }
+    if (!currentPassword) {
+      alert("Şifre değiştirmek için mevcut şifrenizi girmelisiniz.");
+      return;
+    }
+  }
+
+  const payload = {
+    name,
+    phone,
+    email,
+    ...(occupancyType ? { occupancyType } : {}),
+    plateNumber,
+    emergencyContact,
+    ...(newPassword ? { currentPassword, newPassword } : {}),
+  };
+
+  try {
+    const token = getToken();
+    if (token) {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Profil güncellenemedi.");
+      }
+      if (data.user) {
+        state.sessionUser = { ...state.sessionUser, ...data.user };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(state.sessionUser));
+      }
+      if (data.resident) {
+        const idx = state.residents.findIndex((r) => r.id === data.resident.id);
+        if (idx !== -1) {
+          state.residents[idx] = { ...state.residents[idx], ...data.resident };
+        }
+      }
+    } else {
+      // Local fallback
+      if (state.sessionUser) {
+        state.sessionUser.name = name;
+        state.sessionUser.phone = phone;
+        state.sessionUser.email = email;
+      }
+      const resObj = currentResident();
+      if (resObj) {
+        resObj.name = name;
+        resObj.phone = phone;
+        resObj.email = email;
+        if (occupancyType) resObj.occupancyType = occupancyType;
+        resObj.plateNumber = plateNumber;
+        resObj.emergencyContact = emergencyContact;
+      }
+    }
+    playNotificationSound();
+    alert("Profil ve daire bilgileriniz başarıyla güncellendi.");
+    render();
+  } catch (err) {
+    alert(err.message || "Güncelleme sırasında bir hata oluştu.");
+  }
+}
+
 
 function residentRequestView() {
   const apt = residentApartment();
@@ -2968,8 +3749,13 @@ function printReportModal() {
   const site = activeSite();
   const health = calculateHealthScore();
   const dues = dueSummary();
-  const requests = requestStats();
-  const vendors = vendorPerformance();
+  const reqStats = requestStats();
+  const requests = { ...reqStats, total: scoped.requests.length };
+  const vendors = vendorPerformance() || [];
+  const expenses = scoped.expenses || [];
+  const totalExpense = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const vaultBalance = dues.paid - totalExpense;
+
   const dateStr = new Date().toLocaleDateString("tr-TR", { year: "numeric", month: "long", day: "numeric" });
   const periodStr = new Date().toLocaleDateString("tr-TR", { year: "numeric", month: "long" });
 
@@ -3020,9 +3806,9 @@ function printReportModal() {
               <div class="bulletin-box-sub">${money(dues.paid)} / ${money(dues.total)}</div>
             </div>
             <div class="bulletin-box">
-              <span class="bulletin-box-title">Arıza & Talep Çözüm Hızı</span>
-              <div class="bulletin-score-num">%${requests.resolutionRate}</div>
-              <div class="bulletin-box-sub">${requests.resolved} Çözüldü / ${requests.total} Talep</div>
+              <span class="bulletin-box-title">Güncel Kasa Bakiyesi</span>
+              <div class="bulletin-score-num" style="color:${vaultBalance >= 0 ? '#059669' : '#dc2626'};">${money(vaultBalance)}</div>
+              <div class="bulletin-box-sub">Gider: ${money(totalExpense)}</div>
             </div>
           </div>
 
@@ -3048,6 +3834,13 @@ function printReportModal() {
                     <td>${money(dues.overdue)}</td>
                     <td><span style="color:#b91c1c;">Hukuki İhtar Süreci</span></td>
                   </tr>
+                  <tr>
+                    <td>Ortak Alan Harcamaları & Giderler</td>
+                    <td>-</td>
+                    <td>${money(totalExpense)}</td>
+                    <td><strong>Kasa: ${money(vaultBalance)}</strong></td>
+                    <td><span style="color:${vaultBalance >= 0 ? '#059669' : '#dc2626'}; font-weight:600;">${vaultBalance >= 0 ? 'Kasa Pozitif' : 'Kasa Negatif'}</span></td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -3059,18 +3852,22 @@ function printReportModal() {
             <div class="bulletin-table-wrap">
               <table class="bulletin-table">
                 <thead>
-                  <tr><th>Firma / Tedarikçi</th><th>Hizmet Alanı</th><th>İş Sayısı</th><th>Ort. Çözüm Süresi</th><th>Performans / SLA</th></tr>
+                  <tr><th>Firma / Tedarikçi</th><th>Hizmet Alanı</th><th>İş Sayısı</th><th>Ort. Çözüm Süresi</th><th>Performans / Durum</th></tr>
                 </thead>
                 <tbody>
-                  ${vendors.map(v => `
-                    <tr>
-                      <td><strong>${safeText(v.name)}</strong></td>
-                      <td>${v.categories.join(", ") || "Genel"}</td>
-                      <td>${v.total} iş (${v.resolved} çözüldü)</td>
-                      <td>${v.avgDays} gün</td>
-                      <td>${v.badge}</td>
-                    </tr>
-                  `).join("")}
+                  ${
+                    vendors.length
+                      ? vendors.map((v) => `
+                        <tr>
+                          <td><strong>${safeText(v.assignee || v.name || "-")}</strong></td>
+                          <td>${safeText(v.category || "Genel")}</td>
+                          <td>${v.total} iş (${v.resolved} çözüldü)</td>
+                          <td>${v.avgDays !== null ? `${v.avgDays} gün` : "Açık takip"}</td>
+                          <td><span class="status ${v.scoreStatus || "ok"}">${v.scoreText || "SLA Uygun"}</span></td>
+                        </tr>
+                      `).join("")
+                      : `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:12px;">Henüz atanmış anlaşmalı firma kaydı bulunmamaktadır.</td></tr>`
+                  }
                 </tbody>
               </table>
             </div>
@@ -3423,6 +4220,7 @@ function residentBottomNav() {
     { view: "resident-request", icon: "🛠️", label: "Talep Aç" },
     { view: "resident-announcements", icon: "📢", label: "Duyurular" },
     { view: "resident-surveys", icon: "📊", label: "Anketler" },
+    { view: "profile", icon: "👤", label: "Profilim" },
   ];
   return `
     <nav class="mobile-bottom-nav">
@@ -3443,6 +4241,7 @@ function managerBottomNav() {
     { view: "dues", icon: "💳", label: "Aidatlar" },
     { view: "requests", icon: "🛠️", label: "Talepler" },
     { view: "surveys", icon: "🗳️", label: "Anketler" },
+    { view: "profile", icon: "👤", label: "Profil" },
   ];
   return `
     <nav class="mobile-bottom-nav manager-nav">
