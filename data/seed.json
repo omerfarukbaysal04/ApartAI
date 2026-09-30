@@ -158,5 +158,51 @@
       "expiresAt": "2026-05-25",
       "status": "active"
     }
+  ],
+  "expenses": [
+    {
+      "id": "exp-1",
+      "siteId": "site-1",
+      "title": "Ortak Alan Elektrik Faturası (Nisan)",
+      "category": "electricity",
+      "amount": 4250,
+      "date": "2026-05-02",
+      "vendor": "BEDAŞ / Enerji A.Ş.",
+      "invoiceNo": "FTR-2026-8812",
+      "description": "Bina merdiven otomatiği, hidrofor ve asansör ortak sayaç tüketimi"
+    },
+    {
+      "id": "exp-2",
+      "siteId": "site-1",
+      "title": "Asansör Aylık Periyodik Bakım ve Yağlama",
+      "category": "elevator",
+      "amount": 2800,
+      "date": "2026-05-04",
+      "vendor": "Kone Asansör Servis",
+      "invoiceNo": "SRV-4410",
+      "description": "A ve B blok çift asansör aylık yasal periyodik servis bakımı"
+    },
+    {
+      "id": "exp-3",
+      "siteId": "site-1",
+      "title": "Ortak Alan Temizlik Kimyasalları ve Sarf Malzeme",
+      "category": "cleaning",
+      "amount": 1650,
+      "date": "2026-05-06",
+      "vendor": "Titiz Kimya ve Hijyen Ltd.",
+      "invoiceNo": "FAT-0914",
+      "description": "Ortak alan zemin temizlik otomatı deterjanı ve çöp torbaları"
+    },
+    {
+      "id": "exp-4",
+      "siteId": "site-1",
+      "title": "Bahçe Çim Biçme ve Sulama Sistemi Onarımı",
+      "category": "garden",
+      "amount": 1900,
+      "date": "2026-05-08",
+      "vendor": "Yeşil Vadi Peyzaj",
+      "invoiceNo": "MAK-102",
+      "description": "Bahar dönemi çim havalandırma ve patlayan damlama borusu değişimi"
+    }
   ]
 }

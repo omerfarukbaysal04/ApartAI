@@ -54,7 +54,17 @@ function migrateToMultiSite(data) {
     data.sites = [{ id: "site-1", name: "Site", address: "" }];
   }
   const defaultSiteId = data.sites[0].id;
-  const collections = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores"];
+  if (!Array.isArray(data.expenses) || data.expenses.length === 0) {
+    try {
+      if (fsSync.existsSync(SEED_FILE)) {
+        const seedData = JSON.parse(fsSync.readFileSync(SEED_FILE, "utf8"));
+        if (Array.isArray(seedData.expenses)) {
+          data.expenses = structuredClone(seedData.expenses);
+        }
+      }
+    } catch {}
+  }
+  const collections = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores", "surveys", "expenses"];
   for (const name of collections) {
     if (!Array.isArray(data[name])) data[name] = [];
     for (const row of data[name]) {

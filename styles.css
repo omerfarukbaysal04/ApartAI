@@ -3612,3 +3612,79 @@ tr.row-active > td {
   color: rgba(255, 255, 255, 0.85) !important;
   font-size: 10px !important;
 }
+
+/* Apartman Kasası & Gelir-Gider Yönetimi */
+.metric.vault-positive {
+  border-color: rgba(13, 148, 136, 0.4);
+  background: radial-gradient(circle at top right, rgba(13, 148, 136, 0.08), transparent 70%), var(--panel);
+}
+
+.metric.vault-negative {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: radial-gradient(circle at top right, rgba(220, 38, 38, 0.08), transparent 70%), var(--panel);
+}
+
+.expense-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--badge-color, var(--muted)) 12%, transparent);
+  color: var(--badge-color, var(--ink));
+  border: 1px solid color-mix(in srgb, var(--badge-color, var(--muted)) 25%, transparent);
+  white-space: nowrap;
+}
+
+.category-breakdown-card {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: transform var(--speed) ease, box-shadow var(--speed) ease;
+}
+
+.category-breakdown-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-xs);
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.resident-vault-card {
+  border-left: 4px solid var(--accent);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 253, 250, 0.6) 100%);
+}
+
+.resident-vault-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.resident-vault-stat {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resident-vault-stat span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.resident-vault-stat strong {
+  font-size: 18px;
+  font-family: "Outfit", sans-serif;
+  letter-spacing: -0.02em;
+}
+

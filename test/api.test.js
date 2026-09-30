@@ -656,5 +656,78 @@ test("yönetici ve sakin AI asistanını sorgulayabilir", async () => {
   assert.ok(Array.isArray(guestRes.body.suggestedPrompts));
 });
 
+test("GET /api/finances kasa ve finansal özeti döndürür", async () => {
+  const admin = await adminToken();
+  const res = await api("GET", "/api/finances?siteId=site-1", { token: admin });
+  assert.equal(res.status, 200);
+  assert.ok(typeof res.body.balance === "number");
+  assert.ok(typeof res.body.totalIncome === "number");
+  assert.ok(typeof res.body.totalExpense === "number");
+  assert.ok(Array.isArray(res.body.categoryBreakdown));
+  assert.ok(Array.isArray(res.body.recentExpenses));
+
+  // Sakin de kendi sitesinin finans özetini görebilir (şeffaflık)
+  const resident = await residentToken("ayse@example.com");
+  const resResident = await api("GET", "/api/finances?siteId=site-1", { token: resident });
+  assert.equal(resResident.status, 200);
+  assert.equal(resResident.body.totalExpense, res.body.totalExpense);
+
+  // Oturumsuz istek 401 alır
+  const resAnon = await api("GET", "/api/finances?siteId=site-1", {});
+  assert.equal(resAnon.status, 401);
+});
+
+test("POST ve DELETE /api/expenses gider kaydını yönetir", async () => {
+  const admin = await adminToken();
+  const resident = await residentToken("ayse@example.com");
+
+  // Sakin gider ekleyemez (403)
+  const forbiddenRes = await api("POST", "/api/expenses", {
+    token: resident,
+    body: {
+      siteId: "site-1",
+      title: "Yetkisiz Harcama",
+      amount: 500,
+      category: "other",
+    },
+  });
+  assert.equal(forbiddenRes.status, 403);
+
+  // Yönetici gider ekler
+  const createRes = await api("POST", "/api/expenses", {
+    token: admin,
+    body: {
+      siteId: "site-1",
+      title: "Bina Giriş Kapı Hidroliği Değişimi",
+      amount: 1250,
+      category: "maintenance",
+      vendor: "Kale Kilit Servis",
+      invoiceNo: "FTR-9912",
+      description: "A blok ana giriş kapısı rüzgarda sert çarpıyordu, hidrolik yenilendi",
+    },
+  });
+  assert.equal(createRes.status, 201);
+  assert.equal(createRes.body.expense.title, "Bina Giriş Kapı Hidroliği Değişimi");
+  assert.equal(createRes.body.expense.amount, 1250);
+  const expenseId = createRes.body.expense.id;
+
+  // State içinde giderin bulunduğunu doğrula
+  const stateRes = await api("GET", "/api/state", { token: admin });
+  assert.ok(stateRes.body.expenses.some((e) => e.id === expenseId));
+
+  // AI asistanına kasa bakiyesi sorulunca güncel cevabı üretir
+  const aiRes = await api("POST", "/api/ai/assistant?siteId=site-1", {
+    token: admin,
+    body: { message: "Kasa bakiyesi ve giderler ne durumda?" },
+  });
+  assert.equal(aiRes.status, 200);
+  assert.ok(aiRes.body.reply.includes("Apartman Kasası"));
+
+  // Yönetici gideri siler
+  const delRes = await api("DELETE", `/api/expenses/${expenseId}`, { token: admin });
+  assert.equal(delRes.status, 200);
+  assert.ok(!delRes.body.data.expenses.some((e) => e.id === expenseId));
+});
+
 
 

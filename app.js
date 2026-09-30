@@ -210,6 +210,52 @@ const seedState = {
       status: "active",
     },
   ],
+  expenses: [
+    {
+      id: "exp-1",
+      siteId: "site-1",
+      title: "Ortak Alan Elektrik Faturası (Nisan)",
+      category: "electricity",
+      amount: 4250,
+      date: "2026-05-02",
+      vendor: "BEDAŞ / Enerji A.Ş.",
+      invoiceNo: "FTR-2026-8812",
+      description: "Bina merdiven otomatiği, hidrofor ve asansör ortak sayaç tüketimi",
+    },
+    {
+      id: "exp-2",
+      siteId: "site-1",
+      title: "Asansör Aylık Periyodik Bakım ve Yağlama",
+      category: "elevator",
+      amount: 2800,
+      date: "2026-05-04",
+      vendor: "Kone Asansör Servis",
+      invoiceNo: "SRV-4410",
+      description: "A ve B blok çift asansör aylık yasal periyodik servis bakımı",
+    },
+    {
+      id: "exp-3",
+      siteId: "site-1",
+      title: "Ortak Alan Temizlik Kimyasalları ve Sarf Malzeme",
+      category: "cleaning",
+      amount: 1650,
+      date: "2026-05-06",
+      vendor: "Titiz Kimya ve Hijyen Ltd.",
+      invoiceNo: "FAT-0914",
+      description: "Ortak alan zemin temizlik otomatı deterjanı ve çöp torbaları",
+    },
+    {
+      id: "exp-4",
+      siteId: "site-1",
+      title: "Bahçe Çim Biçme ve Sulama Sistemi Onarımı",
+      category: "garden",
+      amount: 1900,
+      date: "2026-05-08",
+      vendor: "Yeşil Vadi Peyzaj",
+      invoiceNo: "MAK-102",
+      description: "Bahar dönemi çim havalandırma ve patlayan damlama borusu değişimi",
+    },
+  ],
 };
 
 let state = structuredClone(seedState);
@@ -289,6 +335,7 @@ let scoped = {
   announcements: [],
   healthScores: [],
   surveys: [],
+  expenses: [],
 };
 
 function rebuildScope() {
@@ -307,6 +354,7 @@ function rebuildScope() {
     announcements: pick(state.announcements),
     healthScores: pick(state.healthScores),
     surveys: pick(state.surveys),
+    expenses: pick(state.expenses),
   };
 }
 
@@ -1260,6 +1308,7 @@ function managerNav() {
   const items = [
     ["dashboard", "Panel"],
     ["dues", "Aidatlar"],
+    ["finances", "Kasa & Giderler"],
     ["requests", "Talepler"],
     ["announcements", "Duyurular"],
     ["surveys", "Anketler"],
@@ -1284,6 +1333,7 @@ function pageTitle() {
   const titles = {
     dashboard: "Yönetici Paneli",
     dues: "Aidat Takibi",
+    finances: "Apartman Kasası & Gider Yönetimi",
     requests: "Arıza ve Şikayet Talepleri",
     announcements: "Duyurular",
     surveys: "Site Anketleri ve Kararlar",
@@ -1302,6 +1352,7 @@ function pageDescription() {
   const descriptions = {
     dashboard: "Site sağlığı, ödeme durumu, açık talepler ve AI aksiyonları.",
     dues: "Dönem bazlı borç oluşturma, tahsilat tahmini ve risk analizi.",
+    finances: "Kasa bakiyesi, faturalar, harcama kalemleri ve kategori bazlı gider dağılımı.",
     requests: "Sakin taleplerini sınıflandır, önceliklendir ve çözüm süresini izle.",
     announcements: "Duyuru yayınla ve AI ile metni sakin bir tona getir.",
     surveys: "Site geneli oylama ve anketler ile şeffaf karar alma süreci.",
@@ -1320,6 +1371,7 @@ function managerView() {
   const views = {
     dashboard: dashboardView,
     dues: duesView,
+    finances: managerFinancesView,
     requests: requestsView,
     announcements: announcementsView,
     surveys: surveysView,
@@ -1551,6 +1603,198 @@ function reminderModal(due) {
         </div>
       </section>
     </div>
+  `;
+}
+
+const EXPENSE_CATEGORIES = {
+  electricity: { label: "Ortak Alan Elektrik", icon: "⚡", color: "#eab308" },
+  water: { label: "Su & Hidrofor", icon: "💧", color: "#06b6d4" },
+  elevator: { label: "Asansör Bakım", icon: "🛗", color: "#3b82f6" },
+  cleaning: { label: "Temizlik & Hijyen", icon: "🧹", color: "#10b981" },
+  maintenance: { label: "Teknik Bakım", icon: "🔧", color: "#f97316" },
+  garden: { label: "Bahçe & Peyzaj", icon: "🌿", color: "#84cc16" },
+  security: { label: "Güvenlik & Kamera", icon: "🛡️", color: "#8b5cf6" },
+  fixture: { label: "Demirbaş Alımı", icon: "📦", color: "#ec4899" },
+  other: { label: "Diğer Giderler", icon: "📋", color: "#64748b" },
+};
+
+function expenseCategoryBadge(cat) {
+  const meta = EXPENSE_CATEGORIES[cat] || { label: cat || "Gider", icon: "📋", color: "#64748b" };
+  return `<span class="expense-badge" style="--badge-color: ${meta.color};">${meta.icon} ${safeText(meta.label)}</span>`;
+}
+
+function managerFinancesView() {
+  const dues = scoped.dues || [];
+  const expenses = (scoped.expenses || []).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+  const totalIncome = dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const totalExpense = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const vaultBalance = totalIncome - totalExpense;
+
+  const currentPeriod = new Date().toISOString().slice(0, 7);
+  const thisMonthIncome = dues
+    .filter((d) => d.status === "paid" && (d.period === currentPeriod || (d.paidDate && d.paidDate.startsWith(currentPeriod))))
+    .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const thisMonthExpense = expenses
+    .filter((e) => e.date && e.date.startsWith(currentPeriod))
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const thisMonthNet = thisMonthIncome - thisMonthExpense;
+
+  const catSums = {};
+  for (const exp of expenses) {
+    const cat = exp.category || "other";
+    catSums[cat] = (catSums[cat] || 0) + (Number(exp.amount) || 0);
+  }
+
+  const categoryBreakdown = Object.entries(catSums)
+    .map(([cat, amount]) => ({
+      category: cat,
+      meta: EXPENSE_CATEGORIES[cat] || { label: cat, icon: "📋", color: "#64748b" },
+      amount,
+      pct: totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  return `
+    <div class="grid dashboard-grid">
+      <section class="section metric ${vaultBalance >= 0 ? "vault-positive" : "vault-negative"}">
+        <span>💰 Güncel Kasa Bakiyesi</span>
+        <strong style="color: ${vaultBalance >= 0 ? "var(--accent)" : "var(--danger)"};">${money(vaultBalance)}</strong>
+        <small>${vaultBalance >= 0 ? "Nakit mevcudu sağlıklı" : "Giderler gelirleri aştı"}</small>
+      </section>
+      <section class="section metric">
+        <span>📈 Tahsil Edilen Gelir</span>
+        <strong style="color: var(--ok);">${money(totalIncome)}</strong>
+        <small>${dues.filter((d) => d.status === "paid").length} adet aidat tahsilatı</small>
+      </section>
+      <section class="section metric">
+        <span>📉 Toplam Harcamalar</span>
+        <strong style="color: var(--danger);">${money(totalExpense)}</strong>
+        <small>${expenses.length} adet fatura/gider kaydı</small>
+      </section>
+      <section class="section metric">
+        <span>🗓️ Bu Ay Net Nakit Akışı</span>
+        <strong style="color: ${thisMonthNet >= 0 ? "var(--accent)" : "var(--warning)"};">${thisMonthNet >= 0 ? "+" : ""}${money(thisMonthNet)}</strong>
+        <small>Gelir: ${money(thisMonthIncome)} | Gider: ${money(thisMonthExpense)}</small>
+      </section>
+    </div>
+
+    <div class="split">
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Yeni Masraf / Gider Kaydı</h2>
+            <p>Fatura, fiş ve ortak alan harcamalarını kasaya işleyin.</p>
+          </div>
+        </div>
+        <form class="grid" onsubmit="createExpense(event)">
+          <label>Gider Başlığı / Konusu
+            <input name="title" required placeholder="Örn. Ortak alan merdiven otomatiği ve asansör elektrik faturası" />
+          </label>
+          <div class="form-row-2" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <label>Kategori
+              <select name="category" required>
+                ${Object.entries(EXPENSE_CATEGORIES).map(([cat, info]) => `<option value="${cat}">${info.icon} ${info.label}</option>`).join("")}
+              </select>
+            </label>
+            <label>Tutar (TL)
+              <input name="amount" type="number" min="1" step="any" required placeholder="Örn. 3250" />
+            </label>
+          </div>
+          <div class="form-row-2" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <label>Harcama / Fatura Tarihi
+              <input name="date" type="date" required value="${new Date().toISOString().slice(0, 10)}" />
+            </label>
+            <label>Fatura / Makbuz No (Opsiyonel)
+              <input name="invoiceNo" placeholder="Örn. FTR-2026-981" />
+            </label>
+          </div>
+          <label>Tedarikçi Firma / Hizmet Veren
+            <input name="vendor" placeholder="Örn. BEDAŞ, Kone Asansör Servis, Kale Kilit" />
+          </label>
+          <label>Açıklama & Detay
+            <textarea name="description" rows="2" placeholder="Harcamanın detayı, yapılan onarım veya satın alma gerekçesi"></textarea>
+          </label>
+          <button class="btn primary" type="submit">Gideri Kaydet & Kasadan Düş</button>
+        </form>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <h2>Kategori Bazlı Gider Dağılımı</h2>
+            <p>Harcamaların hangi kalemlerde yoğunlaştığını analiz edin.</p>
+          </div>
+        </div>
+        ${
+          categoryBreakdown.length
+            ? `
+            <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+              ${categoryBreakdown.map((item) => `
+                <div class="category-breakdown-card">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:13.5px;">
+                    <span><strong>${item.meta.icon} ${safeText(item.meta.label)}</strong></span>
+                    <span><strong>${money(item.amount)}</strong> <small style="color:var(--muted);">(%${item.pct})</small></span>
+                  </div>
+                  <div style="height:8px; background:rgba(0,0,0,0.06); border-radius:999px; overflow:hidden;">
+                    <div style="width:${item.pct}%; height:100%; background:${item.meta.color}; border-radius:999px; transition:width 0.4s ease;"></div>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+            `
+            : `<div class="empty">Henüz kaydedilmiş harcama bulunmamaktadır.</div>`
+        }
+      </section>
+    </div>
+
+    <section class="section" style="margin-top:16px;">
+      <div class="section-header">
+        <div>
+          <h2>Kayıtlı Gider Belgeleri ve Faturalar (${expenses.length})</h2>
+          <p>Sisteme işlenmiş tüm harcamalar, faturalar ve tedarikçiler.</p>
+        </div>
+      </div>
+      ${
+        expenses.length
+          ? `
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Tarih</th>
+                  <th>Gider / Belge Başlığı</th>
+                  <th>Kategori</th>
+                  <th>Tedarikçi Firma</th>
+                  <th>Fatura No</th>
+                  <th style="text-align:right;">Tutar</th>
+                  <th style="text-align:center;">İşlem</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${expenses.map((exp) => `
+                  <tr>
+                    <td style="white-space:nowrap; font-size:13px; color:var(--muted);">${dateText(exp.date)}</td>
+                    <td>
+                      <strong style="display:block; font-size:13.5px;">${safeText(exp.title)}</strong>
+                      ${exp.description ? `<small style="color:var(--muted); font-size:12px;">${safeText(exp.description)}</small>` : ""}
+                    </td>
+                    <td>${expenseCategoryBadge(exp.category)}</td>
+                    <td style="font-size:13px;">${safeText(exp.vendor || "-")}</td>
+                    <td style="font-size:12.5px; font-family:monospace; color:var(--muted);">${safeText(exp.invoiceNo || "-")}</td>
+                    <td style="text-align:right; font-weight:700; color:var(--danger); white-space:nowrap;">-${money(exp.amount)}</td>
+                    <td style="text-align:center;">
+                      <button class="btn danger" style="padding:4px 10px; font-size:12px;" onclick="deleteExpense('${exp.id}')" title="Gider kaydını sil">Sil</button>
+                    </td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+          `
+          : `<div class="empty">Kayıtlı gider bulunmuyor. Sol taraftaki formdan ilk gider kaydınızı oluşturabilirsiniz.</div>`
+      }
+    </section>
   `;
 }
 
@@ -2074,6 +2318,14 @@ function residentHomeView() {
   const apt = residentApartment();
   const dues = scoped.dues.filter((due) => due.apartmentId === apt?.id);
   const requests = scoped.requests.filter((request) => request.apartmentId === apt?.id);
+
+  // Finansal Şeffaflık
+  const totalSiteIncome = scoped.dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (d.amount || 0), 0);
+  const siteExpenses = (scoped.expenses || []).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const totalSiteExpense = siteExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const siteVaultBalance = totalSiteIncome - totalSiteExpense;
+  const recentExpenses = siteExpenses.slice(0, 3);
+
   return `
     <div class="resident-shell">
       <section class="mobile-preview">
@@ -2086,6 +2338,45 @@ function residentHomeView() {
             <div class="section-header"><h2>Borç Durumu</h2></div>
             ${dues.map((due) => `<div class="notice"><strong>${due.period} - ${money(due.amount)}</strong><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span><p>Son ödeme: ${dateText(due.dueDate)}</p></div>`).join("")}
           </section>
+
+          <section class="section resident-vault-card">
+            <div class="section-header">
+              <div>
+                <h2>💰 Site Kasası & Şeffaf Gider Özeti</h2>
+                <small style="color:var(--muted); font-size:12px;">Yönetim harcamaları tüm sakinlerle şeffaf olarak paylaşılır.</small>
+              </div>
+            </div>
+            <div class="resident-vault-grid">
+              <div class="resident-vault-stat">
+                <span>Güncel Kasa Bakiyesi</span>
+                <strong style="color: ${siteVaultBalance >= 0 ? 'var(--accent)' : 'var(--danger)'};">${money(siteVaultBalance)}</strong>
+              </div>
+              <div class="resident-vault-stat">
+                <span>Toplam Yapılan Harcama</span>
+                <strong>${money(totalSiteExpense)}</strong>
+              </div>
+            </div>
+            ${
+              recentExpenses.length
+                ? `
+                <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
+                  <span style="font-size:11.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Son Ortak Harcamalar:</span>
+                  <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+                    ${recentExpenses.map((exp) => `
+                      <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:6px 8px; background:rgba(255,255,255,0.6); border-radius:6px; border:1px solid var(--line);">
+                        <div>
+                          <strong>${safeText(exp.title)}</strong>
+                          <div style="color:var(--muted); font-size:11px;">${dateText(exp.date)} ${exp.vendor ? `• ${safeText(exp.vendor)}` : ""}</div>
+                        </div>
+                        <span style="font-weight:700; color:var(--danger); white-space:nowrap;">-${money(exp.amount)}</span>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>`
+                : `<div class="empty" style="margin-top:10px; font-size:12px;">Henüz kaydedilmiş harcama yok.</div>`
+            }
+          </section>
+
           <section class="section">
             <div class="section-header"><h2>Açık Taleplerim</h2></div>
             ${requests.length ? requests.map((request) => `<div class="notice"><strong>${request.title}</strong><span class="status ${statusClass(request.status)}">${requestStatusText(request.status)}</span><p>${request.aiSummary}</p></div>`).join("") : `<div class="empty">Açık talep bulunmuyor.</div>`}
@@ -2197,6 +2488,74 @@ function createDues(event) {
     .filter((apt) => !existing.has(apt.id))
     .map((apt) => ({ id: id("due"), siteId, apartmentId: apt.id, period, amount, dueDate, status: "pending" }));
   state.dues = [...state.dues, ...newDues];
+  saveState();
+  render();
+}
+
+function createExpense(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const title = String(form.get("title") || "").trim();
+  const category = String(form.get("category") || "other").trim();
+  const amount = Number(form.get("amount"));
+  const date = String(form.get("date") || "").trim();
+  const vendor = String(form.get("vendor") || "").trim();
+  const invoiceNo = String(form.get("invoiceNo") || "").trim();
+  const description = String(form.get("description") || "").trim();
+
+  if (!title || !amount || amount <= 0) {
+    alert("Lütfen geçerli bir başlık ve tutar girin.");
+    return;
+  }
+
+  const payload = {
+    siteId: state.activeSiteId,
+    title,
+    category,
+    amount,
+    date: date || new Date().toISOString().slice(0, 10),
+    vendor,
+    invoiceNo,
+    description,
+  };
+
+  if (API_BASE) {
+    apiRequest(`/expenses`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+      .then((result) => {
+        applyServerData(result.data || result);
+        event.target.reset();
+      })
+      .catch((error) => alert(error.message));
+    return;
+  }
+
+  const newExpense = {
+    id: id("exp"),
+    ...payload,
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+  state.expenses = [...(state.expenses || []), newExpense];
+  saveState();
+  render();
+  event.target.reset();
+}
+
+function deleteExpense(expenseId) {
+  if (!confirm("Bu harcama kaydını silmek istediğinize emin misiniz? Kasa bakiyesi güncellenecektir.")) return;
+  if (API_BASE) {
+    apiRequest(`/expenses/${encodeURIComponent(expenseId)}`, {
+      method: "DELETE",
+    })
+      .then((result) => {
+        applyServerData(result.data || result);
+      })
+      .catch((error) => alert(error.message));
+    return;
+  }
+  state.expenses = (state.expenses || []).filter((e) => e.id !== expenseId);
   saveState();
   render();
 }
@@ -3080,10 +3439,10 @@ function residentBottomNav() {
 function managerBottomNav() {
   const items = [
     { view: "dashboard", icon: "📊", label: "Özet" },
+    { view: "finances", icon: "💰", label: "Kasa" },
     { view: "dues", icon: "💳", label: "Aidatlar" },
     { view: "requests", icon: "🛠️", label: "Talepler" },
     { view: "surveys", icon: "🗳️", label: "Anketler" },
-    { view: "reports", icon: "📑", label: "Raporlar" },
   ];
   return `
     <nav class="mobile-bottom-nav manager-nav">

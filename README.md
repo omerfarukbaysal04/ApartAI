@@ -73,7 +73,9 @@ ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
 ### Faz 3+ — Entegrasyon ve akıllı yönetim katmanı
 
 - [x] Yönetim firmaları için çoklu site görünümü ekle (`siteId` filtrelemesi).
-- [ ] Online ödeme veya banka hareketi içeri aktarma altyapısını planla.
+- [x] Site geneli dijital anket ve istişare oylamaları (katılım oranı ve oy dağılımı).
+- [x] **Apartman Kasası & Gelir-Gider Yönetimi:** Kasa bakiyesi, faturalar, kategori bazlı gider analizi, sakinler için şeffaf harcama kartı ve AI finansal asistan entegrasyonu.
+- [ ] Online ödeme (Iyzico / PayTR) veya banka hareketi içeri aktarma altyapısını planla.
 - [ ] Karşılaştırmalı site skorları, tedarikçi performansı ve tahsilat tahmini ekle.
 
 ## Çalıştırma

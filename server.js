@@ -358,7 +358,7 @@ function publicData(data) {
   };
 }
 
-const SITE_COLLECTIONS = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores", "surveys"];
+const SITE_COLLECTIONS = ["blocks", "residents", "apartments", "dues", "payments", "requests", "announcements", "healthScores", "surveys", "expenses"];
 
 // Kullanıcının erişebildiği site id'leri. Yönetici birden çok site yönetebilir;
 // sakin yalnızca kendi sitesini görür.
@@ -389,7 +389,7 @@ function siteScope(data, siteId) {
 // ihtiyaç duyduğu site/blok listesini görür; sakin yalnızca kendi kayıtlarını;
 // yönetici ise yönettiği sitelerin tamamını.
 function stateForUser(data, user) {
-  const empty = { users: [], blocks: [], residents: [], apartments: [], dues: [], payments: [], requests: [], announcements: [], healthScores: [], surveys: [] };
+  const empty = { users: [], blocks: [], residents: [], apartments: [], dues: [], payments: [], requests: [], announcements: [], healthScores: [], surveys: [], expenses: [] };
   if (!user) {
     return { ...empty, sites: data.sites, blocks: data.blocks };
   }
@@ -408,6 +408,7 @@ function stateForUser(data, user) {
       requests: data.requests.filter((item) => apartmentIds.has(item.apartmentId)),
       announcements: data.announcements.filter((item) => item.siteId === user.siteId),
       surveys: (data.surveys || []).filter((item) => item.siteId === user.siteId),
+      expenses: (data.expenses || []).filter((item) => item.siteId === user.siteId),
     };
   }
   const allowed = userSiteIds(user, data);
@@ -418,6 +419,62 @@ function stateForUser(data, user) {
     users: data.users
       .filter((item) => item.id === user.id || (item.role === "resident" && allow.has(item.siteId)))
       .map(publicUser),
+  };
+}
+
+function calculateFinances(rawData, siteId) {
+  const data = siteId ? siteScope(rawData, siteId) : rawData;
+  const dues = data.dues || [];
+  const expenses = (data.expenses || []).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+  const totalIncome = dues.filter((d) => d.status === "paid").reduce((sum, d) => sum + (d.amount || 0), 0);
+  const totalExpense = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const balance = totalIncome - totalExpense;
+
+  const currentPeriod = today().slice(0, 7);
+  const thisMonthIncome = dues
+    .filter((d) => d.status === "paid" && (d.period === currentPeriod || (d.paidDate && d.paidDate.startsWith(currentPeriod))))
+    .reduce((sum, d) => sum + (d.amount || 0), 0);
+  const thisMonthExpense = expenses
+    .filter((e) => e.date && e.date.startsWith(currentPeriod))
+    .reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  const categories = {
+    electricity: "Ortak Alan Elektrik",
+    water: "Su & Hidrofor",
+    elevator: "Asansör Bakım",
+    cleaning: "Temizlik & Hijyen",
+    maintenance: "Teknik Bakım",
+    garden: "Bahçe & Peyzaj",
+    security: "Güvenlik & Kamera",
+    fixture: "Demirbaş Alımı",
+    other: "Diğer Giderler",
+  };
+
+  const catSums = {};
+  for (const exp of expenses) {
+    const cat = exp.category || "other";
+    catSums[cat] = (catSums[cat] || 0) + (exp.amount || 0);
+  }
+
+  const categoryBreakdown = Object.entries(catSums)
+    .map(([cat, amount]) => ({
+      category: cat,
+      label: categories[cat] || cat,
+      amount,
+      percentage: totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  return {
+    totalIncome,
+    totalExpense,
+    balance,
+    thisMonthIncome,
+    thisMonthExpense,
+    thisMonthNet: thisMonthIncome - thisMonthExpense,
+    categoryBreakdown,
+    recentExpenses: expenses.slice(0, 20),
   };
 }
 
@@ -830,6 +887,7 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
   const requests = (data.requests || []).filter((r) => r.siteId === targetSiteId);
   const announcements = (data.announcements || []).filter((a) => a.siteId === targetSiteId);
   const surveys = (data.surveys || []).filter((s) => s.siteId === targetSiteId);
+  const finances = calculateFinances(data, targetSiteId);
 
   const role = user?.role || "guest";
   const isGuest = role === "guest";
@@ -861,6 +919,9 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
         title: s.title,
         hasVoted: (s.votes || []).some((v) => v.userId === user.id || v.apartmentId === apt?.id),
       })),
+      vaultBalance: finances.balance,
+      totalExpenses: finances.totalExpense,
+      recentExpenses: finances.recentExpenses.slice(0, 3).map((e) => `${e.title}: ${e.amount.toLocaleString("tr-TR")} TL (${e.date})`),
     };
   }
 
@@ -893,6 +954,12 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
       paidDuesAmount,
       overdueDuesAmount,
       pendingDuesAmount: totalDuesAmount - paidDuesAmount,
+      vaultBalance: finances.balance,
+      totalExpenses: finances.totalExpense,
+      thisMonthIncome: finances.thisMonthIncome,
+      thisMonthExpense: finances.thisMonthExpense,
+      thisMonthNet: finances.thisMonthNet,
+      categoryBreakdown: finances.categoryBreakdown,
       totalRequests: requests.length,
       openRequests: openReqs.length,
       resolvedRequests: resolvedReqs.length,
@@ -914,8 +981,8 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
     ];
     if (queryLower.includes("nedir") || queryLower.includes("nasıl") || queryLower.includes("ne işe")) {
       fallbackReply = `**ApartAI**, apartman ve site yönetim süreçlerini otomatikleştiren yapay zeka destekli akıllı bir platformdur.\n\n` +
-        `- **Yöneticiler için:** Finansal tahsilat takibi, gecikme riski analizi, arızaları firmalara atama ve panoya asılabilir A4 resmi faaliyet bülteni üretimi.\n` +
-        `- **Sakinler için:** Güncel aidat borç takibi, kayıtlı araç plakası ve acil durum bilgileri, fotoğraflı arıza bildirimi ve site karar anketlerine dijital katılım.\n\n` +
+        `- **Yöneticiler için:** Kasa ve gelir-gider takibi, finansal tahsilat, gecikme riski analizi, arızaları firmalara atama ve resmi faaliyet bülteni üretimi.\n` +
+        `- **Sakinler için:** Şeffaf kasa durumu, güncel aidat borç takibi, kayıtlı araç plakası ve acil durum bilgileri, fotoğraflı arıza bildirimi ve site karar anketlerine katılım.\n\n` +
         `Yukarıdaki **"Yönetici Demosunu Başlat"** veya **"Sakin Portaline Gir"** butonlarına tıklayarak anında canlı deneyebilirsiniz!`;
     } else if (queryLower.includes("yönetici") || queryLower.includes("demo") || queryLower.includes("denerim")) {
       fallbackReply = `Yönetici panelini test etmek için üst menüdeki **"👑 Yönetici Girişi"** butonuna basarak tek tıkla demo oturumu açabilirsiniz (admin@apartai.local / demo123).`;
@@ -929,11 +996,18 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
   } else if (isResident) {
     suggestedPrompts = [
       "Aidat borcum ne kadar?",
+      "Apartman kasası ne durumda?",
       "Kayıtlı araç plakam nedir?",
       "Aktif bir anket var mı?",
       "Arıza talebi nasıl açarım?",
     ];
-    if (queryLower.includes("aidat") || queryLower.includes("borç") || queryLower.includes("ödeme")) {
+    if (queryLower.includes("kasa") || queryLower.includes("harcama") || queryLower.includes("gider") || queryLower.includes("masraf") || queryLower.includes("şeffaf")) {
+      fallbackReply = `📊 **Sitemizin Güncel Kasa ve Gider Durumu (Finansal Şeffaflık):**\n\n` +
+        `- **Kasa Bakiyesi:** **${residentContext.vaultBalance.toLocaleString("tr-TR")} TL**\n` +
+        `- **Toplam Gider Kaydı:** ${residentContext.totalExpenses.toLocaleString("tr-TR")} TL\n\n` +
+        `Son Yapılan Harcamalar:\n${residentContext.recentExpenses.map((e) => `- ${e}`).join("\n") || "Henüz kaydedilmiş gider bulunmuyor."}\n\n` +
+        `Sitemizin tüm harcamaları yöneticimiz tarafından şeffaf bir şekilde sisteme işlenmektedir.`;
+    } else if (queryLower.includes("aidat") || queryLower.includes("borç") || queryLower.includes("ödeme")) {
       if (residentContext.totalUnpaid > 0) {
         fallbackReply = `Dairenize (${residentContext.blockName} Blok No: ${residentContext.apartmentNo}) ait **${residentContext.totalUnpaid.toLocaleString("tr-TR")} TL** ödenmemiş aidat bakiyesi bulunmaktadır.\n\n` +
           `Dönemler:\n${residentContext.unpaidPeriods.map((p) => `- ${p}`).join("\n")}\n\n` +
@@ -957,16 +1031,24 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
     } else if (queryLower.includes("yönetim") || queryLower.includes("iletişim") || queryLower.includes("telefon") || queryLower.includes("acil")) {
       fallbackReply = `${site?.name || "Site"} Yönetimi ile görüşmek için sistem üzerinden talep oluşturabilir veya acil durumlarda bina görevlisine başvurabilirsiniz.\nKayıtlı Acil İrtibatınız: **${residentContext.emergencyContact}**.`;
     } else {
-      fallbackReply = `Merhaba Sayın ${residentContext.residentName}! Ben **ApartAI Akıllı Asistanınızım**.\n\nSize aidat borç durumunuz, kayıtlı araç plakanız, arıza talepleriniz veya aktif site anketleri konusunda yardımcı olabilirim. Aşağıdaki sorulardan birini seçebilir veya dilediğinizi sorabilirsiniz.`;
+      fallbackReply = `Merhaba Sayın ${residentContext.residentName}! Ben **ApartAI Akıllı Asistanınızım**.\n\nSize aidat borç durumunuz, site kasa ve harcama durumu, kayıtlı araç plakanız, arıza talepleriniz veya aktif site anketleri konusunda yardımcı olabilirim. Aşağıdaki sorulardan birini seçebilir veya dilediğinizi sorabilirsiniz.`;
     }
   } else {
     suggestedPrompts = [
+      "Kasa bakiyesi ve giderler ne durumda?",
       "Aidat tahsilat durumu nasıl?",
       "En çok hangi konuda arıza var?",
       "Asansör bakımı için duyuru taslağı yaz",
       "Sitede kaç kiracı, kaç ev sahibi var?",
     ];
-    if (queryLower.includes("tahsilat") || queryLower.includes("aidat") || queryLower.includes("kasa") || queryLower.includes("alacak")) {
+    if (queryLower.includes("kasa") || queryLower.includes("bakiye") || queryLower.includes("gider") || queryLower.includes("harcama") || queryLower.includes("masraf")) {
+      fallbackReply = `💰 **${adminContext.siteName} Apartman Kasası & Harcama Durumu:**\n\n` +
+        `- **Güncel Kasa Bakiyesi:** **${adminContext.vaultBalance.toLocaleString("tr-TR")} TL**\n` +
+        `- **Tahsil Edilen Aidat Geliri:** ${adminContext.paidDuesAmount.toLocaleString("tr-TR")} TL\n` +
+        `- **Toplam Giderler:** ${adminContext.totalExpenses.toLocaleString("tr-TR")} TL\n` +
+        `- **Bu Ay Net Nakit Akışı:** ${adminContext.thisMonthNet >= 0 ? "+" : ""}${adminContext.thisMonthNet.toLocaleString("tr-TR")} TL (Gelir: ${adminContext.thisMonthIncome.toLocaleString("tr-TR")} TL / Gider: ${adminContext.thisMonthExpense.toLocaleString("tr-TR")} TL)\n\n` +
+        `Detaylı harcama dağılımı, faturalar ve yeni gider girişi için **Kasa & Giderler** sekmesini kullanabilirsiniz.`;
+    } else if (queryLower.includes("tahsilat") || queryLower.includes("aidat") || queryLower.includes("alacak")) {
       fallbackReply = `**${adminContext.siteName}** Güncel Finansal Durum Özeti:\n\n` +
         `- **Tahsilat Başarı Oranı:** %${adminContext.collectionRate}\n` +
         `- **Tahsil Edilen:** ${adminContext.paidDuesAmount.toLocaleString("tr-TR")} TL\n` +
@@ -995,7 +1077,7 @@ async function assistantQueryWithAI({ user, siteId, message, data }) {
     } else if (queryLower.includes("anket") || queryLower.includes("karar")) {
       fallbackReply = `Sistemde şu anda **${adminContext.activeSurveysCount} adet** aktif anket bulunmaktadır. Anketler sekmesinden katılım oranlarını ve oy dağılımını canlı inceleyebilirsiniz.`;
     } else {
-      fallbackReply = `Merhaba Sayın Yöneticim! Ben **ApartAI Akıllı Yönetim Asistanınızım**.\n\nSitenizin finansal tahsilatları, teknik arıza yoğunlukları, sakin/kiracı istatistikleri ve duyuru hazırlama süreçlerinde size yardımcı olmaya hazırım. Hızlı sorulardan birini seçebilir veya sormak istediğiniz konuyu yazabilirsiniz.`;
+      fallbackReply = `Merhaba Sayın Yöneticim! Ben **ApartAI Akıllı Yönetim Asistanınızım**.\n\nSitenizin apartman kasası, gider dağılımı, aidat tahsilatları, teknik arıza yoğunlukları, sakin/kiracı istatistikleri ve duyuru hazırlama süreçlerinde size yardımcı olmaya hazırım. Hızlı sorulardan birini seçebilir veya sormak istediğiniz konuyu yazabilirsiniz.`;
     }
   }
 
@@ -1025,6 +1107,8 @@ function routeAccess(method, pathname) {
     ["POST", "/api/ai/assistant"],
   ];
   if (publicRoutes.some(([m, p]) => m === method && p === pathname)) return "public";
+  // Any authenticated user (resident or admin) may view finances (transparency).
+  if (method === "GET" && pathname === "/api/finances") return "auth";
   // Any authenticated user (resident or admin) may open a request.
   if (method === "POST" && pathname === "/api/requests") return "auth";
   // Any authenticated user may mark an announcement as read.
@@ -1666,6 +1750,64 @@ async function routeApi(req, res, url) {
     data.surveys.splice(surveyIndex, 1);
     await writeData(data);
     json(res, 200, stateForUser(data, authUser));
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/finances") {
+    const siteId = resolveSiteId(url, authUser, data);
+    const summary = calculateFinances(data, siteId);
+    json(res, 200, summary);
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/expenses") {
+    const body = await readBody(req);
+    const title = clean(body.title);
+    const amount = Number(body.amount);
+    const category = clean(body.category) || "other";
+    const date = clean(body.date) || today();
+    const vendor = clean(body.vendor);
+    const invoiceNo = clean(body.invoiceNo);
+    const description = clean(body.description);
+
+    ensure(title, "Gider başlığı zorunludur.");
+    ensure(Number.isFinite(amount) && amount > 0, "Gider tutarı 0'dan büyük bir sayı olmalıdır.");
+    const targetSiteId = clean(body.siteId) || resolveSiteId(url, authUser, data);
+    requireSiteAccess(targetSiteId, authUser, data);
+
+    const expense = {
+      id: uid("exp"),
+      siteId: targetSiteId,
+      title,
+      category,
+      amount,
+      date,
+      vendor,
+      invoiceNo,
+      description,
+      createdAt: today(),
+    };
+    if (!Array.isArray(data.expenses)) data.expenses = [];
+    data.expenses.push(expense);
+    await writeData(data);
+    const finances = calculateFinances(data, targetSiteId);
+    json(res, 201, { expense, finances, data: stateForUser(data, authUser) });
+    return;
+  }
+
+  const expenseDeleteMatch = url.pathname.match(/^\/api\/expenses\/([^/]+)$/);
+  if (method === "DELETE" && expenseDeleteMatch) {
+    const expenseIndex = (data.expenses || []).findIndex((item) => item.id === expenseDeleteMatch[1]);
+    if (expenseIndex < 0) {
+      json(res, 404, { error: "Expense not found" });
+      return;
+    }
+    const expense = data.expenses[expenseIndex];
+    requireSiteAccess(expense.siteId, authUser, data);
+    data.expenses.splice(expenseIndex, 1);
+    await writeData(data);
+    const finances = calculateFinances(data, expense.siteId);
+    json(res, 200, { success: true, finances, data: stateForUser(data, authUser) });
     return;
   }
 
