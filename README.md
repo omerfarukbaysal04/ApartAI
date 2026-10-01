@@ -89,6 +89,23 @@ DATABASE_URL="postgres://..." node tools/create-admin.js --email ben@sirket.com 
 E-posta zaten kayıtlıysa kullanıcı yöneticiye yükseltilir ve şifresi sıfırlanır.
 Otomasyonda şifre `ADMIN_PASSWORD` ortam değişkeniyle de verilebilir.
 
+### Demo hesapları kaldırma
+
+Demo hesaplar arayüzde gösterilmez ama veritabanında durdukları sürece bilinen
+şifreyle giriş yapılabilir. Gerçek yöneticiyi açtıktan sonra temizleyin:
+
+```bash
+# Önce ne silineceğini göster (hiçbir şeye dokunmaz)
+DATABASE_URL="postgres://..." node tools/remove-demo-users.js
+
+# Onaylayıp sil
+DATABASE_URL="postgres://..." node tools/remove-demo-users.js --confirm
+```
+
+Araç varsayılan olarak kuru çalışır ve silme sonrasında hiç yönetici hesabı
+kalmayacaksa işlemi reddeder. Yalnızca giriş hesaplarını siler; daire ve sakin
+kayıtlarına dokunmaz. Farklı adresler için `--emails a@b.com,c@d.com` kullanın.
+
 ---
 
 ## Ortam değişkenleri
