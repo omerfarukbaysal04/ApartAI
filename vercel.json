@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://apartai-backend.onrender.com/api/:path*"
+      "destination": "https://apartai.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://apartai-backend.onrender.com/uploads/:path*"
+      "destination": "https://apartai.onrender.com/uploads/:path*"
     }
   ]
 }
