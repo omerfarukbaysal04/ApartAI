@@ -64,6 +64,8 @@ const seedState = {
   warningModalAptId: null,
   warningModalTone: "friendly",
   warningModalDraft: "",
+  batchWhatsAppModalOpen: false,
+  batchWhatsAppTone: "official",
   editingSurveyId: null,
   sessionUser: null,
   activeSiteId: "site-1",
@@ -599,6 +601,8 @@ function applyServerData(data, patch = {}) {
     financesSelectedMonth: state.financesSelectedMonth,
     financesCategoryFilter: state.financesCategoryFilter,
     editingSurveyId: state.editingSurveyId,
+    batchWhatsAppModalOpen: state.batchWhatsAppModalOpen,
+    batchWhatsAppTone: state.batchWhatsAppTone,
     assistantMessages: state.assistantMessages,
     sessionUser: state.sessionUser,
     activeSiteId: state.activeSiteId,
@@ -2817,7 +2821,10 @@ function duesView() {
           : ""
       }
 
-      <div style="margin-left:auto; display:flex; gap:8px;">
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-whatsapp" style="font-size:12.5px; padding:6px 14px;" onclick="openBatchWhatsAppModal()" title="Borçlu dairelerin WhatsApp ve SMS iletişim listesi">
+          💬 Toplu WhatsApp & SMS Paneli
+        </button>
         <button class="btn" style="border-color:var(--danger); color:var(--danger); font-size:12.5px; padding:6px 14px;" onclick="sendBatchOverdueReminders()" title="Vadesi geçen tüm sakinlere uyarı bildirimi gönderir">
           📢 Geciken Dairelere Toplu Hatırlatma Gönder
         </button>
@@ -2868,15 +2875,18 @@ function duesView() {
             </div>
           </div>
 
-          <div class="apt-central-actions">
+          <div class="apt-central-actions" style="display:flex; flex-wrap:wrap; gap:8px;">
             ${
               aptTotalDebt > 0
                 ? `
                 <button class="btn primary" style="background:#ef4444; border-color:#dc2626;" onclick="openWarningModalForApt('${selectedApartment.id}')">
                   🚨 Daireye Özel Uyarı / İhtar Gönder
                 </button>
-                <button class="btn" style="background:#25d366; border-color:#16a34a; color:#ffffff;" onclick="shareApartmentViaWhatsApp('${selectedApartment.id}')">
-                  📲 WhatsApp ile Borç Uyarısı İlet
+                <button class="btn btn-whatsapp" style="background:#25d366; border-color:#16a34a; color:#ffffff; font-weight:600;" onclick="shareApartmentViaWhatsApp('${selectedApartment.id}')">
+                  💬 WhatsApp ile Borç Uyarısı İlet
+                </button>
+                <button class="btn btn-sms" style="background:#0284c7; border-color:#0369a1; color:#ffffff; font-weight:600;" onclick="shareApartmentViaSMS('${selectedApartment.id}')">
+                  📱 SMS ile Borç Uyarısı İlet
                 </button>
                 <button class="btn" style="background:rgba(255,255,255,0.2); border-color:rgba(255,255,255,0.3); color:#ffffff;" onclick="markAllApartmentDuesPaid('${selectedApartment.id}')">
                   ✅ Tüm Borçları Ödendi Yap
@@ -2989,13 +2999,14 @@ function duesView() {
                         <td>${dateText(due.dueDate)}</td>
                         <td><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span></td>
                         <td style="text-align:right;">
-                          <div class="inline-actions" style="justify-content:flex-end;">
+                          <div class="inline-actions" style="justify-content:flex-end; gap:4px; flex-wrap:nowrap;">
                             ${
                               due.status !== "paid"
                                 ? `
-                                  <button class="btn" style="padding:5px 10px; font-size:12px;" onclick="markPaid('${due.id}')">Ödendi</button>
-                                  <button class="btn" style="padding:5px 10px; font-size:12px; border-color:var(--danger); color:var(--danger);" onclick="openWarningModalForDue('${due.id}')">🚨 Uyarı</button>
-                                  <button class="btn" style="padding:5px 10px; font-size:12px; border-color:#22c55e; color:#15803d;" onclick="shareDueViaWhatsApp('${due.id}')" title="WhatsApp Mesajı Aç">💬</button>
+                                  <button class="btn" style="padding:4px 8px; font-size:11.5px;" onclick="markPaid('${due.id}')" title="Ödendi olarak işaretle">✓ Ödendi</button>
+                                  <button class="btn" style="padding:4px 8px; font-size:11.5px; border-color:var(--danger); color:var(--danger);" onclick="openWarningModalForDue('${due.id}')" title="Detaylı Uyarı / İhtar Modalı">🚨 İhtar</button>
+                                  <button class="btn btn-whatsapp" style="padding:4px 8px; font-size:11.5px;" onclick="shareDueViaWhatsApp('${due.id}')" title="WhatsApp Mesajı Aç (Web & Mobil)">💬 WA</button>
+                                  <button class="btn btn-sms" style="padding:4px 8px; font-size:11.5px;" onclick="shareDueViaSMS('${due.id}')" title="SMS Gönder & Panoya Kopyala">📱 SMS</button>
                                 `
                                 : `<span style="font-size:12px; color:var(--ok); font-weight:600;">✓ Tahsil Edildi</span>`
                             }
@@ -3024,6 +3035,7 @@ function duesView() {
 
     <!-- 6. Çok Kanallı Uyarı & İhtar Modalı -->
     ${activeWarningDue || state.warningModalAptId ? warningReminderModal() : ""}
+    ${state.batchWhatsAppModalOpen ? batchWhatsAppModal() : ""}
   `;
 }
 
@@ -3052,13 +3064,13 @@ function closeWarningModal() {
 function generateWarningText(due, resident, tone, multiDues = null) {
   const residentName = resident?.name ? `Sayın ${resident.name}` : "Değerli Sakinimiz";
   const siteName = activeSite()?.name || "Apartman Yönetimi";
-  const totalAmount = multiDues ? multiDues.reduce((s, d) => s + (Number(d.amount) || 0), 0) : due.amount;
-  const periodsStr = multiDues ? multiDues.map((d) => d.period).join(", ") : due.period;
+  const totalAmount = multiDues ? multiDues.reduce((s, d) => s + (Number(d.amount) || 0), 0) : (due ? due.amount : 0);
+  const periodsStr = multiDues ? multiDues.map((d) => d.period).join(", ") : (due ? due.period : "Güncel");
 
   if (tone === "friendly") {
     return `${residentName}, ${siteName} ${periodsStr} dönemi aidat ödemenizi (${money(totalAmount)}) hatırlatır, anlayışınız ve katkılarınız için teşekkür eder, iyi günler dileriz.`;
   } else if (tone === "official") {
-    return `BİLGİLENDİRME: ${residentName}, adınıza tahakkuk eden ${periodsStr} dönemine ait ${money(totalAmount)} tutarındaki aidat borcunuzun son ödeme tarihi (${dateText(due.dueDate)}) geçmiştir. Apartman ortak hizmetlerinin aksamaması adına ödemenizi en kısa sürede gerçekleştirmenizi rica ederiz. ${siteName}`;
+    return `BİLGİLENDİRME: ${residentName}, adınıza tahakkuk eden ${periodsStr} dönemine ait ${money(totalAmount)} tutarındaki aidat borcunuzun son ödeme tarihi (${dateText(due?.dueDate || today())}) geçmiştir. Apartman ortak hizmetlerinin aksamaması adına ödemenizi en kısa sürede gerçekleştirmenizi rica ederiz. ${siteName}`;
   } else {
     return `RESMİ İHTAR VE SON ÇAĞRI: ${residentName}, ${siteName} bünyesindeki bağımsız bölümünüze ait ${periodsStr} dönemi toplam ${money(totalAmount)} tutarındaki aidat borcunuz vadesi geçmiş olarak beklemektedir. Kat Mülkiyeti Kanunu Madde 20 uyarınca söz konusu borcun 3 (üç) iş günü içinde ödenmesi, aksi halde gecikme tazminatı ve yasal icra takibi sürecinin başlatılacağı önemle ihtar olunur.`;
   }
@@ -3072,6 +3084,63 @@ function selectWarningTone(tone) {
     : null;
   const draft = generateWarningText(due, resident, tone, multiDues);
   setState({ warningModalTone: tone, warningModalDraft: draft });
+}
+
+/* Toast Bildirim Fonksiyonu (Web Sitesi ve Mobil İçin) */
+function showToast(message, type = "ok") {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = `toast-msg ${type}`;
+  const icon = type === "ok" ? "✓" : type === "warn" ? "⚠️" : type === "danger" ? "✕" : "ℹ️";
+  toast.innerHTML = `<span style="font-size:16px;">${icon}</span><span>${safeText(message)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add("fade-out");
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }, 3200);
+}
+
+function fallbackCopyText(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+  } catch (err) {}
+  document.body.removeChild(ta);
+}
+
+function copyTextToClipboard(text, successMsg = "Metin panoya kopyalandı!") {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast(successMsg, "ok"))
+      .catch(() => {
+        fallbackCopyText(text);
+        showToast(successMsg, "ok");
+      });
+  } else {
+    fallbackCopyText(text);
+    showToast(successMsg, "ok");
+  }
+}
+
+function formatPhoneForService(phone) {
+  let digits = (phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("90") && digits.length >= 12) return digits;
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  return digits.length >= 7 ? `90${digits}` : "";
 }
 
 function warningReminderModal() {
@@ -3088,7 +3157,7 @@ function warningReminderModal() {
         <div class="section-header">
           <div>
             <h2 style="margin:0; font-size:20px;">Daireye Uyarı / Hatırlatma Gönder</h2>
-            <p style="margin:4px 0 0; color:var(--muted); font-size:13px;">${apartmentLabel(apt?.id)} — ${resident?.name || "Sakin"}</p>
+            <p style="margin:4px 0 0; color:var(--muted); font-size:13px;">${apartmentLabel(apt?.id)} — ${resident?.name || "Sakin"} (${resident?.phone || "Telefon Kayıtlı Değil"})</p>
           </div>
         </div>
 
@@ -3111,28 +3180,35 @@ function warningReminderModal() {
           <textarea id="warningModalDraftInput" rows="5" style="font-size:13.5px; line-height:1.5;" oninput="state.warningModalDraft = this.value">${safeText(draft)}</textarea>
         </label>
 
-        <!-- İletim Kanalları -->
-        <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; display:block; margin-top:14px;">İletim Kanalını Seçin:</span>
+        <!-- İletim Kanalları (Web & Mobil Uyumlu) -->
+        <span style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; display:block; margin-top:14px;">İletim Kanalını Seçin (Web & Mobil):</span>
         <div class="warning-channels-grid">
           <div class="warning-channel-card" onclick="sendWarningViaNotification('${due?.id || ""}')" title="Sakinin ApartAI bildirim kutusuna resmi bildirim düşürür">
-            <span style="font-size:18px;">🔔</span>
+            <span style="font-size:20px;">🔔</span>
             <div>
               <strong>ApartAI Bildirimi</strong>
               <small style="display:block; color:var(--muted); font-size:11px;">Uygulama içi zil</small>
             </div>
           </div>
-          <div class="warning-channel-card" onclick="sendWarningViaWhatsApp('${resident?.phone || ""}')" title="WhatsApp üzerinden hazır mesajı açar">
-            <span style="font-size:18px;">💬</span>
+          <div class="warning-channel-card" onclick="sendWarningViaWhatsApp('${resident?.phone || ""}')" title="WhatsApp üzerinden hazır mesajı açar (Web & Mobil)">
+            <span style="font-size:20px; color:#22c55e;">💬</span>
             <div>
-              <strong>WhatsApp</strong>
-              <small style="display:block; color:var(--muted); font-size:11px;">Mesajla ilet</small>
+              <strong style="color:#15803d;">WhatsApp</strong>
+              <small style="display:block; color:var(--muted); font-size:11px;">Web / Uygulama Aç</small>
             </div>
           </div>
-          <div class="warning-channel-card" onclick="sendWarningViaSMS('${due?.id || ""}')" title="SMS iletim logunu sisteme işler">
-            <span style="font-size:18px;">📱</span>
+          <div class="warning-channel-card" onclick="sendWarningViaSMS('${resident?.phone || ""}', '', '${due?.id || ""}')" title="SMS uygulamasını açar ve metni panoya kopyalar">
+            <span style="font-size:20px; color:#0284c7;">📱</span>
             <div>
-              <strong>SMS İhtar</strong>
-              <small style="display:block; color:var(--muted); font-size:11px;">Doğrudan hatta</small>
+              <strong style="color:#0369a1;">SMS İhtar</strong>
+              <small style="display:block; color:var(--muted); font-size:11px;">SMS Aç & Kopyala</small>
+            </div>
+          </div>
+          <div class="warning-channel-card" onclick="copyWarningDraftToClipboard()" title="Hazırlanan mesaj metnini panoya kopyalar">
+            <span style="font-size:20px;">📋</span>
+            <div>
+              <strong>Metni Kopyala</strong>
+              <small style="display:block; color:var(--muted); font-size:11px;">Panoya kopyala</small>
             </div>
           </div>
         </div>
@@ -3149,38 +3225,128 @@ function sendWarningViaNotification(dueId) {
       .then((data) => {
         closeWarningModal();
         applyServerData(data);
-        alert("✅ Bildirim sakinin ApartAI bildirim kutusuna başarıyla iletildi.");
+        showToast("✅ Bildirim sakinin ApartAI bildirim kutusuna iletildi.", "ok");
       })
       .catch((err) => alert(err.message));
   } else {
     closeWarningModal();
-    alert("✅ Bildirim sakinin ApartAI bildirim kutusuna başarıyla iletildi.");
+    showToast("✅ Bildirim sakinin ApartAI bildirim kutusuna iletildi.", "ok");
   }
 }
 
-function sendWarningViaWhatsApp(phone) {
+function copyWarningDraftToClipboard() {
   const text = document.getElementById("warningModalDraftInput")?.value || state.warningModalDraft;
-  const cleanPhone = (phone || "").replace(/\D/g, "");
-  const targetPhone = cleanPhone ? (cleanPhone.startsWith("90") ? cleanPhone : `90${cleanPhone.replace(/^0/, "")}`) : "";
-  const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`;
+  if (!text) {
+    showToast("⚠️ Kopyalanacak metin bulunamadı.", "warn");
+    return;
+  }
+  copyTextToClipboard(text, "📋 İhtar/hatırlatma metni panoya kopyalandı!");
+}
+
+function sendWarningViaWhatsApp(phone, customText = "") {
+  const text = customText || document.getElementById("warningModalDraftInput")?.value || state.warningModalDraft;
+  if (!text) {
+    showToast("⚠️ Gönderilecek mesaj metni boş olamaz.", "warn");
+    return;
+  }
+  let targetPhone = formatPhoneForService(phone);
+  if (!targetPhone) {
+    const manual = prompt("Bu sakinin kayıtlı geçerli bir telefon numarası bulunamadı. Lütfen telefon numarasını girin (Örn: 05321234567):");
+    if (!manual) return;
+    targetPhone = formatPhoneForService(manual);
+    if (!targetPhone) {
+      alert("Geçersiz telefon numarası.");
+      return;
+    }
+  }
+
+  // Web tarayıcısında (masaüstü) web.whatsapp.com, mobilde ise wa.me deep linki
+  const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const waUrl = isMobile
+    ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`
+    : `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(text)}`;
+
   window.open(waUrl, "_blank");
+  showToast(`💬 WhatsApp sohbeti açıldı! (${targetPhone})`, "ok");
   closeWarningModal();
 }
 
-function sendWarningViaSMS(dueId) {
-  sendWarningViaNotification(dueId);
+function sendWarningViaSMS(phone, customText = "", dueId = null) {
+  const text = customText || document.getElementById("warningModalDraftInput")?.value || state.warningModalDraft;
+  if (!text) {
+    showToast("⚠️ Gönderilecek SMS metni boş olamaz.", "warn");
+    return;
+  }
+  let targetPhone = formatPhoneForService(phone);
+  if (!targetPhone) {
+    const manual = prompt("Bu sakinin kayıtlı geçerli bir telefon numarası bulunamadı. Lütfen telefon numarasını girin (Örn: 05321234567):");
+    if (!manual) return;
+    targetPhone = formatPhoneForService(manual);
+    if (!targetPhone) {
+      alert("Geçersiz telefon numarası.");
+      return;
+    }
+  }
+
+  const formattedForSMS = targetPhone.startsWith("+") ? targetPhone : `+${targetPhone}`;
+
+  // 1. Panoya kopyala (özellikle masaüstü/web kullanıcıları için çok büyük kolaylık)
+  copyTextToClipboard(text, `📱 SMS metni panoya kopyalandı! (Numara: ${formattedForSMS})`);
+
+  // 2. Mobil ve masaüstü SMS linki tetikle
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const smsUrl = isIOS
+    ? `sms:${formattedForSMS}&body=${encodeURIComponent(text)}`
+    : `sms:${formattedForSMS}?body=${encodeURIComponent(text)}`;
+
+  try {
+    window.location.href = smsUrl;
+  } catch (e) {
+    /* desktop browser fallback */
+  }
+
+  // API log kaydı düş
+  if (dueId && API_BASE) {
+    apiRequest(`/dues/${dueId}/reminder`, { method: "POST", body: JSON.stringify({ note: `[SMS İhtar]: ${text.slice(0, 100)}...` }) }).catch(() => {});
+  }
+
+  closeWarningModal();
 }
 
 function shareDueViaWhatsApp(dueId) {
   const due = scoped.dues.find((d) => d.id === dueId);
   if (!due) return;
   const resident = residentForApartment(due.apartmentId);
-  const msg = generateWarningText(due, resident, "official");
-  sendWarningViaWhatsApp(resident?.phone || "");
+  const msg = generateWarningText(due, resident, "friendly");
+  sendWarningViaWhatsApp(resident?.phone || "", msg);
+}
+
+function shareDueViaSMS(dueId) {
+  const due = scoped.dues.find((d) => d.id === dueId);
+  if (!due) return;
+  const resident = residentForApartment(due.apartmentId);
+  const msg = generateWarningText(due, resident, "friendly");
+  sendWarningViaSMS(resident?.phone || "", msg, dueId);
 }
 
 function shareApartmentViaWhatsApp(aptId) {
-  openWarningModalForApt(aptId);
+  const apt = scoped.apartments.find((a) => a.id === aptId);
+  if (!apt) return;
+  const resident = residentForApartment(aptId);
+  const unpaidDues = scoped.dues.filter((d) => d.apartmentId === aptId && d.status !== "paid");
+  const firstDue = unpaidDues[0] || { period: "Güncel", amount: 0, dueDate: today() };
+  const msg = generateWarningText(firstDue, resident, "official", unpaidDues);
+  sendWarningViaWhatsApp(resident?.phone || "", msg);
+}
+
+function shareApartmentViaSMS(aptId) {
+  const apt = scoped.apartments.find((a) => a.id === aptId);
+  if (!apt) return;
+  const resident = residentForApartment(aptId);
+  const unpaidDues = scoped.dues.filter((d) => d.apartmentId === aptId && d.status !== "paid");
+  const firstDue = unpaidDues[0] || { period: "Güncel", amount: 0, dueDate: today() };
+  const msg = generateWarningText(firstDue, resident, "official", unpaidDues);
+  sendWarningViaSMS(resident?.phone || "", msg, firstDue.id);
 }
 
 function markAllApartmentDuesPaid(aptId) {
@@ -3192,7 +3358,7 @@ function markAllApartmentDuesPaid(aptId) {
 function sendBatchOverdueReminders() {
   const overdues = scoped.dues.filter((d) => d.status === "overdue");
   if (!overdues.length) {
-    alert("Harika! Sitede şu anda vadesi geçmiş aidat borcu bulunmuyor.");
+    showToast("Sitede şu anda vadesi geçmiş aidat borcu bulunmuyor.", "ok");
     return;
   }
   if (!confirm(`Sitede vadesi geçmiş ${overdues.length} adet aidat borcu tespit edildi. Tüm bu dairelerin sakinlerine resmi hatırlatma bildirimi gönderilsin mi?`)) {
@@ -3203,7 +3369,174 @@ function sendBatchOverdueReminders() {
       apiRequest(`/dues/${due.id}/reminder`, { method: "POST", body: JSON.stringify({ note: "Sayın sakinimiz, vadesi geçen aidat borcunuz bulunmaktadır." }) }).catch(() => {});
     }
   });
-  alert(`📢 ${overdues.length} adet geciken daire sakinine başarıyla hatırlatma bildirimi gönderildi.`);
+  showToast(`📢 ${overdues.length} adet geciken daire sakinine hatırlatma bildirimi gönderildi.`, "ok");
+}
+
+function openBatchWhatsAppModal() {
+  setState({ batchWhatsAppModalOpen: true, batchWhatsAppTone: state.batchWhatsAppTone || "official" });
+}
+
+function closeBatchWhatsAppModal() {
+  setState({ batchWhatsAppModalOpen: false });
+}
+
+function batchWhatsAppModal() {
+  const overdues = scoped.dues.filter((d) => d.status !== "paid");
+  const siteApartments = scoped.apartments || [];
+  const siteBlocks = scoped.blocks || [];
+  const tone = state.batchWhatsAppTone || "official";
+
+  // Daire bazında grupla
+  const aptGroups = {};
+  for (const due of overdues) {
+    if (!aptGroups[due.apartmentId]) {
+      const apt = siteApartments.find((a) => a.id === due.apartmentId);
+      const blk = siteBlocks.find((b) => b.id === apt?.blockId);
+      const resident = residentForApartment(due.apartmentId);
+      aptGroups[due.apartmentId] = {
+        apartment: apt,
+        block: blk,
+        resident,
+        dues: [],
+        totalDebt: 0,
+      };
+    }
+    aptGroups[due.apartmentId].dues.push(due);
+    aptGroups[due.apartmentId].totalDebt += (Number(due.amount) || 0);
+  }
+
+  const list = Object.values(aptGroups);
+
+  return `
+    <div class="modal-backdrop" onclick="closeBatchWhatsAppModal()">
+      <div class="request-modal" style="max-width:780px; width:95%; max-height:88vh; display:flex; flex-direction:column;" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeBatchWhatsAppModal()" aria-label="Kapat">×</button>
+        <div class="section-header" style="margin-bottom:12px;">
+          <div>
+            <h2 style="margin:0; font-size:20px; display:flex; align-items:center; gap:8px;">
+              <span>💬</span> Toplu WhatsApp & SMS İletişim Merkezi
+            </h2>
+            <p style="margin:4px 0 0; color:var(--muted); font-size:13px;">
+              Ödenmemiş aidatı olan <strong>${list.length} daire</strong> listelendi. Web sitesinden tek tıkla mesaj açabilir veya numaraları kopyalayabilirsiniz.
+            </p>
+          </div>
+        </div>
+
+        <!-- Üst Hızlı İşlem Araç Çubuğu -->
+        <div style="display:flex; flex-wrap:wrap; gap:8px; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:14px; align-items:center;">
+          <button class="btn" style="font-size:12.5px; padding:6px 12px; background:#ffffff; border-color:#0284c7; color:#0369a1; font-weight:600;" onclick="copyAllOverduePhones()" title="Toplu SMS panellerine yapıştırmak için tüm telefon numaralarını kopyalar">
+            📋 Tüm Telefon Numaralarını Kopyala (${list.length})
+          </button>
+          <button class="btn" style="font-size:12.5px; padding:6px 12px; background:#ffffff; border-color:#22c55e; color:#15803d; font-weight:600;" onclick="copyGeneralReminderTemplate()" title="Genel aidat duyuru şablonunu panoya kopyalar">
+            📋 Genel Hatırlatma Şablonunu Kopyala
+          </button>
+          <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; color:var(--muted); font-weight:600;">Mesaj Tonu:</span>
+            <select class="dues-filter-select" style="padding:4px 8px; font-size:12px;" onchange="setState({ batchWhatsAppTone: this.value })">
+              <option value="friendly" ${tone === "friendly" ? "selected" : ""}>🟢 Nazik</option>
+              <option value="official" ${tone === "official" ? "selected" : ""}>🟡 Resmi</option>
+              <option value="legal" ${tone === "legal" ? "selected" : ""}>🔴 Hukuki</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Liste Tablosu -->
+        <div style="overflow-y:auto; flex:1; border:1px solid #e2e8f0; border-radius:10px;">
+          ${
+            list.length === 0
+              ? `<div style="padding:30px; text-align:center; color:var(--ok); font-weight:600;">✨ Harika! Şu an ödenmemiş aidat borcu bulunmuyor.</div>`
+              : `
+              <table class="batch-wa-table">
+                <thead>
+                  <tr>
+                    <th>Daire / Blok</th>
+                    <th>Sakin Bilgisi</th>
+                    <th>Borç / Dönemler</th>
+                    <th style="text-align:right;">Hızlı İletişim</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.map((group) => {
+                    const blkName = group.block?.name || "Blok";
+                    const aptNo = group.apartment?.no || "-";
+                    const resName = group.resident?.name || "İsimsiz";
+                    const resPhone = group.resident?.phone || "";
+                    const periods = group.dues.map((d) => d.period).join(", ");
+                    const firstDue = group.dues[0];
+                    const msg = generateWarningText(firstDue, group.resident, tone, group.dues);
+                    const safeMsgAttr = encodeURIComponent(msg);
+                    return `
+                      <tr>
+                        <td>
+                          <strong>${safeText(blkName)} No: ${safeText(aptNo)}</strong>
+                          <small style="display:block; color:var(--muted); font-size:11px;">${group.dues.length} Dönem Borç</small>
+                        </td>
+                        <td>
+                          <strong>${safeText(resName)}</strong>
+                          <span style="display:block; font-size:12px; color:${resPhone ? "var(--text-sub)" : "var(--danger)"};">
+                            ${resPhone ? `📞 ${safeText(resPhone)}` : "⚠️ Telefon Kayıtlı Değil"}
+                          </span>
+                        </td>
+                        <td>
+                          <strong style="color:var(--danger);">${money(group.totalDebt)}</strong>
+                          <small style="display:block; color:var(--muted); font-size:11px;">${safeText(periods)}</small>
+                        </td>
+                        <td style="text-align:right;">
+                          <div style="display:flex; justify-content:flex-end; gap:4px;">
+                            <button class="btn btn-whatsapp" style="padding:4px 8px; font-size:11.5px;" onclick="sendWarningViaWhatsApp('${safeText(resPhone)}', decodeURIComponent('${safeMsgAttr}'))" title="WhatsApp Mesajı Aç">
+                              💬 WA
+                            </button>
+                            <button class="btn btn-sms" style="padding:4px 8px; font-size:11.5px;" onclick="sendWarningViaSMS('${safeText(resPhone)}', decodeURIComponent('${safeMsgAttr}'), '${firstDue?.id || ""}')" title="SMS Gönder & Kopyala">
+                              📱 SMS
+                            </button>
+                            <button class="btn" style="padding:4px 7px; font-size:11.5px;" onclick="copyTextToClipboard(decodeURIComponent('${safeMsgAttr}'), '${safeText(resName)} için mesaj panoya kopyalandı!')" title="Metni Kopyala">
+                              📋
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+              `
+          }
+        </div>
+
+        <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+          <button class="btn" onclick="closeBatchWhatsAppModal()" style="padding:8px 18px;">Kapat</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function copyAllOverduePhones() {
+  const overdues = scoped.dues.filter((d) => d.status !== "paid");
+  const phones = [];
+  const seen = new Set();
+  for (const due of overdues) {
+    const res = residentForApartment(due.apartmentId);
+    if (res?.phone) {
+      const clean = formatPhoneForService(res.phone);
+      if (clean && !seen.has(clean)) {
+        seen.add(clean);
+        phones.push(clean.startsWith("90") ? `0${clean.slice(2)}` : clean);
+      }
+    }
+  }
+  if (!phones.length) {
+    showToast("⚠️ Kayıtlı telefon numarası bulunamadı.", "warn");
+    return;
+  }
+  copyTextToClipboard(phones.join(", "), `📋 ${phones.length} adet telefon numarası kopyalandı!`);
+}
+
+function copyGeneralReminderTemplate() {
+  const site = activeSite()?.name || "Apartman Yönetimi";
+  const currentPeriod = new Date().toISOString().slice(0, 7);
+  const text = `Değerli ${site} Sakinleri, ${currentPeriod} dönemi ve geçmiş aidat borcu bulunan komşularımızın site ortak hizmetlerinin aksamaması adına ödemelerini tamamlamalarını rica eder, anlayışınız için teşekkür ederiz. - ${site} Yönetimi`;
+  copyTextToClipboard(text, "📋 Genel aidat hatırlatma şablonu kopyalandı!");
 }
 
 const EXPENSE_CATEGORIES = {
