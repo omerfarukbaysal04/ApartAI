@@ -1181,14 +1181,13 @@ function render() {
 
   const site = activeSite();
   app.innerHTML = `
-    <div class="shell ${state.mode === "resident" ? "resident-shell" : ""}">
+    <div class="shell">
       ${state.mobileNavOpen ? `<div class="sidebar-backdrop" onclick="setState({ mobileNavOpen: false })"></div>` : ""}
       <aside class="sidebar ${state.mobileNavOpen ? "mobile-open" : ""}">
         <div class="brand">
-          ${brandLogo()}
-          <div>
-            <strong>ApartAI</strong>
-            <span>AI destekli site yönetimi</span>
+          <div style="display:flex; flex-direction:column; gap:3px;">
+            ${brandLogo()}
+            <span style="color:rgba(247, 251, 249, 0.65); font-size:11.5px; padding-left:2px;">AI destekli site yönetimi</span>
           </div>
           <button class="mobile-close-btn" onclick="setState({ mobileNavOpen: false })" aria-label="Menüyü Kapat">×</button>
         </div>
