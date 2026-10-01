@@ -17,7 +17,7 @@ const repository = createRepository();
 const storage = createStorage();
 const notifier = createNotifier();
 const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL || 60 * 60 * 24 * 7);
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-nano";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -115,7 +115,7 @@ async function ensureAuthSecret() {
       if (process.env.NODE_ENV === "production") {
         console.warn(
           "[auth] AUTH_SECRET ortam değişkeni tanımlı değil. Anahtar veritabanına yazıldı; " +
-            "yine de Render/Vercel panelinden AUTH_SECRET tanımlamanız önerilir."
+          "yine de Render/Vercel panelinden AUTH_SECRET tanımlamanız önerilir."
         );
       }
       return authSecret;
@@ -781,9 +781,9 @@ async function callOpenAIJson({ instructions, input, fallback, operation = "unkn
   try {
     const userContent = photo
       ? [
-          { type: "input_text", text: JSON.stringify(input) },
-          { type: "input_image", image_url: image },
-        ]
+        { type: "input_text", text: JSON.stringify(input) },
+        { type: "input_image", image_url: image },
+      ]
       : JSON.stringify(input);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",

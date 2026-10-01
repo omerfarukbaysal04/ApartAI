@@ -519,7 +519,7 @@ function saveActiveView(view) {
     if (location.hash !== `#${view}`) {
       history.replaceState(null, "", `#${view}`);
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function getSavedActiveView(role) {
@@ -1466,11 +1466,11 @@ function showcaseSlide(slide, index) {
       <p>${safeText(slide.text)}</p>
       <ul class="hero-slide-bullets">
         ${slide.bullets
-          .map(
-            (item) =>
-              `<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${safeText(item)}</li>`
-          )
-          .join("")}
+      .map(
+        (item) =>
+          `<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${safeText(item)}</li>`
+      )
+      .join("")}
       </ul>
     </article>`;
 }
@@ -1580,9 +1580,9 @@ function authView() {
             ${SHOWCASE_SLIDES.map((slide, index) => showcaseSlide(slide, index)).join("")}
             <div class="hero-stage-dots" id="showcase-dots">
               ${SHOWCASE_SLIDES.map(
-                (slide, index) =>
-                  `<button type="button" class="showcase-dot${index === showcaseIndex ? " active" : ""}" onclick="goToShowcase(${index})" aria-label="${safeText(slide.title)}"><span class="showcase-dot-fill"></span></button>`
-              ).join("")}
+    (slide, index) =>
+      `<button type="button" class="showcase-dot${index === showcaseIndex ? " active" : ""}" onclick="goToShowcase(${index})" aria-label="${safeText(slide.title)}"><span class="showcase-dot-fill"></span></button>`
+  ).join("")}
             </div>
           </div>
         </div>
@@ -1666,7 +1666,7 @@ function authView() {
           <a href="https://www.linkedin.com/in/baysal/" target="_blank" rel="noopener noreferrer" title="LinkedIn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>
           </a>
-          <a href="https://www.youtube.com/@baysalsoft" target="_blank" rel="noopener noreferrer" title="YouTube">
+          <a href="https://www.youtube.com/@omerfarukbaysall" target="_blank" rel="noopener noreferrer" title="YouTube">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
           </a>
           <a href="https://x.com/BaysalSoft" target="_blank" rel="noopener noreferrer" title="X (Twitter)">
@@ -1705,26 +1705,25 @@ function authModalView(isLogin) {
           <button class="${isLogin ? "active" : ""}" onclick="authMode = 'login'; authModalOpen = true; render()">Giriş</button>
           <button class="${!isLogin ? "active" : ""}" onclick="authMode = 'register'; authModalOpen = true; render()">Sakin kaydı</button>
         </div>
-        ${
-          isLogin
-            ? `<form class="grid" onsubmit="loginUser(event)">
+        ${isLogin
+      ? `<form class="grid" onsubmit="loginUser(event)">
                 <label>E-posta<input name="email" type="email" autocomplete="email" required /></label>
                 <label>Şifre<input name="password" type="password" autocomplete="current-password" required /></label>
                 <button class="btn primary" type="submit">Panele Gir</button>
               </form>`
-            : `<form class="grid" onsubmit="registerResident(event)">
+      : `<form class="grid" onsubmit="registerResident(event)">
                 <label>Ad soyad<input name="name" required /></label>
                 <label>E-posta<input name="email" type="email" required /></label>
                 <label>Telefon<input name="phone" placeholder="05xx" /></label>
                 <label>Site ve blok
                   <select name="blockId">
                     ${(state.sites || [])
-                      .map((site) => {
-                        const blocks = (state.blocks || []).filter((block) => block.siteId === site.id);
-                        if (!blocks.length) return "";
-                        return `<optgroup label="${safeText(site.name)}">${blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</optgroup>`;
-                      })
-                      .join("")}
+        .map((site) => {
+          const blocks = (state.blocks || []).filter((block) => block.siteId === site.id);
+          if (!blocks.length) return "";
+          return `<optgroup label="${safeText(site.name)}">${blocks.map((block) => `<option value="${block.id}">${safeText(block.name)}</option>`).join("")}</optgroup>`;
+        })
+        .join("")}
                   </select>
                 </label>
                 <div class="form-grid wide">
@@ -1734,7 +1733,7 @@ function authModalView(isLogin) {
                 <label>Şifre<input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="En az 6 karakter" required /></label>
                 <button class="btn primary" type="submit">Sakin Hesabı Oluştur</button>
               </form>`
-        }
+    }
       </section>
     </div>
   `;
@@ -1823,7 +1822,7 @@ function markNotifAsRead(id) {
     ids.push(id);
     try {
       localStorage.setItem(getReadNotifStorageKey(), JSON.stringify(ids));
-    } catch {}
+    } catch { }
   }
 }
 
@@ -2070,7 +2069,7 @@ function markAllNotificationsRead(event) {
   });
   try {
     localStorage.setItem(getReadNotifStorageKey(), JSON.stringify(ids));
-  } catch {}
+  } catch { }
   if (state.sessionUser?.role === "resident") {
     markAnnouncementsRead();
   }
@@ -2540,9 +2539,8 @@ function sessionActions() {
             </div>
           </div>
           <div class="notification-list">
-            ${
-              notifs.length
-                ? notifs.map((n) => `
+            ${notifs.length
+      ? notifs.map((n) => `
                   <div class="notification-item ${n.unread ? "unread" : ""}" onclick="handleNotificationClick('${n.id}')">
                     <div class="notif-icon-col">${n.icon}</div>
                     <div class="notif-content-col">
@@ -2553,8 +2551,8 @@ function sessionActions() {
                     ${n.unread ? `<span class="unread-dot"></span>` : ""}
                   </div>
                 `).join("")
-                : `<div class="empty" style="padding:20px; font-size:13px;">Yeni bildirim bulunmuyor.</div>`
-            }
+      : `<div class="empty" style="padding:20px; font-size:13px;">Yeni bildirim bulunmuyor.</div>`
+    }
           </div>
           <div class="notification-drawer-footer">
             <button type="button" class="btn text-btn" onclick="playNotificationSound()" style="font-size:11.5px;">🔊 Bildirim Sesi Dinle</button>
@@ -2567,9 +2565,9 @@ function sessionActions() {
       <div class="user-chip clickable ${state.view === "profile" ? "active" : ""}" onclick="setState({ view: 'profile' })" title="Profil & Daire Bilgilerini Düzenle">
         <div class="user-avatar-circle">
           ${user.avatar
-            ? `<img src="${escapeAttr(user.avatar)}" class="user-chip-avatar-img" alt="${safeText(user.name)}" />`
-            : `<span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>`
-          }
+      ? `<img src="${escapeAttr(user.avatar)}" class="user-chip-avatar-img" alt="${safeText(user.name)}" />`
+      : `<span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>`
+    }
         </div>
         <div class="user-chip-text">
           <strong>${safeText(user.name)}</strong>
@@ -2625,30 +2623,30 @@ function managerNav() {
   const isBlockActive = state.activeBlockId && state.activeBlockId !== "all";
   const items = isBlockActive
     ? [
-        ["dashboard", "Panel"],
-        ["dues", "Aidatlar"],
-        ["finances", "Kasa & Giderler"],
-        ["requests", "Talepler"],
-        ["announcements", "Duyurular"],
-        ["surveys", "Anketler"],
-        ["block-setup", "🏢 Blok Özelleştirme"],
-        ["ai-assistant", "✨ AI Asistan"],
-        ["reports", "Rapor"],
-        ["profile", "Profilim"],
-      ]
+      ["dashboard", "Panel"],
+      ["dues", "Aidatlar"],
+      ["finances", "Kasa & Giderler"],
+      ["requests", "Talepler"],
+      ["announcements", "Duyurular"],
+      ["surveys", "Anketler"],
+      ["block-setup", "🏢 Blok Özelleştirme"],
+      ["ai-assistant", "✨ AI Asistan"],
+      ["reports", "Rapor"],
+      ["profile", "Profilim"],
+    ]
     : [
-        ["dashboard", "Panel"],
-        ["dues", "Aidatlar"],
-        ["finances", "Kasa & Giderler"],
-        ["requests", "Talepler"],
-        ["announcements", "Duyurular"],
-        ["surveys", "Anketler"],
-        ["setup", "Site Kurulumu"],
-        ["ai-assistant", "✨ AI Asistan"],
-        ["reports", "Rapor"],
-        ["sites", "Tüm Siteler"],
-        ["profile", "Profilim"],
-      ];
+      ["dashboard", "Panel"],
+      ["dues", "Aidatlar"],
+      ["finances", "Kasa & Giderler"],
+      ["requests", "Talepler"],
+      ["announcements", "Duyurular"],
+      ["surveys", "Anketler"],
+      ["setup", "Site Kurulumu"],
+      ["ai-assistant", "✨ AI Asistan"],
+      ["reports", "Rapor"],
+      ["sites", "Tüm Siteler"],
+      ["profile", "Profilim"],
+    ];
   return `<nav class="nav">${items.map(([view, label]) => `<button class="${state.view === view ? "active" : ""}" onclick="setState({ view: '${view}', mobileNavOpen: false })">${label}</button>`).join("")}</nav>`;
 }
 
@@ -2859,17 +2857,16 @@ function dashboardView() {
             <span class="card-action-hint" style="margin:0;">Duyurulara Git →</span>
           </div>
           <div class="dash-mini-announcements">
-            ${
-              scoped.announcements.length
-                ? scoped.announcements.slice(-2).reverse().map((item) => `
+            ${scoped.announcements.length
+      ? scoped.announcements.slice(-2).reverse().map((item) => `
                   <div class="dash-mini-ann-item">
                     <strong>${safeText(item.title)}</strong>
                     <p>${safeText(item.aiContent || item.content)}</p>
                     <small>${dateText(item.date)}</small>
                   </div>
                 `).join("")
-                : `<div class="empty">Yayınlanmış duyuru yok.</div>`
-            }
+      : `<div class="empty">Yayınlanmış duyuru yok.</div>`
+    }
           </div>
         </section>
 
@@ -2882,12 +2879,11 @@ function dashboardView() {
             <span class="card-action-hint" style="margin:0;">Anketlere Git →</span>
           </div>
           <div style="font-size:13px; color:var(--text-sub);">
-            ${
-              activeSurveys.length > 0
-                ? `<p style="margin:0;">Şu anda yayında <strong>${activeSurveys.length} adet</strong> aktif karar anketi bulunuyor.</p>
+            ${activeSurveys.length > 0
+      ? `<p style="margin:0;">Şu anda yayında <strong>${activeSurveys.length} adet</strong> aktif karar anketi bulunuyor.</p>
                    <small style="color:var(--muted);">${activeSurveys[0].title}</small>`
-                : `<p style="margin:0; color:var(--muted);">Aktif anket bulunmuyor. Yeni bir istişare oylaması başlatabilirsiniz.</p>`
-            }
+      : `<p style="margin:0; color:var(--muted);">Aktif anket bulunmuyor. Yeni bir istişare oylaması başlatabilirsiniz.</p>`
+    }
           </div>
         </section>
       </div>
@@ -2984,12 +2980,12 @@ function duesView() {
         <select class="dues-filter-select" onchange="setState({ duesSelectedAptId: this.value })">
           <option value="all" ${state.duesSelectedAptId === "all" ? "selected" : ""}>Tüm Daireler (${siteApartments.length})</option>
           ${siteApartments
-            .filter((a) => state.duesBlockFilter === "all" || a.blockId === state.duesBlockFilter)
-            .map((a) => {
-              const res = residentForApartment(a.id);
-              const blk = siteBlocks.find((b) => b.id === a.blockId);
-              return `<option value="${a.id}" ${state.duesSelectedAptId === a.id ? "selected" : ""}>${blk?.name || "Blok"} No: ${a.no} (${res?.name || "Boş"})</option>`;
-            }).join("")}
+      .filter((a) => state.duesBlockFilter === "all" || a.blockId === state.duesBlockFilter)
+      .map((a) => {
+        const res = residentForApartment(a.id);
+        const blk = siteBlocks.find((b) => b.id === a.blockId);
+        return `<option value="${a.id}" ${state.duesSelectedAptId === a.id ? "selected" : ""}>${blk?.name || "Blok"} No: ${a.no} (${res?.name || "Boş"})</option>`;
+      }).join("")}
         </select>
       </div>
 
@@ -3011,13 +3007,12 @@ function duesView() {
         </select>
       </div>
 
-      ${
-        hasActiveFilter
-          ? `<button class="btn" style="padding:6px 14px; font-size:12.5px; border-color:var(--line); color:var(--text-sub);" onclick="setState({ duesBlockFilter: 'all', duesSelectedAptId: 'all', duesPeriodFilter: 'all', duesStatusFilter: 'all' })" title="Tüm filtreleri temizle">
+      ${hasActiveFilter
+      ? `<button class="btn" style="padding:6px 14px; font-size:12.5px; border-color:var(--line); color:var(--text-sub);" onclick="setState({ duesBlockFilter: 'all', duesSelectedAptId: 'all', duesPeriodFilter: 'all', duesStatusFilter: 'all' })" title="Tüm filtreleri temizle">
               ✕ Filtreleri Temizle
             </button>`
-          : ""
-      }
+      : ""
+    }
 
       <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-whatsapp" style="font-size:12.5px; padding:6px 14px;" onclick="openBatchWhatsAppModal()" title="Borçlu dairelerin WhatsApp ve SMS iletişim listesi">
@@ -3030,9 +3025,8 @@ function duesView() {
     </div>
 
     <!-- 3. Daire Tek Merkezden İnceleme Kartı (İstenen Daire Seçildiğinde Gözükür) -->
-    ${
-      selectedApartment
-        ? `
+    ${selectedApartment
+      ? `
         <div class="apartment-central-card">
           <div class="apt-central-header">
             <div>
@@ -3074,9 +3068,8 @@ function duesView() {
           </div>
 
           <div class="apt-central-actions" style="display:flex; flex-wrap:wrap; gap:8px;">
-            ${
-              aptTotalDebt > 0
-                ? `
+            ${aptTotalDebt > 0
+        ? `
                 <button class="btn primary" style="background:#ef4444; border-color:#dc2626;" onclick="openWarningModalForApt('${selectedApartment.id}')">
                   🚨 Daireye Özel Uyarı / İhtar Gönder
                 </button>
@@ -3090,14 +3083,14 @@ function duesView() {
                   ✅ Tüm Borçları Ödendi Yap
                 </button>
                 `
-                : `
+        : `
                 <span style="font-size:13.5px; color:#6ee7b7; font-weight:600;">✨ Bu dairenin herhangi bir gecikmiş aidat borcu bulunmamaktadır.</span>
                 `
-            }
+      }
           </div>
         </div>
         `
-        : ""
+      : ""
     }
 
     <!-- 4. Tahsilat Tahmini & Daire Alışkanlıkları -->
@@ -3176,13 +3169,12 @@ function duesView() {
             </tr>
           </thead>
           <tbody>
-            ${
-              filteredDues.length
-                ? filteredDues.map((due) => {
-                    const apt = siteApartments.find((a) => a.id === due.apartmentId);
-                    const blk = siteBlocks.find((b) => b.id === apt?.blockId);
-                    const res = residentForApartment(due.apartmentId);
-                    return `
+            ${filteredDues.length
+      ? filteredDues.map((due) => {
+        const apt = siteApartments.find((a) => a.id === due.apartmentId);
+        const blk = siteBlocks.find((b) => b.id === apt?.blockId);
+        const res = residentForApartment(due.apartmentId);
+        return `
                       <tr style="cursor:pointer;" onclick="if (!event.target.closest('button') && !event.target.closest('a')) setState({ duesSelectedAptId: '${due.apartmentId}' })">
                         <td>
                           <strong>${blk?.name || "Blok"} No: ${apt?.no || "-"}</strong>
@@ -3198,22 +3190,21 @@ function duesView() {
                         <td><span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span></td>
                         <td style="text-align:right;">
                           <div class="inline-actions" style="justify-content:flex-end; gap:4px; flex-wrap:nowrap;">
-                            ${
-                              due.status !== "paid"
-                                ? `
+                            ${due.status !== "paid"
+            ? `
                                   <button class="btn" style="padding:4px 8px; font-size:11.5px;" onclick="markPaid('${due.id}')" title="Ödendi olarak işaretle">✓ Ödendi</button>
                                   <button class="btn" style="padding:4px 8px; font-size:11.5px; border-color:var(--danger); color:var(--danger);" onclick="openWarningModalForDue('${due.id}')" title="Detaylı Uyarı / İhtar Modalı">🚨 İhtar</button>
                                   <button class="btn btn-whatsapp" style="padding:4px 8px; font-size:11.5px;" onclick="shareDueViaWhatsApp('${due.id}')" title="WhatsApp Mesajı Aç (Web & Mobil)">💬 WA</button>
                                   <button class="btn btn-sms" style="padding:4px 8px; font-size:11.5px;" onclick="shareDueViaSMS('${due.id}')" title="SMS Gönder & Panoya Kopyala">📱 SMS</button>
                                 `
-                                : `<span style="font-size:12px; color:var(--ok); font-weight:600;">✓ Tahsil Edildi</span>`
-                            }
+            : `<span style="font-size:12px; color:var(--ok); font-weight:600;">✓ Tahsil Edildi</span>`
+          }
                           </div>
                         </td>
                       </tr>
                     `;
-                  }).join("")
-                : `
+      }).join("")
+      : `
                 <tr>
                   <td colspan="7" style="text-align:center; padding:36px 16px; color:var(--muted);">
                     <div style="font-size:26px; margin-bottom:8px;">🔍</div>
@@ -3225,7 +3216,7 @@ function duesView() {
                   </td>
                 </tr>
                 `
-            }
+    }
           </tbody>
         </table>
       </div>
@@ -3314,7 +3305,7 @@ function fallbackCopyText(text) {
   ta.select();
   try {
     document.execCommand("copy");
-  } catch (err) {}
+  } catch (err) { }
   document.body.removeChild(ta);
 }
 
@@ -3505,7 +3496,7 @@ function sendWarningViaSMS(phone, customText = "", dueId = null) {
 
   // API log kaydı düş
   if (dueId && API_BASE) {
-    apiRequest(`/dues/${dueId}/reminder`, { method: "POST", body: JSON.stringify({ note: `[SMS İhtar]: ${text.slice(0, 100)}...` }) }).catch(() => {});
+    apiRequest(`/dues/${dueId}/reminder`, { method: "POST", body: JSON.stringify({ note: `[SMS İhtar]: ${text.slice(0, 100)}...` }) }).catch(() => { });
   }
 
   closeWarningModal();
@@ -3564,7 +3555,7 @@ function sendBatchOverdueReminders() {
   }
   overdues.forEach((due) => {
     if (API_BASE) {
-      apiRequest(`/dues/${due.id}/reminder`, { method: "POST", body: JSON.stringify({ note: "Sayın sakinimiz, vadesi geçen aidat borcunuz bulunmaktadır." }) }).catch(() => {});
+      apiRequest(`/dues/${due.id}/reminder`, { method: "POST", body: JSON.stringify({ note: "Sayın sakinimiz, vadesi geçen aidat borcunuz bulunmaktadır." }) }).catch(() => { });
     }
   });
   showToast(`📢 ${overdues.length} adet geciken daire sakinine hatırlatma bildirimi gönderildi.`, "ok");
@@ -3640,10 +3631,9 @@ function batchWhatsAppModal() {
 
         <!-- Liste Tablosu -->
         <div style="overflow-y:auto; flex:1; border:1px solid #e2e8f0; border-radius:10px;">
-          ${
-            list.length === 0
-              ? `<div style="padding:30px; text-align:center; color:var(--ok); font-weight:600;">✨ Harika! Şu an ödenmemiş aidat borcu bulunmuyor.</div>`
-              : `
+          ${list.length === 0
+      ? `<div style="padding:30px; text-align:center; color:var(--ok); font-weight:600;">✨ Harika! Şu an ödenmemiş aidat borcu bulunmuyor.</div>`
+      : `
               <table class="batch-wa-table">
                 <thead>
                   <tr>
@@ -3655,15 +3645,15 @@ function batchWhatsAppModal() {
                 </thead>
                 <tbody>
                   ${list.map((group) => {
-                    const blkName = group.block?.name || "Blok";
-                    const aptNo = group.apartment?.no || "-";
-                    const resName = group.resident?.name || "İsimsiz";
-                    const resPhone = group.resident?.phone || "";
-                    const periods = group.dues.map((d) => d.period).join(", ");
-                    const firstDue = group.dues[0];
-                    const msg = generateWarningText(firstDue, group.resident, tone, group.dues);
-                    const safeMsgAttr = encodeURIComponent(msg);
-                    return `
+        const blkName = group.block?.name || "Blok";
+        const aptNo = group.apartment?.no || "-";
+        const resName = group.resident?.name || "İsimsiz";
+        const resPhone = group.resident?.phone || "";
+        const periods = group.dues.map((d) => d.period).join(", ");
+        const firstDue = group.dues[0];
+        const msg = generateWarningText(firstDue, group.resident, tone, group.dues);
+        const safeMsgAttr = encodeURIComponent(msg);
+        return `
                       <tr>
                         <td>
                           <strong>${safeText(blkName)} No: ${safeText(aptNo)}</strong>
@@ -3694,11 +3684,11 @@ function batchWhatsAppModal() {
                         </td>
                       </tr>
                     `;
-                  }).join("")}
+      }).join("")}
                 </tbody>
               </table>
               `
-          }
+    }
         </div>
 
         <div style="margin-top:14px; display:flex; justify-content:flex-end;">
@@ -3906,13 +3896,12 @@ function managerFinancesView() {
         </select>
       </div>
 
-      ${
-        dateFilter !== "all" || selectedMonth !== "all" || categoryFilter !== "all" || state.financesStartDate || state.financesEndDate
-          ? `<button class="btn" style="padding:6px 12px; font-size:12px; border-color:var(--line); color:var(--text-sub);" onclick="setState({ financesDateFilter: 'all', financesSelectedMonth: 'all', financesCategoryFilter: 'all', financesStartDate: '', financesEndDate: '' })">
+      ${dateFilter !== "all" || selectedMonth !== "all" || categoryFilter !== "all" || state.financesStartDate || state.financesEndDate
+      ? `<button class="btn" style="padding:6px 12px; font-size:12px; border-color:var(--line); color:var(--text-sub);" onclick="setState({ financesDateFilter: 'all', financesSelectedMonth: 'all', financesCategoryFilter: 'all', financesStartDate: '', financesEndDate: '' })">
               ✕ Filtreleri Temizle
             </button>`
-          : ""
-      }
+      : ""
+    }
     </div>
 
     <!-- 3. Aylık Nakit Akışı ve Gelir-Gider İncelemesi (Monthly Breakdown) -->
@@ -3922,23 +3911,21 @@ function managerFinancesView() {
           <h2>Aylık Nakit Akışı ve Gelir-Gider Analizi</h2>
           <p>Her ayın gelir, gider ve net bakiye dengesi. İlgili aya tıklayarak detaylı filtreleme yapabilirsiniz.</p>
         </div>
-        ${
-          selectedMonth !== "all"
-            ? `<button class="btn" style="padding:6px 12px; font-size:12.5px;" onclick="setState({ financesSelectedMonth: 'all' })">✕ Ay Filtresini Temizle (${selectedMonth})</button>`
-            : ""
-        }
+        ${selectedMonth !== "all"
+      ? `<button class="btn" style="padding:6px 12px; font-size:12.5px;" onclick="setState({ financesSelectedMonth: 'all' })">✕ Ay Filtresini Temizle (${selectedMonth})</button>`
+      : ""
+    }
       </div>
 
       <div class="monthly-cashflow-container">
-        ${
-          monthlyBreakdown.length
-            ? monthlyBreakdown.map((m) => {
-                const net = m.income - m.expense;
-                const totalVol = (m.income + m.expense) || 1;
-                const incPct = Math.round((m.income / totalVol) * 100);
-                const expPct = 100 - incPct;
-                const isSelected = selectedMonth === m.period;
-                return `
+        ${monthlyBreakdown.length
+      ? monthlyBreakdown.map((m) => {
+        const net = m.income - m.expense;
+        const totalVol = (m.income + m.expense) || 1;
+        const incPct = Math.round((m.income / totalVol) * 100);
+        const expPct = 100 - incPct;
+        const isSelected = selectedMonth === m.period;
+        return `
                   <div class="monthly-cashflow-card ${isSelected ? "active-period" : ""}" onclick="setState({ financesSelectedMonth: '${isSelected ? "all" : m.period}' })" title="Bu ayın detaylarını filtrelemek için tıklayın">
                     <div class="cashflow-month-header">
                       <span class="cashflow-month-title">${m.period}</span>
@@ -3963,9 +3950,9 @@ function managerFinancesView() {
                     </small>
                   </div>
                 `;
-              }).join("")
-            : `<div class="empty">Henüz aylık akış verisi bulunmuyor.</div>`
-        }
+      }).join("")
+      : `<div class="empty">Henüz aylık akış verisi bulunmuyor.</div>`
+    }
       </div>
     </section>
 
@@ -4017,9 +4004,8 @@ function managerFinancesView() {
             <p>Seçilen dönemde harcamaların kalemlere göre yoğunluğu.</p>
           </div>
         </div>
-        ${
-          categoryBreakdown.length
-            ? `
+        ${categoryBreakdown.length
+      ? `
             <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
               ${categoryBreakdown.map((item) => `
                 <div class="category-breakdown-card">
@@ -4034,8 +4020,8 @@ function managerFinancesView() {
               `).join("")}
             </div>
             `
-            : `<div class="empty">Bu tarih aralığında kaydedilmiş harcama bulunmamaktadır.</div>`
-        }
+      : `<div class="empty">Bu tarih aralığında kaydedilmiş harcama bulunmamaktadır.</div>`
+    }
       </section>
     </div>
 
@@ -4047,9 +4033,8 @@ function managerFinancesView() {
           <p>Filtreye uygun tüm harcamalar, faturalar ve tedarikçiler.</p>
         </div>
       </div>
-      ${
-        filteredExpenses.length
-          ? `
+      ${filteredExpenses.length
+      ? `
           <div class="table-wrap">
             <table class="table">
               <thead>
@@ -4084,7 +4069,7 @@ function managerFinancesView() {
             </table>
           </div>
           `
-          : `
+      : `
           <div class="empty" style="text-align:center; padding:32px 16px;">
             <div style="font-size:24px; margin-bottom:6px;">🧾</div>
             <strong>Seçilen filtre kriterlerine uygun gider kaydı bulunamadı.</strong>
@@ -4094,7 +4079,7 @@ function managerFinancesView() {
             </button>
           </div>
           `
-      }
+    }
     </section>
   `;
 }
@@ -4228,11 +4213,10 @@ function requestDetailModal(request) {
               <strong>Talep Açıklaması</strong>
               <p>${request.description}</p>
             </div>
-            ${
-              requestPhotoSrc(request)
-                ? `<figure class="attachment-preview"><img src="${requestPhotoSrc(request)}" alt="Talep fotoğrafı" /><figcaption>Sakin tarafından eklenen fotoğraf${request.aiImageAnalyzed ? ` <span class="status info">Görsel AI ile analiz edildi</span>` : ""}</figcaption></figure>`
-                : ""
-            }
+            ${requestPhotoSrc(request)
+      ? `<figure class="attachment-preview"><img src="${requestPhotoSrc(request)}" alt="Talep fotoğrafı" /><figcaption>Sakin tarafından eklenen fotoğraf${request.aiImageAnalyzed ? ` <span class="status info">Görsel AI ile analiz edildi</span>` : ""}</figcaption></figure>`
+      : ""
+    }
             <div class="ai-panel">
               ${aiBadge(request)}
               <h3>${request.category} - ${request.location}</h3>
@@ -4241,11 +4225,10 @@ function requestDetailModal(request) {
             </div>
             <div class="notice">
               <strong>Benzer Talepler</strong>
-              ${
-                similar.length
-                  ? `<ul class="mini-list">${similar.map((item) => `<li><span>${item.category}</span>${item.title}<small>${apartmentLabel(item.apartmentId)} - ${requestStatusText(item.status)}</small></li>`).join("")}</ul>`
-                  : `<p>Benzer blok veya kategoride yakın talep bulunmadı.</p>`
-              }
+              ${similar.length
+      ? `<ul class="mini-list">${similar.map((item) => `<li><span>${item.category}</span>${item.title}<small>${apartmentLabel(item.apartmentId)} - ${requestStatusText(item.status)}</small></li>`).join("")}</ul>`
+      : `<p>Benzer blok veya kategoride yakın talep bulunmadı.</p>`
+    }
             </div>
           </div>
           <form class="request-side-form" onsubmit="saveRequestDetail(event, '${request.id}')">
@@ -4375,9 +4358,9 @@ function announcementsView() {
         </div>
         <div class="grid">
           ${scoped.announcements.slice().reverse().map((item) => {
-            const stats = announcementReadStats(item);
-            const targetBlock = item.blockId ? (state.blocks || []).find((b) => b.id === item.blockId) : null;
-            return `
+    const stats = announcementReadStats(item);
+    const targetBlock = item.blockId ? (state.blocks || []).find((b) => b.id === item.blockId) : null;
+    return `
             <article class="notice">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                 <strong>${item.title}</strong>
@@ -4389,20 +4372,19 @@ function announcementsView() {
               <small>${dateText(item.date)}</small>
             </article>
           `;
-          }).join("")}
+  }).join("")}
         </div>
       </section>
     </div>
     <section class="section">
       <div class="section-header"><h2>Bildirim Geçmişi</h2></div>
-      ${
-        history.length
-          ? `<div class="table-wrap"><table>
+      ${history.length
+      ? `<div class="table-wrap"><table>
               <thead><tr><th>Tarih</th><th>Tür</th><th>Hedef</th><th>Detay</th></tr></thead>
               <tbody>${history.map((item) => `<tr><td>${dateText(item.date)}</td><td><span class="status ${item.type === "Duyuru" ? "info" : "warn"}">${item.type}</span></td><td>${safeText(item.target)}</td><td>${safeText(item.detail)}</td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p>Henüz gönderilen bildirim yok.</p>`
-      }
+      : `<p>Henüz gönderilen bildirim yok.</p>`
+    }
     </section>
   `;
 }
@@ -4523,17 +4505,16 @@ function setupView() {
             <label class="full">Acil Durum İrtibatı<input name="emergencyContact" placeholder="İsim ve Telefon (Örn: Yakını 0532...)" /></label>
             <button class="btn primary" type="submit" style="margin-top:8px;">Kaydı Ekle</button>
           </form>
-          ${
-            API_BASE
-              ? `<div class="section-header" style="margin-top:1.8rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
+          ${API_BASE
+      ? `<div class="section-header" style="margin-top:1.8rem"><h2>CSV ile Toplu İçeri Aktarma</h2></div>
                 <p class="muted" style="font-size:13px; line-height:1.5;">Başlıklar: <code>Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat</code>.</p>
                 <form class="form-grid wide" onsubmit="importApartmentsCsv(event)">
                   <label class="full">CSV içeriği<textarea name="csv" rows="4" placeholder="Blok,Daire No,Kat,Ad Soyad,Telefon,E-posta,Mülkiyet,Plaka,Acil İrtibat&#10;Ç1,ÇD1,1,Ali Veli,05xx,ali@example.com,Ev Sahibi,34 ABC 123,0532 xxx"></textarea></label>
                   <label>veya dosya seç<input name="csvFile" type="file" accept=".csv,text/csv" onchange="loadCsvFileIntoTextarea(this)" /></label>
                   <button class="btn primary" type="submit">İçeri Aktar</button>
                 </form>`
-              : ""
-          }
+      : ""
+    }
         </section>
 
         <!-- Mevcut Daireler & Blok Filtresi -->
@@ -4551,9 +4532,9 @@ function setupView() {
               Tüm Bloklar (${scoped.apartments.length})
             </button>
             ${scoped.blocks.map((b) => {
-              const count = scoped.apartments.filter((a) => a.blockId === b.id).length;
-              return `<button type="button" class="block-pill ${currentBlockFilter === b.id ? "active" : ""}" onclick="setState({ setupBlockFilter: '${b.id}' })">${safeText(b.name)} (${count})</button>`;
-            }).join("")}
+      const count = scoped.apartments.filter((a) => a.blockId === b.id).length;
+      return `<button type="button" class="block-pill ${currentBlockFilter === b.id ? "active" : ""}" onclick="setState({ setupBlockFilter: '${b.id}' })">${safeText(b.name)} (${count})</button>`;
+    }).join("")}
           </div>
 
           <div class="table-wrap">
@@ -4561,9 +4542,9 @@ function setupView() {
               <thead><tr><th>Daire</th><th>Kat</th><th>Mülkiyet</th><th>Sakin</th><th>Plaka</th><th>Acil İrtibat</th></tr></thead>
               <tbody>
                 ${filteredApts.map((apt) => {
-                  const resident = scoped.residents.find((item) => item.id === apt.residentId);
-                  const isTenant = resident?.occupancyType === "tenant";
-                  return `
+      const resident = scoped.residents.find((item) => item.id === apt.residentId);
+      const isTenant = resident?.occupancyType === "tenant";
+      return `
                     <tr>
                       <td><strong>${apartmentLabel(apt.id)}</strong></td>
                       <td>${apt.floor}</td>
@@ -4573,7 +4554,7 @@ function setupView() {
                       <td><small>${safeText(resident?.emergencyContact || "-")}</small></td>
                     </tr>
                   `;
-                }).join("") || `<tr><td colspan="6">Bu blokta kayıtlı daire bulunamadı.</td></tr>`}
+    }).join("") || `<tr><td colspan="6">Bu blokta kayıtlı daire bulunamadı.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -4968,9 +4949,9 @@ function blockSetupView() {
               </thead>
               <tbody>
                 ${blockApartments.map((apt) => {
-                  const resident = scoped.residents.find((item) => item.id === apt.residentId);
-                  const isTenant = resident?.occupancyType === "tenant";
-                  return `
+    const resident = scoped.residents.find((item) => item.id === apt.residentId);
+    const isTenant = resident?.occupancyType === "tenant";
+    return `
                     <tr>
                       <td><strong>Daire ${safeText(apt.no)}</strong></td>
                       <td>Kat ${apt.floor}</td>
@@ -4991,7 +4972,7 @@ function blockSetupView() {
                       </td>
                     </tr>
                   `;
-                }).join("") || `<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--muted);">Bu blokta henüz kayıtlı daire bulunmuyor.</td></tr>`}
+  }).join("") || `<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--muted);">Bu blokta henüz kayıtlı daire bulunmuyor.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -5084,15 +5065,14 @@ function reportsView() {
           <table>
             <thead><tr><th>Kategori</th><th>Talep Sayısı</th><th>Durum</th></tr></thead>
             <tbody>
-              ${
-                Object.entries(byCategory).map(([category, count]) => `
+              ${Object.entries(byCategory).map(([category, count]) => `
                   <tr>
                     <td><strong>${category}</strong></td>
                     <td>${count} adet</td>
                     <td><span class="status ${count > 3 ? "warn" : "ok"}">${count > 3 ? "Yoğun" : "Normal"}</span></td>
                   </tr>
                 `).join("") || `<tr><td colspan="3">Henüz talep kaydı bulunmuyor.</td></tr>`
-              }
+    }
             </tbody>
           </table>
         </div>
@@ -5112,15 +5092,14 @@ function reportsView() {
           <table>
             <thead><tr><th>Blok Adı</th><th>Talep Sayısı</th><th>İzleme Durumu</th></tr></thead>
             <tbody>
-              ${
-                blocks.map((item) => `
+              ${blocks.map((item) => `
                   <tr>
                     <td><strong>${item.block}</strong></td>
                     <td>${item.count} adet</td>
                     <td><span class="status ${item.count > 2 ? "warn" : "ok"}">${item.count > 2 ? "İzlenmeli" : "Sorunsuz"}</span></td>
                   </tr>
                 `).join("") || `<tr><td colspan="3">Blok verisi bulunamadı.</td></tr>`
-              }
+    }
             </tbody>
           </table>
         </div>
@@ -5150,14 +5129,13 @@ function reportsView() {
           <p>Anlaşmalı bakım firmalarının ortalama çözüm süresi ve SLA hedeflerine uyumu.</p>
         </div>
       </div>
-      ${
-        vendors.length
-          ? `<div class="table-wrap"><table>
+      ${vendors.length
+      ? `<div class="table-wrap"><table>
               <thead><tr><th>Firma / Hizmet Veren</th><th>Hizmet Alanı</th><th>Toplam İş</th><th>Açık</th><th>Çözülen</th><th>Ort. Çözüm Süresi</th><th>SLA Karnesi</th></tr></thead>
               <tbody>${vendors.map((v) => `<tr><td><strong>${safeText(v.assignee)}</strong></td><td><span class="status info">${safeText(v.category)}</span></td><td>${v.total}</td><td>${v.open}</td><td>${v.resolved}</td><td><strong>${v.avgDays !== null ? `${v.avgDays} gün` : "-"}</strong></td><td><span class="status ${v.scoreStatus}">${v.scoreText}</span></td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p style="color:var(--muted); padding:12px 0;">Henüz firmaya atanmış talep bulunmuyor. Talepler ekranından firma atayarak karne oluşturabilirsiniz.</p>`
-      }
+      : `<p style="color:var(--muted); padding:12px 0;">Henüz firmaya atanmış talep bulunmuyor. Talepler ekranından firma atayarak karne oluşturabilirsiniz.</p>`
+    }
     </section>
 
     <!-- 5. Site Sağlık Skoru Geçmişi -->
@@ -5168,14 +5146,13 @@ function reportsView() {
           <p>Dönemsel performans ve iyileşme trendi.</p>
         </div>
       </div>
-      ${
-        scoped.healthScores.length
-          ? `<div class="table-wrap"><table>
+      ${scoped.healthScores.length
+      ? `<div class="table-wrap"><table>
               <thead><tr><th>Tarih</th><th>Skor</th><th>Değerlendirme</th></tr></thead>
               <tbody>${scoped.healthScores.slice().reverse().map((item) => `<tr><td>${dateText(item.date)}</td><td><strong>${item.score}/100</strong></td><td><span class="status ${item.score >= 75 ? "ok" : item.score >= 60 ? "warn" : "danger"}">${item.status}</span></td></tr>`).join("")}</tbody>
             </table></div>`
-          : `<p style="color:var(--muted); padding:12px 0;">Henüz kayıtlı anlık görüntü bulunmuyor. Yukarıdaki "Skoru Kaydet" butonu ile bugünün skorunu arşivleyebilirsiniz.</p>`
-      }
+      : `<p style="color:var(--muted); padding:12px 0;">Henüz kayıtlı anlık görüntü bulunmuyor. Yukarıdaki "Skoru Kaydet" butonu ile bugünün skorunu arşivleyebilirsiniz.</p>`
+    }
     </section>
   `;
 }
@@ -5244,8 +5221,8 @@ function sitesView() {
 
       <div class="sites-portfolio-grid">
         ${rows.map((row) => {
-          const isActive = row.siteId === state.activeSiteId;
-          return `
+    const isActive = row.siteId === state.activeSiteId;
+    return `
             <div class="site-portfolio-card ${isActive ? "is-active-site" : ""}">
               <div class="site-card-header">
                 <div style="display:flex; align-items:center; gap:12px;">
@@ -5287,15 +5264,14 @@ function sitesView() {
               </div>
 
               <div class="site-card-footer">
-                ${
-                  isActive
-                    ? `<span class="status ok" style="padding:6px 14px; font-weight:750;">🟢 Şu An Yönetilen Site</span>`
-                    : `<button class="btn primary" style="width:100%; font-size:13px; padding:8px 14px;" onclick="switchSite('${row.siteId}')">Bu Siteyi Yönet →</button>`
-                }
+                ${isActive
+        ? `<span class="status ok" style="padding:6px 14px; font-weight:750;">🟢 Şu An Yönetilen Site</span>`
+        : `<button class="btn primary" style="width:100%; font-size:13px; padding:8px 14px;" onclick="switchSite('${row.siteId}')">Bu Siteyi Yönet →</button>`
+      }
               </div>
             </div>
           `;
-        }).join("")}
+  }).join("")}
       </div>
     </div>
 
@@ -5333,9 +5309,8 @@ function sitesView() {
     </section>
 
     <!-- 4. Yeni Site Ekleme Formu -->
-    ${
-      API_BASE
-        ? `<section class="section" style="margin-top:24px">
+    ${API_BASE
+      ? `<section class="section" style="margin-top:24px">
             <div class="section-header">
               <div>
                 <h2>Portföye Yeni Site Ekle</h2>
@@ -5348,7 +5323,7 @@ function sitesView() {
               <button class="btn primary" type="submit" style="align-self:end;">Siteyi Sisteme Ekle</button>
             </form>
           </section>`
-        : ""
+      : ""
     }
   `;
 }
@@ -5506,9 +5481,8 @@ function residentHomeView() {
               ${totalUnpaid > 0 ? `<span class="status warn">${money(totalUnpaid)} Borç</span>` : `<span class="status ok">Borç Yok</span>`}
             </div>
             <div class="resident-dues-list" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-              ${
-                dues.length
-                  ? dues.map((due) => `
+              ${dues.length
+      ? dues.map((due) => `
                     <div class="notice" style="display:flex; justify-content:space-between; align-items:center; margin:0; flex-wrap:wrap; gap:8px;">
                       <div>
                         <strong>${due.period} Dönemi</strong>
@@ -5519,15 +5493,15 @@ function residentHomeView() {
                         <div style="display:flex; align-items:center; gap:6px;">
                           <span class="status ${statusClass(due.status)}">${dueStatusText(due.status)}</span>
                           ${due.status !== "paid"
-                            ? `<button type="button" class="btn primary btn-sm" onclick="openPaymentModal('${due.id}')" style="padding:3px 10px; font-size:11.5px; border-radius:6px; font-weight:700;">💳 Kartla Öde</button>`
-                            : `<button type="button" class="btn text-btn btn-sm" onclick="showReceiptModal('${due.id}')" style="padding:2px 8px; font-size:11px; border:1px solid var(--line); border-radius:6px;">🧾 Dekont Gör</button>`
-                          }
+          ? `<button type="button" class="btn primary btn-sm" onclick="openPaymentModal('${due.id}')" style="padding:3px 10px; font-size:11.5px; border-radius:6px; font-weight:700;">💳 Kartla Öde</button>`
+          : `<button type="button" class="btn text-btn btn-sm" onclick="showReceiptModal('${due.id}')" style="padding:2px 8px; font-size:11px; border:1px solid var(--line); border-radius:6px;">🧾 Dekont Gör</button>`
+        }
                         </div>
                       </div>
                     </div>
                   `).join("")
-                  : `<div class="empty">Kayıtlı aidat bilgisi bulunamadı.</div>`
-              }
+      : `<div class="empty">Kayıtlı aidat bilgisi bulunamadı.</div>`
+    }
             </div>
           </section>
 
@@ -5543,9 +5517,8 @@ function residentHomeView() {
               </div>
               <span class="card-action-hint" style="margin:0;">Tümünü Yönet →</span>
             </div>
-            ${
-              requests.length
-                ? requests.slice(-2).reverse().map((request) => `
+            ${requests.length
+      ? requests.slice(-2).reverse().map((request) => `
                   <div class="notice" style="margin-top:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                       <strong>${safeText(request.title)}</strong>
@@ -5554,8 +5527,8 @@ function residentHomeView() {
                     <p style="margin:4px 0 0; font-size:12.5px; color:var(--text-sub);">${safeText(request.aiSummary || request.description)}</p>
                   </div>
                 `).join("")
-                : `<div class="empty" style="padding:14px;">Açık talep bulunmuyor. Yeni bir arıza veya öneri bildirebilirsiniz.</div>`
-            }
+      : `<div class="empty" style="padding:14px;">Açık talep bulunmuyor. Yeni bir arıza veya öneri bildirebilirsiniz.</div>`
+    }
           </section>
         </div>
 
@@ -5580,9 +5553,8 @@ function residentHomeView() {
               <strong>${money(totalSiteExpense)}</strong>
             </div>
           </div>
-          ${
-            recentExpenses.length
-              ? `
+          ${recentExpenses.length
+      ? `
               <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:10px;">
                 <span style="font-size:11.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em;">Son Ortak Harcamalar:</span>
                 <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
@@ -5597,8 +5569,8 @@ function residentHomeView() {
                   `).join("")}
                 </div>
               </div>`
-              : `<div class="empty" style="margin-top:10px; font-size:12px;">Henüz kaydedilmiş harcama yok.</div>`
-          }
+      : `<div class="empty" style="margin-top:10px; font-size:12px;">Henüz kaydedilmiş harcama yok.</div>`
+    }
         </section>
       </div>
     </div>
@@ -5679,9 +5651,9 @@ function profileView() {
         <div class="profile-hero-content">
           <div class="profile-avatar-large" title="Profil Fotoğrafı">
             ${user.avatar
-              ? `<img src="${escapeAttr(user.avatar)}" class="profile-avatar-img" alt="${safeText(user.name)}" />`
-              : `<span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>`
-            }
+      ? `<img src="${escapeAttr(user.avatar)}" class="profile-avatar-img" alt="${safeText(user.name)}" />`
+      : `<span>${(user.name || "U").slice(0, 2).toUpperCase()}</span>`
+    }
             <label class="avatar-upload-overlay" title="Fotoğraf Değiştir">
               <span>📷 Değiştir</span>
               <input type="file" accept="image/*" style="display:none;" onchange="uploadProfilePhoto(this)" />
@@ -5697,27 +5669,25 @@ function profileView() {
               </label>
             </div>
             <p style="margin:4px 0 0; color:var(--muted); font-size:13.5px;">${safeText(user.email)} • ${safeText(user.phone || "Telefon belirtilmedi")}</p>
-            ${
-              isResident && apt
-                ? `<div class="profile-hero-badges">
+            ${isResident && apt
+      ? `<div class="profile-hero-badges">
                     <span class="profile-tag">🏢 ${safeText(site?.name || "Apartman")}</span>
                     <span class="profile-tag">🚪 ${safeText(block?.name || "Blok")} - No: ${apt.no} (Kat: ${apt.floor})</span>
                     <span class="profile-tag">🔑 ${resident.occupancyType === "tenant" ? "Kiracı" : "Ev Sahibi (Kat Maliki)"}</span>
                     ${resident.plateNumber ? `<span class="profile-tag">🚗 ${safeText(resident.plateNumber)}</span>` : ""}
                   </div>`
-                : `<div class="profile-hero-badges">
+      : `<div class="profile-hero-badges">
                     <span class="profile-tag">🏢 Yönetilen Site: ${safeText(site?.name || "Tüm Siteler")}</span>
                     <span class="profile-tag">⚡ Sistem Yetkilisi</span>
                   </div>`
-            }
+    }
           </div>
         </div>
       </section>
 
       <!-- Daire & Blok Bilgi Özeti (Sadece Sakin İçin) -->
-      ${
-        isResident
-          ? `
+      ${isResident
+      ? `
           <div class="profile-info-grid">
             <div class="profile-info-box">
               <span class="info-label">Bağlı Olduğu Site</span>
@@ -5741,8 +5711,8 @@ function profileView() {
             </div>
           </div>
           `
-          : ""
-      }
+      : ""
+    }
 
       <div class="split" style="margin-top:20px; align-items:start;">
         <!-- Profil & Kişisel / Daire Bilgileri Düzenleme -->
@@ -5771,9 +5741,8 @@ function profileView() {
               <input name="email" type="email" required value="${safeText(user.email || "")}" placeholder="ornek@posta.com" />
             </label>
 
-            ${
-              isResident
-                ? `
+            ${isResident
+      ? `
                 <div class="form-row-2">
                   <label>
                     <span>Mülkiyet Statüsü</span>
@@ -5794,8 +5763,8 @@ function profileView() {
                   <small style="color:var(--muted); font-size:11.5px; margin-top:3px; display:block;">Su baskını, yangın, deprem vb. acil durumlarda ulaşılabilecek yakın.</small>
                 </label>
                 `
-                : ""
-            }
+      : ""
+    }
 
             <div style="border-top:1px solid var(--line); padding-top:16px; margin-top:8px;">
               <h4 style="margin:0 0 10px; font-size:14px; color:var(--text); display:flex; align-items:center; gap:6px;">
@@ -6121,7 +6090,7 @@ function markAnnouncementsRead() {
     .then((finalData) => {
       if (finalData) applyServerData(finalData);
     })
-    .catch(() => {})
+    .catch(() => { })
     .finally(() => {
       markingAnnouncementsRead = false;
     });
@@ -6138,9 +6107,9 @@ function residentAnnouncementsView() {
         <div class="section-header"><h2>Duyurular</h2></div>
         <div class="grid">
           ${scoped.announcements.slice().reverse().map((item) => {
-            const isNew = userId && !(item.readBy || []).some((entry) => entry.userId === userId);
-            return `<article class="notice"><strong>${item.title}</strong>${isNew ? `<span class="status warn">Yeni</span>` : ""}${aiBadge(item)}<p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`;
-          }).join("")}
+    const isNew = userId && !(item.readBy || []).some((entry) => entry.userId === userId);
+    return `<article class="notice"><strong>${item.title}</strong>${isNew ? `<span class="status warn">Yeni</span>` : ""}${aiBadge(item)}<p>${item.aiContent || item.content}</p><small>${dateText(item.date)}</small></article>`;
+  }).join("")}
         </div>
       </section>
     </div>
@@ -6333,7 +6302,7 @@ async function logoutUser() {
   try {
     localStorage.removeItem(ACTIVE_VIEW_KEY);
     history.replaceState(null, "", window.location.pathname);
-  } catch (e) {}
+  } catch (e) { }
   state.sessionUser = null;
   state.mode = "manager";
   state.view = "dashboard";
@@ -6455,13 +6424,13 @@ function saveRequestDetail(event, requestId) {
   state.requests = state.requests.map((request) =>
     request.id === requestId
       ? {
-          ...request,
-          status: payload.status,
-          adminNote: payload.adminNote,
-          assignee: payload.assignee,
-          assignedAt: payload.assignee && payload.assignee !== request.assignee ? new Date().toISOString().slice(0, 10) : request.assignedAt,
-          resolvedAt: payload.status === "cozuldu" ? new Date().toISOString().slice(0, 10) : request.resolvedAt,
-        }
+        ...request,
+        status: payload.status,
+        adminNote: payload.adminNote,
+        assignee: payload.assignee,
+        assignedAt: payload.assignee && payload.assignee !== request.assignee ? new Date().toISOString().slice(0, 10) : request.assignedAt,
+        resolvedAt: payload.status === "cozuldu" ? new Date().toISOString().slice(0, 10) : request.resolvedAt,
+      }
       : request,
   );
   state.selectedRequestId = null;
@@ -6796,9 +6765,8 @@ function printReportModal() {
                   <tr><th>Firma / Tedarikçi</th><th>Hizmet Alanı</th><th>İş Sayısı</th><th>Ort. Çözüm Süresi</th><th>Performans / Durum</th></tr>
                 </thead>
                 <tbody>
-                  ${
-                    vendors.length
-                      ? vendors.map((v) => `
+                  ${vendors.length
+      ? vendors.map((v) => `
                         <tr>
                           <td><strong>${safeText(v.assignee || v.name || "-")}</strong></td>
                           <td>${safeText(v.category || "Genel")}</td>
@@ -6807,8 +6775,8 @@ function printReportModal() {
                           <td><span class="status ${v.scoreStatus || "ok"}">${v.scoreText || "SLA Uygun"}</span></td>
                         </tr>
                       `).join("")
-                      : `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:12px;">Henüz atanmış anlaşmalı firma kaydı bulunmamaktadır.</td></tr>`
-                  }
+      : `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:12px;">Henüz atanmış anlaşmalı firma kaydı bulunmamaktadır.</td></tr>`
+    }
                 </tbody>
               </table>
             </div>
@@ -6899,22 +6867,22 @@ function surveysView() {
         </div>
         <div class="survey-list">
           ${surveys.map(survey => {
-            const targetBlock = survey.blockId ? (state.blocks || []).find((b) => b.id === survey.blockId) : null;
-            const targetApartments = targetBlock
-              ? (state.apartments || []).filter((a) => a.blockId === targetBlock.id)
-              : (scoped.allSiteApartments || scoped.apartments);
-            const targetTotalApts = targetApartments.length || 1;
-            const totalVotes = survey.votes?.length || 0;
-            const participationRate = Math.min(100, Math.round((totalVotes / targetTotalApts) * 100));
-            const isClosed = survey.status === "closed";
+    const targetBlock = survey.blockId ? (state.blocks || []).find((b) => b.id === survey.blockId) : null;
+    const targetApartments = targetBlock
+      ? (state.apartments || []).filter((a) => a.blockId === targetBlock.id)
+      : (scoped.allSiteApartments || scoped.apartments);
+    const targetTotalApts = targetApartments.length || 1;
+    const totalVotes = survey.votes?.length || 0;
+    const participationRate = Math.min(100, Math.round((totalVotes / targetTotalApts) * 100));
+    const isClosed = survey.status === "closed";
 
-            const optionCounts = (survey.options || []).map((opt, idx) => {
-              const count = (survey.votes || []).filter(v => v.optionIndex === idx || v.option === opt).length;
-              const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-              return { option: opt, count, pct };
-            });
+    const optionCounts = (survey.options || []).map((opt, idx) => {
+      const count = (survey.votes || []).filter(v => v.optionIndex === idx || v.option === opt).length;
+      const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+      return { option: opt, count, pct };
+    });
 
-            return `
+    return `
               <div class="survey-card ${isClosed ? 'closed' : 'active'}">
                 <div class="survey-card-header">
                   <div>
@@ -6951,7 +6919,7 @@ function surveysView() {
                 </div>
               </div>
             `;
-          }).join('') || '<p style="color:var(--muted); padding:20px; text-align:center;">Henüz açılmış bir anket bulunmuyor.</p>'}
+  }).join('') || '<p style="color:var(--muted); padding:20px; text-align:center;">Henüz açılmış bir anket bulunmuyor.</p>'}
         </div>
       </section>
     </div>
@@ -6975,25 +6943,25 @@ function residentSurveysView() {
 
       <div class="survey-list">
         ${surveys.map(survey => {
-          const votes = survey.votes || [];
-          const userVote = votes.find(v => 
-            (currentUserId && v.userId === currentUserId) || 
-            (currentResidentId && v.residentId === currentResidentId) || 
-            (currentApartment && v.apartmentId === currentApartment.id)
-          );
-          const hasVoted = Boolean(userVote);
-          const isClosed = survey.status === "closed";
-          const totalVotes = votes.length;
-          const isEditing = state.editingSurveyId === survey.id;
+    const votes = survey.votes || [];
+    const userVote = votes.find(v =>
+      (currentUserId && v.userId === currentUserId) ||
+      (currentResidentId && v.residentId === currentResidentId) ||
+      (currentApartment && v.apartmentId === currentApartment.id)
+    );
+    const hasVoted = Boolean(userVote);
+    const isClosed = survey.status === "closed";
+    const totalVotes = votes.length;
+    const isEditing = state.editingSurveyId === survey.id;
 
-          const optionCounts = (survey.options || []).map((opt, idx) => {
-            const count = votes.filter(v => v.optionIndex === idx || v.option === opt).length;
-            const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-            const votedThis = userVote?.optionIndex === idx || userVote?.option === opt;
-            return { option: opt, count, pct, isVoted: votedThis };
-          });
+    const optionCounts = (survey.options || []).map((opt, idx) => {
+      const count = votes.filter(v => v.optionIndex === idx || v.option === opt).length;
+      const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+      const votedThis = userVote?.optionIndex === idx || userVote?.option === opt;
+      return { option: opt, count, pct, isVoted: votedThis };
+    });
 
-          return `
+    return `
             <div class="survey-card ${isClosed ? 'closed' : 'active'}">
               <div class="survey-card-header">
                 <div>
@@ -7010,14 +6978,14 @@ function residentSurveysView() {
                 <form onsubmit="castVote(event, '${survey.id}')">
                   <div class="survey-vote-options">
                     ${survey.options.map((opt, idx) => {
-                      const isPreChecked = isEditing && userVote ? (userVote.optionIndex === idx || userVote.option === opt) : idx === 0;
-                      return `
+      const isPreChecked = isEditing && userVote ? (userVote.optionIndex === idx || userVote.option === opt) : idx === 0;
+      return `
                         <label class="survey-vote-label" style="display:flex; align-items:center; gap:10px; padding:10px 14px; margin-bottom:8px; background:var(--surface-sunken); border:1px solid var(--border); border-radius:10px; cursor:pointer;">
                           <input type="radio" name="optionIndex" value="${idx}" required ${isPreChecked ? 'checked' : ''} />
                           <span style="font-weight:500;">${safeText(opt)}</span>
                         </label>
                       `;
-                    }).join('')}
+    }).join('')}
                   </div>
                   <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
                     <button class="btn primary" type="submit">
@@ -7055,7 +7023,7 @@ function residentSurveysView() {
               `}
             </div>
           `;
-        }).join('') || '<div class="section"><p style="color:var(--muted); text-align:center; padding:24px;">Şu anda aktif bir anket bulunmuyor.</p></div>'}
+  }).join('') || '<div class="section"><p style="color:var(--muted); text-align:center; padding:24px;">Şu anda aktif bir anket bulunmuyor.</p></div>'}
       </div>
     </div>
   `;
@@ -7148,8 +7116,8 @@ function castVote(event, surveyId) {
 
   const currentApartment = residentApartment();
   survey.votes = survey.votes || [];
-  const existingIdx = survey.votes.findIndex(v => 
-    v.userId === (state.sessionUser?.id || "guest") || 
+  const existingIdx = survey.votes.findIndex(v =>
+    v.userId === (state.sessionUser?.id || "guest") ||
     (currentApartment && v.apartmentId === currentApartment.id)
   );
   const voteRecord = {
@@ -7278,14 +7246,14 @@ function managerMenuSheetModal() {
   const isBlockActive = Boolean(state.activeBlockId && state.activeBlockId !== "all");
   const structureItems = isBlockActive
     ? [
-        { view: "block-setup", icon: "🏢", label: "Blok Özelleştirme", desc: "Bu bloğun daire & sakin ayarları" },
-        { view: "profile", icon: "👤", label: "Yönetici Profili", desc: "Hesap ve iletişim bilgisi" },
-      ]
+      { view: "block-setup", icon: "🏢", label: "Blok Özelleştirme", desc: "Bu bloğun daire & sakin ayarları" },
+      { view: "profile", icon: "👤", label: "Yönetici Profili", desc: "Hesap ve iletişim bilgisi" },
+    ]
     : [
-        { view: "setup", icon: "🏢", label: "Site & Daire Kurulumu", desc: "Bina, kat ve daire yapısı" },
-        { view: "sites", icon: "🌐", label: "Tüm Siteler", desc: "Yönetilen siteler listesi" },
-        { view: "profile", icon: "👤", label: "Yönetici Profili", desc: "Hesap ve iletişim bilgisi" },
-      ];
+      { view: "setup", icon: "🏢", label: "Site & Daire Kurulumu", desc: "Bina, kat ve daire yapısı" },
+      { view: "sites", icon: "🌐", label: "Tüm Siteler", desc: "Yönetilen siteler listesi" },
+      { view: "profile", icon: "👤", label: "Yönetici Profili", desc: "Hesap ve iletişim bilgisi" },
+    ];
 
   const categories = [
     {
@@ -7328,9 +7296,9 @@ function managerMenuSheetModal() {
         </div>
 
         ${(() => {
-          const siteBlocks = (state.blocks || []).filter((b) => !b.siteId || b.siteId === state.activeSiteId);
-          if (sites.length <= 1 && siteBlocks.length === 0) return "";
-          return `
+      const siteBlocks = (state.blocks || []).filter((b) => !b.siteId || b.siteId === state.activeSiteId);
+      if (sites.length <= 1 && siteBlocks.length === 0) return "";
+      return `
             <div class="sheet-site-switcher" style="display:flex; flex-direction:column; gap:8px;">
               ${sites.length > 1 ? `
                 <label>
@@ -7351,7 +7319,7 @@ function managerMenuSheetModal() {
               ` : ""}
             </div>
           `;
-        })()}
+    })()}
 
         <div class="sheet-content-scroll">
           ${categories.map((cat) => `
@@ -7400,7 +7368,7 @@ function loadAssistantHistory() {
 function saveAssistantHistory() {
   try {
     localStorage.setItem(getAssistantHistoryKey(), JSON.stringify(state.assistantMessages || []));
-  } catch {}
+  } catch { }
 }
 
 function syncAssistantHistoryForCurrentSession(force = false) {
@@ -7423,7 +7391,7 @@ function clearAssistantChat() {
   state.assistantMessages = [];
   try {
     localStorage.removeItem(getAssistantHistoryKey());
-  } catch {}
+  } catch { }
   initAssistantWelcome();
   updateAssistantDOM();
   if (state.view === "ai-assistant") render();
