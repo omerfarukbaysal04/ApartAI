@@ -1068,3 +1068,13 @@ test("gömülü base64 avatarlar açılışta storage'a taşınır", async () =>
     "avatar beklenmeyen biçimde"
   );
 });
+
+test("hatalı giriş, oturum düştü değil kimlik hatası döndürür", async () => {
+  // İstemci bu mesajı doğrudan kullanıcıya gösteriyor; "oturum süresi doldu"
+  // demesi yanıltıcıydı.
+  const res = await api("POST", "/api/auth/login", {
+    body: { email: "olmayan@apartai.test", password: "yanlis" },
+  });
+  assert.equal(res.status, 401);
+  assert.match(res.body.error, /şifre hatalı/i);
+});

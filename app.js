@@ -803,7 +803,10 @@ async function apiRequest(path, options = {}) {
     },
     ...options,
   });
-  if (response.status === 401) {
+  // Giriş/kayıt uçlarındaki 401 "kimlik bilgisi hatalı" demektir, oturumun
+  // düşmesi değil; sunucunun mesajı olduğu gibi gösterilir.
+  const isAuthAttempt = path.startsWith("/auth/login") || path.startsWith("/auth/register");
+  if (response.status === 401 && !isAuthAttempt) {
     setToken(null);
     saveSession(null);
     state.sessionUser = null;
