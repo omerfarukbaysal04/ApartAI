@@ -213,6 +213,7 @@ class PostgresRepository {
     const pool = await this.getPool();
     const client = await pool.connect();
     try {
+      await client.query("SET statement_timeout = 8000");
       await client.query("SELECT pg_advisory_lock($1)", [WRITE_LOCK_KEY]);
       return await fn();
     } finally {
@@ -221,6 +222,9 @@ class PostgresRepository {
       } catch {
         /* bağlantı koptuysa kilit zaten serbest kalır */
       }
+      try {
+        await client.query("RESET statement_timeout");
+      } catch {}
       client.release();
     }
   }

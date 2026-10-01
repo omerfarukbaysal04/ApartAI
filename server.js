@@ -2400,7 +2400,10 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname.startsWith("/api/")) {
-      if (MUTATING_METHODS.has(req.method)) {
+      const isReadOnlyPost =
+        ["/api/auth/login", "/api/ai/assistant", "/api/ai/improve-announcement"].includes(url.pathname) ||
+        url.pathname.endsWith("/reminder-draft");
+      if (MUTATING_METHODS.has(req.method) && !isReadOnlyPost) {
         await serializeWrite(() => repository.withWriteLock(() => routeApi(req, res, url)));
       } else {
         await routeApi(req, res, url);
