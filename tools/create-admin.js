@@ -17,7 +17,6 @@
 //   $env:DATABASE_URL="postgres://..."; node tools/create-admin.js --email ... --name "..."
 
 const crypto = require("node:crypto");
-const readline = require("node:readline");
 const { createRepository } = require("../db/repository");
 
 function parseArgs(argv) {
@@ -43,36 +42,74 @@ function hashPassword(password) {
   return `scrypt$${salt}$${derived}`;
 }
 
+// server.js'teki doğrulamanın aynısı; yazdıktan sonra kontrol için kullanılır.
+function verifyPassword(password, stored) {
+  if (!stored || typeof stored !== "string" || !stored.startsWith("scrypt$")) return false;
+  const [, salt, expected] = stored.split("$");
+  if (!salt || !expected) return false;
+  const derived = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(derived, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function uid(prefix) {
   return `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
 }
 
 // Terminalde yankısız (gizli) şifre okur.
+//
+// Önceki sürüm readline ile ayrı bir "data" dinleyicisini birlikte kullanıyordu;
+// bu ikisi aynı akışı paylaşınca bazı terminallerde yazılan karakterler eksik
+// yakalanabiliyordu. Ham mod (raw mode) ile karakterleri doğrudan okumak
+// platformlar arasında daha güvenilir.
 function askHidden(question) {
   return new Promise((resolve, reject) => {
-    if (!process.stdin.isTTY) {
+    const input = process.stdin;
+    if (!input.isTTY) {
       reject(new Error("Şifre sorulamıyor (TTY yok). ADMIN_PASSWORD ortam değişkenini kullanın."));
       return;
     }
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    const onData = (char) => {
-      const s = String(char);
-      if (s === "\n" || s === "\r" || s === "\u0004") {
-        process.stdin.removeListener("data", onData);
-      } else {
-        // Yazılanı gizle: satırı temizleyip soruyu yeniden bas.
-        readline.clearLine(process.stdout, 0);
-        readline.cursorTo(process.stdout, 0);
-        process.stdout.write(question);
+    process.stdout.write(question);
+    input.setRawMode(true);
+    input.resume();
+    input.setEncoding("utf8");
+
+    let value = "";
+    const finish = (err, result) => {
+      input.setRawMode(false);
+      input.pause();
+      input.removeListener("data", onData);
+      process.stdout.write("\n");
+      if (err) reject(err);
+      else resolve(result);
+    };
+
+    const onData = (chunk) => {
+      for (const ch of chunk) {
+        if (ch === "\r" || ch === "\n") {
+          finish(null, value);
+          return;
+        }
+        if (ch === "\u0003") {
+          finish(new Error("İşlem iptal edildi."));
+          return;
+        }
+        if (ch === "\u007f" || ch === "\b") {
+          if (value.length) {
+            value = value.slice(0, -1);
+            process.stdout.write("\b \b");
+          }
+          continue;
+        }
+        // Diğer kontrol karakterlerini yok say.
+        if (ch < " ") continue;
+        value += ch;
+        process.stdout.write("*");
       }
     };
-    process.stdin.on("data", onData);
-    rl.question(question, (answer) => {
-      process.stdin.removeListener("data", onData);
-      rl.close();
-      process.stdout.write("\n");
-      resolve(answer);
-    });
+
+    input.on("data", onData);
   });
 }
 
@@ -156,7 +193,17 @@ async function main() {
 
   await repository.saveState(data);
 
-  console.log(`\n✓ Yönetici hesabı ${action}.`);
+  // Yazdığımızı geri okuyup girilen şifreyle doğrula. Böylece "kaydettim ama
+  // giriş yapamıyorum" durumu burada yakalanır, web arayüzünde değil.
+  const saved = await repository.getState();
+  const check = (saved.users || []).find((u) => String(u.email || "").toLowerCase() === email);
+  if (!check || !verifyPassword(password, check.passwordHash)) {
+    console.error("\n✗ Doğrulama başarısız: kayıt yazıldı ama şifre geri okunduğunda eşleşmedi.");
+    console.error("  Bağlantının doğru veritabanına gittiğinden emin olun ve tekrar deneyin.");
+    process.exit(1);
+  }
+
+  console.log(`\n✓ Yönetici hesabı ${action} ve şifre doğrulandı.`);
   console.log(`  E-posta : ${email}`);
   console.log(`  Ad      : ${name}`);
   console.log(`  Siteler : ${siteIds.length ? siteIds.join(", ") : "(henüz site yok)"}`);

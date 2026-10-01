@@ -2060,7 +2060,7 @@ function openPaymentModal(dueId) {
   const apt = residentApartment();
   const targetDue = scoped.dues.find((d) => d.id === dueId) || scoped.dues.find((d) => d.status !== "paid" && d.apartmentId === apt?.id);
   if (!targetDue) {
-    alert("Ödenecek aidat kaydı bulunamadı.");
+    showToast("Ödenecek aidat kaydı bulunamadı.", "warn");
     return;
   }
   state.activePaymentDueId = targetDue.id;
@@ -2117,7 +2117,7 @@ async function submitPaymentForm(event) {
   const is3d = Boolean(form.get("is3d"));
 
   if (cardNumber.length < 15) {
-    alert("Lütfen 16 haneli geçerli kart numarasını giriniz.");
+    showToast("Lütfen 16 haneli geçerli kart numarasını giriniz.", "warn");
     return;
   }
 
@@ -2142,11 +2142,11 @@ async function verify3dOtp(event) {
   const form = new FormData(event.target);
   const code = (form.get("otpCode") || "").trim();
   if (code.length < 4) {
-    alert("Lütfen telefonunuza gelen 6 haneli doğrulama kodunu giriniz (Demo: 123456).");
+    showToast("Lütfen telefonunuza gelen 6 haneli doğrulama kodunu giriniz (Demo: 123456).", "warn");
     return;
   }
   if (!state.tempPaymentPayload) {
-    alert("Ödeme oturumu zaman aşımına uğradı.");
+    showToast("Ödeme oturumu zaman aşımına uğradı.", "warn");
     closePaymentModal();
     return;
   }
@@ -2184,7 +2184,7 @@ async function executeDuePayment(payload) {
       playNotificationSound();
       applyServerData(res.data, { paymentStep: "success_receipt" });
     } catch (err) {
-      alert("Ödeme işlemi tamamlanamadı: " + err.message);
+      showToast("Ödeme işlemi tamamlanamadı: " + err.message, "danger");
     }
   } else {
     // Offline / Local state simulation
@@ -3351,7 +3351,7 @@ function sendWarningViaNotification(dueId) {
         applyServerData(data);
         showToast("✅ Bildirim sakinin ApartAI bildirim kutusuna iletildi.", "ok");
       })
-      .catch((err) => alert(err.message));
+      .catch((err) => showToast(err.message, "danger"));
   } else {
     closeWarningModal();
     showToast("✅ Bildirim sakinin ApartAI bildirim kutusuna iletildi.", "ok");
@@ -3379,7 +3379,7 @@ function sendWarningViaWhatsApp(phone, customText = "") {
     if (!manual) return;
     targetPhone = formatPhoneForService(manual);
     if (!targetPhone) {
-      alert("Geçersiz telefon numarası.");
+      showToast("Geçersiz telefon numarası.", "warn");
       return;
     }
   }
@@ -3407,7 +3407,7 @@ function sendWarningViaSMS(phone, customText = "", dueId = null) {
     if (!manual) return;
     targetPhone = formatPhoneForService(manual);
     if (!targetPhone) {
-      alert("Geçersiz telefon numarası.");
+      showToast("Geçersiz telefon numarası.", "warn");
       return;
     }
   }
@@ -4344,7 +4344,7 @@ async function bulkSetupSite(event) {
 
   const siteId = state.activeSiteId;
   if (!siteId) {
-    alert("Lütfen önce bir site seçiniz.");
+    showToast("Lütfen önce bir site seçiniz.", "warn");
     return;
   }
 
@@ -4354,13 +4354,13 @@ async function bulkSetupSite(event) {
         method: "POST",
         body: JSON.stringify({ prefix, buildingCount, flatsPerBuilding, flatPrefix, duesAmount }),
       });
-      alert(`Toplu kurulum başarılı! ${res.blocksCreated} bina/blok ve ${res.apartmentsCreated} daire oluşturuldu.`);
+      showToast(`Toplu kurulum başarılı! ${res.blocksCreated} bina/blok ve ${res.apartmentsCreated} daire oluşturuldu.`, "ok");
       applyServerData(res.data);
     } catch (err) {
-      alert("Toplu kurulum hatası: " + err.message);
+      showToast("Toplu kurulum hatası: " + err.message, "danger");
     }
   } else {
-    alert(`Toplu kurulum simüle edildi: ${buildingCount} bina ve ${buildingCount * flatsPerBuilding} daire.`);
+    showToast(`Toplu kurulum simüle edildi: ${buildingCount} bina ve ${buildingCount * flatsPerBuilding} daire.`, "ok");
   }
 }
 
@@ -4604,7 +4604,7 @@ async function saveEditApartment(event, aptId) {
       applyServerData(res.data);
       showToast("Daire ve sakin bilgileri güncellendi.", "ok");
     } catch (err) {
-      alert("Hata: " + err.message);
+      showToast("Hata: " + err.message, "danger");
     }
     return;
   }
@@ -4644,7 +4644,7 @@ async function removeApartment(aptId) {
       applyServerData(res.data);
       showToast("Daire başarıyla silindi.", "ok");
     } catch (err) {
-      alert("Silme hatası: " + err.message);
+      showToast("Silme hatası: " + err.message, "danger");
     }
     return;
   }
@@ -4676,7 +4676,7 @@ async function updateBlockName(event, blockId) {
       applyServerData(res.data);
       showToast("Blok ismi güncellendi.", "ok");
     } catch (err) {
-      alert("İsim güncelleme hatası: " + err.message);
+      showToast("İsim güncelleme hatası: " + err.message, "danger");
     }
     return;
   }
@@ -4712,7 +4712,7 @@ function createBlockApartment(event, blockId) {
         applyServerData(result.data);
         showToast("Daire başarıyla eklendi.", "ok");
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
 
@@ -5289,7 +5289,7 @@ function createSite(event) {
       event.target.reset();
       applyServerData(result.data, { activeSiteId: result.site.id, view: "setup" });
     })
-    .catch((error) => alert(error.message));
+    .catch((error) => showToast(error.message, "danger"));
 }
 
 function saveHealthSnapshot() {
@@ -5300,7 +5300,7 @@ function saveHealthSnapshot() {
       const others = (state.healthScores || []).filter((item) => item.siteId !== state.activeSiteId);
       setState({ healthScores: [...others, ...result.history] });
     })
-    .catch((error) => alert(error.message));
+    .catch((error) => showToast(error.message, "danger"));
 }
 
 function currentResident() {
@@ -5535,11 +5535,11 @@ async function uploadProfilePhoto(input) {
   const file = input.files?.[0];
   if (!file) return;
   if (!file.type.startsWith("image/")) {
-    alert("Lütfen geçerli bir görsel dosyası seçin (PNG, JPG, WEBP).");
+    showToast("Lütfen geçerli bir görsel dosyası seçin (PNG, JPG, WEBP).", "warn");
     return;
   }
   if (file.size > 5 * 1024 * 1024) {
-    alert("Fotoğraf boyutu 5 MB'dan küçük olmalıdır.");
+    showToast("Fotoğraf boyutu 5 MB'dan küçük olmalıdır.", "warn");
     return;
   }
   const reader = new FileReader();
@@ -5569,7 +5569,7 @@ async function uploadProfilePhoto(input) {
           }
         }
       } catch (err) {
-        alert(err.message);
+        showToast(err.message, "danger");
         return;
       }
     } else {
@@ -5809,15 +5809,15 @@ async function saveProfile(event) {
 
   if (newPassword) {
     if (newPassword.length < 6) {
-      alert("Yeni şifre en az 6 karakter olmalıdır.");
+      showToast("Yeni şifre en az 6 karakter olmalıdır.", "warn");
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert("Yeni şifreler birbiriyle uyuşmuyor.");
+      showToast("Yeni şifreler birbiriyle uyuşmuyor.", "warn");
       return;
     }
     if (!currentPassword) {
-      alert("Şifre değiştirmek için mevcut şifrenizi girmelisiniz.");
+      showToast("Şifre değiştirmek için mevcut şifrenizi girmelisiniz.", "warn");
       return;
     }
   }
@@ -5875,10 +5875,10 @@ async function saveProfile(event) {
       }
     }
     playNotificationSound();
-    alert("Profil ve daire bilgileriniz başarıyla güncellendi.");
+    showToast("Profil ve daire bilgileriniz başarıyla güncellendi.", "ok");
     render();
   } catch (err) {
-    alert(err.message || "Güncelleme sırasında bir hata oluştu.");
+    showToast(err.message || "Güncelleme sırasında bir hata oluştu.", "danger");
   }
 }
 
@@ -6086,7 +6086,7 @@ function createDues(event) {
       body: JSON.stringify({ period, amount, dueDate, blockId: state.activeBlockId }),
     })
       .then((result) => applyServerData(result.data))
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   const siteId = state.activeSiteId;
@@ -6111,7 +6111,7 @@ function createExpense(event) {
   const description = String(form.get("description") || "").trim();
 
   if (!title || !amount || amount <= 0) {
-    alert("Lütfen geçerli bir başlık ve tutar girin.");
+    showToast("Lütfen geçerli bir başlık ve tutar girin.", "warn");
     return;
   }
 
@@ -6135,7 +6135,7 @@ function createExpense(event) {
         applyServerData(result.data || result);
         event.target.reset();
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
 
@@ -6159,7 +6159,7 @@ function deleteExpense(expenseId) {
       .then((result) => {
         applyServerData(result.data || result);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   state.expenses = (state.expenses || []).filter((e) => e.id !== expenseId);
@@ -6206,7 +6206,7 @@ function loginUser(event) {
         state = { ...state, ...result.data };
         applyLoggedInUser(result.user);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   const user = state.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email.toLocaleLowerCase("tr-TR"));
@@ -6232,7 +6232,7 @@ function registerResident(event) {
         state = { ...state, ...result.data };
         applyLoggedInUser(result.user);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   const residentId = id("resident");
@@ -6248,7 +6248,7 @@ function registerResident(event) {
 }
 
 function showPwaInfo() {
-  alert("ApartAI mobil uyumlu bir web uygulamasıdır. Akıllı telefonunuzda Safari veya Chrome tarayıcısının Paylaş veya Menü kısmından 'Ana Ekrana Ekle' seçeneğini kullanarak uygulamayı tek dokunuşla tam ekran kullanabilirsiniz.");
+  showToast("ApartAI mobil uyumlu bir web uygulamasıdır. Akıllı telefonunuzda Safari veya Chrome tarayıcısının Paylaş veya Menü kısmından 'Ana Ekrana Ekle' seçeneğini kullanarak uygulamayı tek dokunuşla tam ekran kullanabilirsiniz.", "warn");
 }
 
 function logoutUser() {
@@ -6421,7 +6421,7 @@ function createAnnouncement(event) {
         event.target.reset();
         applyServerData(result.data);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   state.announcements = [
@@ -6463,7 +6463,7 @@ function createApartment(event) {
         event.target.reset();
         applyServerData(result.data);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   const residentId = id("resident");
@@ -6508,17 +6508,17 @@ function importApartmentsCsv(event) {
   const form = new FormData(event.target);
   const csv = String(form.get("csv") || "");
   if (!csv.trim()) {
-    alert("Lütfen CSV içeriği yapıştırın veya bir dosya seçin.");
+    showToast("Lütfen CSV içeriği yapıştırın veya bir dosya seçin.", "warn");
     return;
   }
   apiRequest(`/apartments/import?siteId=${encodeURIComponent(state.activeSiteId)}`, { method: "POST", body: JSON.stringify({ csv }) })
     .then((result) => {
       event.target.reset();
       const errorNote = result.errors?.length ? `\nHatalar:\n- ${result.errors.join("\n- ")}` : "";
-      alert(`${result.created} kayıt eklendi, ${result.skipped} mükerrer atlandı, ${result.blocksCreated} yeni blok oluşturuldu.${errorNote}`);
+      showToast(`${result.created} kayıt eklendi, ${result.skipped} mükerrer atlandı, ${result.blocksCreated} yeni blok oluşturuldu.${errorNote}`, "danger");
       applyServerData(result.data);
     })
-    .catch((error) => alert(error.message));
+    .catch((error) => showToast(error.message, "danger"));
 }
 
 async function createResidentRequest(event) {
@@ -6533,12 +6533,12 @@ async function createResidentRequest(event) {
   try {
     photoDataUrl = await fileToDataUrl(form.get("photo"));
   } catch (error) {
-    alert(error.message);
+    showToast(error.message, "danger");
     return;
   }
   const apartment = residentApartment();
   if (!apartment) {
-    alert("Kayıtlı daire bulunamadı.");
+    showToast("Kayıtlı daire bulunamadı.", "warn");
     return;
   }
   if (API_BASE) {
@@ -6548,10 +6548,10 @@ async function createResidentRequest(event) {
     })
       .then((result) => {
         event.target.reset();
-        alert("Talebiniz başarıyla oluşturuldu ve site yönetimine iletildi.");
+        showToast("Talebiniz başarıyla oluşturuldu ve site yönetimine iletildi.", "ok");
         applyServerData(result.data, { view: "resident-home" });
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   const ai = analyzeComplaint(`${title}. ${description}`);
@@ -6581,7 +6581,7 @@ async function createResidentRequest(event) {
   ];
   saveState();
   event.target.reset();
-  alert("Talebiniz başarıyla oluşturuldu.");
+  showToast("Talebiniz başarıyla oluşturuldu.", "ok");
   setState({ view: "resident-home" });
 }
 
@@ -6981,7 +6981,7 @@ function createSurvey(event) {
     .filter(Boolean);
 
   if (options.length < 2) {
-    alert("Lütfen en az 2 seçenek giriniz.");
+    showToast("Lütfen en az 2 seçenek giriniz.", "warn");
     return;
   }
 
@@ -7007,7 +7007,7 @@ function createSurvey(event) {
         event.target.reset();
         applyServerData(result.data);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
 
@@ -7037,7 +7037,7 @@ function castVote(event, surveyId) {
   const optionIndex = Number(rawIdx);
   const survey = (state.surveys || []).find((s) => s.id === surveyId);
   if (!survey || optionIndex < 0 || optionIndex >= (survey.options || []).length) {
-    alert("Geçersiz seçenek.");
+    showToast("Geçersiz seçenek.", "warn");
     return;
   }
   const optionText = survey.options[optionIndex];
@@ -7052,7 +7052,7 @@ function castVote(event, surveyId) {
         playNotificationSound();
         applyServerData(result);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
 
@@ -7089,7 +7089,7 @@ function toggleSurveyStatus(surveyId) {
       .then((result) => {
         applyServerData(result);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
 
@@ -7109,7 +7109,7 @@ function deleteSurvey(surveyId) {
       .then((result) => {
         applyServerData(result);
       })
-      .catch((error) => alert(error.message));
+      .catch((error) => showToast(error.message, "danger"));
     return;
   }
   state.surveys = (state.surveys || []).filter((s) => s.id !== surveyId);
@@ -7600,7 +7600,7 @@ async function confirmAiSuggestedRequest(msgId) {
   if (!msg || !msg.suggestedRequest) return;
   const apt = residentApartment();
   if (!apt) {
-    alert("Kayıtlı daire bulunamadı.");
+    showToast("Kayıtlı daire bulunamadı.", "warn");
     return;
   }
 
@@ -7632,7 +7632,7 @@ async function confirmAiSuggestedRequest(msgId) {
       applyServerData(res.data);
       updateAssistantDOM();
     } catch (err) {
-      alert("Talep iletilemedi: " + err.message);
+      showToast("Talep iletilemedi: " + err.message, "danger");
     }
   } else {
     msg.requestConfirmed = true;
