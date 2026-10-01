@@ -406,8 +406,8 @@ function stateForUser(data, user) {
       dues: data.dues.filter((item) => apartmentIds.has(item.apartmentId)),
       payments: data.payments.filter((item) => apartmentIds.has(item.apartmentId)),
       requests: data.requests.filter((item) => apartmentIds.has(item.apartmentId)),
-      announcements: data.announcements.filter((item) => item.siteId === user.siteId),
-      surveys: (data.surveys || []).filter((item) => item.siteId === user.siteId),
+      announcements: data.announcements.filter((item) => item.siteId === user.siteId && (!item.blockId || item.blockId === "all" || apartments.some((a) => a.blockId === item.blockId))),
+      surveys: (data.surveys || []).filter((item) => item.siteId === user.siteId && (!item.blockId || item.blockId === "all" || apartments.some((a) => a.blockId === item.blockId))),
       expenses: (data.expenses || []).filter((item) => item.siteId === user.siteId),
     };
   }
@@ -1663,22 +1663,42 @@ async function routeApi(req, res, url) {
     ensure(clean(body.title), "Duyuru başlığı zorunludur.");
     ensure(content, "Duyuru içeriği zorunludur.");
     const siteId = resolveSiteId(url, authUser, data);
+    const rawBlockId = clean(body.blockId || url.searchParams.get("blockId"));
+    const blockId = (rawBlockId && rawBlockId !== "all") ? rawBlockId : null;
+    let audience = clean(body.audience);
+    if (!audience || audience === "Tüm site") {
+      if (blockId) {
+        const blk = data.blocks.find((b) => b.id === blockId);
+        audience = blk ? `${blk.name} Sakinleri` : "Blok Özel";
+      } else {
+        audience = "Tüm site";
+      }
+    }
     const improved = await improveAnnouncementWithAI({ content, tone: clean(body.tone) });
     const announcement = {
       id: uid("ann"),
       siteId,
+      blockId,
       title: clean(body.title),
       content,
       aiContent: improved.content,
       aiProvider: improved.provider,
       aiModel: improved.model,
       aiFallbackUsed: improved.fallbackUsed,
-      audience: clean(body.audience || "Tüm site"),
+      audience,
       date: today(),
       readBy: [],
     };
-    // Duyuruyu yalnızca ilgili sitenin e-postalı sakinlerine ilet.
-    const recipients = data.users.filter((user) => user.role === "resident" && user.siteId === siteId && clean(user.email));
+    // Duyuruyu yalnızca ilgili sitenin (ve eğer blok seçildiyse ilgili bloğun) sakinlerine ilet.
+    let eligibleResidentIds = null;
+    if (blockId) {
+      eligibleResidentIds = new Set(data.apartments.filter((a) => a.blockId === blockId).map((a) => a.residentId).filter(Boolean));
+    }
+    const recipients = data.users.filter((user) => {
+      if (user.role !== "resident" || user.siteId !== siteId || !clean(user.email)) return false;
+      if (eligibleResidentIds && !eligibleResidentIds.has(user.residentId)) return false;
+      return true;
+    });
     const results = await Promise.all(
       recipients.map((user) =>
         notifier.send({
@@ -1766,6 +1786,82 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const blockPatchMatch = url.pathname.match(/^\/api\/blocks\/([^/]+)$/);
+  if (method === "PATCH" && blockPatchMatch) {
+    const block = data.blocks.find((b) => b.id === blockPatchMatch[1]);
+    if (!block) {
+      json(res, 404, { error: "Blok bulunamadı." });
+      return;
+    }
+    requireSiteAccess(block.siteId, authUser, data);
+    const body = await readBody(req);
+    const newName = clean(body.name);
+    ensure(newName, "Blok adı boş olamaz.");
+    block.name = newName;
+    await writeData(data);
+    json(res, 200, { block, data: stateForUser(data, authUser) });
+    return;
+  }
+
+  const aptMatch = url.pathname.match(/^\/api\/apartments\/([^/]+)$/);
+  if (method === "PATCH" && aptMatch) {
+    const apt = data.apartments.find((a) => a.id === aptMatch[1]);
+    if (!apt) {
+      json(res, 404, { error: "Daire bulunamadı." });
+      return;
+    }
+    requireSiteAccess(apt.siteId, authUser, data);
+    const body = await readBody(req);
+    if (body.no) apt.no = clean(body.no);
+    if (body.floor !== undefined) apt.floor = Number(body.floor) || apt.floor;
+    if (body.blockId) {
+      const targetBlock = data.blocks.find((b) => b.id === body.blockId && b.siteId === apt.siteId);
+      if (targetBlock) apt.blockId = targetBlock.id;
+    }
+    const resident = data.residents.find((r) => r.id === apt.residentId);
+    if (resident) {
+      if (body.residentName) resident.name = clean(body.residentName);
+      if (body.phone !== undefined) resident.phone = clean(body.phone);
+      if (body.email !== undefined) {
+        ensure(!body.email || isEmail(body.email), "Geçerli bir e-posta adresi girin.");
+        resident.email = clean(body.email);
+      }
+      if (body.occupancyType) resident.occupancyType = clean(body.occupancyType) === "tenant" ? "tenant" : "owner";
+      if (body.plateNumber !== undefined) resident.plateNumber = clean(body.plateNumber);
+      if (body.emergencyContact !== undefined) resident.emergencyContact = clean(body.emergencyContact);
+
+      const user = data.users.find((u) => u.residentId === resident.id);
+      if (user) {
+        user.name = resident.name;
+        user.phone = resident.phone;
+        user.email = resident.email;
+      }
+    }
+    await writeData(data);
+    json(res, 200, { apartment: apt, resident, data: stateForUser(data, authUser) });
+    return;
+  }
+
+  if (method === "DELETE" && aptMatch) {
+    const apt = data.apartments.find((a) => a.id === aptMatch[1]);
+    if (!apt) {
+      json(res, 404, { error: "Daire bulunamadı." });
+      return;
+    }
+    requireSiteAccess(apt.siteId, authUser, data);
+    data.apartments = data.apartments.filter((a) => a.id !== apt.id);
+    if (apt.residentId) {
+      data.residents = data.residents.filter((r) => r.id !== apt.residentId);
+      data.users = data.users.filter((u) => u.residentId !== apt.residentId);
+    }
+    data.dues = data.dues.filter((d) => d.apartmentId !== apt.id);
+    data.payments = data.payments.filter((p) => p.apartmentId !== apt.id);
+    data.requests = data.requests.filter((r) => r.apartmentId !== apt.id);
+    await writeData(data);
+    json(res, 200, { success: true, data: stateForUser(data, authUser) });
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/apartments/import") {
     const body = await readBody(req);
     const records = parseApartmentCsv(body.csv);
@@ -1846,9 +1942,12 @@ async function routeApi(req, res, url) {
     const options = rawOptions.map(clean).filter(Boolean);
     ensure(options.length >= 2, "Anket için en az 2 seçenek gereklidir.");
     const siteId = resolveSiteId(url, authUser, data);
+    const rawBlockId = clean(body.blockId || url.searchParams.get("blockId"));
+    const blockId = (rawBlockId && rawBlockId !== "all") ? rawBlockId : null;
     const survey = {
       id: uid("survey"),
       siteId,
+      blockId,
       title: clean(body.title),
       description: clean(body.description),
       options,
@@ -1879,6 +1978,11 @@ async function routeApi(req, res, url) {
     const accessible = authUser.role === "resident" ? [authUser.siteId] : userSiteIds(authUser, data);
     ensure(accessible.includes(survey.siteId), "Bu ankete erişim yetkiniz yok.");
     ensure(survey.status === "active", "Bu anket oylamaya kapatılmıştır.");
+    if (authUser.role === "resident" && survey.blockId && survey.blockId !== "all") {
+      const residentApts = data.apartments.filter((apt) => apt.residentId === authUser.residentId);
+      const inBlock = residentApts.some((apt) => apt.blockId === survey.blockId);
+      ensure(inBlock, "Bu anket yalnızca ilgili bloğun sakinlerine açıktır.");
+    }
     const optionIndex = Number(body.optionIndex);
     ensure(Number.isInteger(optionIndex) && optionIndex >= 0 && optionIndex < survey.options.length, "Geçerli bir seçenek seçiniz.");
     if (!Array.isArray(survey.votes)) survey.votes = [];

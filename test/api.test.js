@@ -856,6 +856,91 @@ test("dues/bulk blockId verildiğinde yalnızca o binanın dairelerine kayıt a�
   assert.ok(created.every((due) => blockAAptIds.has(due.apartmentId)));
 });
 
+test("duyuru ve anket oluştururken blockId atanabilir ve blok sakinlerine kısıtlanır", async () => {
+  const admin = await adminToken();
+  // Bloğa özel duyuru
+  const annRes = await api("POST", "/api/announcements?siteId=site-1&blockId=block-a", {
+    token: admin,
+    body: {
+      title: "A Blok Asansör Bakımı",
+      content: "A Blok asansörü yarın 10:00-12:00 arası bakımdadır.",
+      tone: "Resmi",
+      blockId: "block-a",
+    },
+  });
+  assert.equal(annRes.status, 201);
+  assert.equal(annRes.body.announcement.blockId, "block-a");
+
+  // Bloğa özel anket
+  const survRes = await api("POST", "/api/surveys?siteId=site-1&blockId=block-a", {
+    token: admin,
+    body: {
+      title: "A Blok Giriş Paspası Seçimi",
+      description: "A Blok girişi için paspas seçimi",
+      deadline: "2026-12-31",
+      options: ["Kırmızı", "Gri"],
+      blockId: "block-a",
+    },
+  });
+  assert.equal(survRes.status, 201);
+  assert.equal(survRes.body.survey.blockId, "block-a");
+});
+
+test("yönetici blok adını güncelleyebilir (PATCH /api/blocks/:id)", async () => {
+  const admin = await adminToken();
+  const res = await api("PATCH", "/api/blocks/block-a", {
+    token: admin,
+    body: { name: "A Blok - Manzara" },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.block.name, "A Blok - Manzara");
+});
+
+test("yönetici daireyi düzenleyebilir ve silebilir (PATCH & DELETE /api/apartments/:id)", async () => {
+  const admin = await adminToken();
+  // Yeni daire ekle
+  const addRes = await api("POST", "/api/apartments", {
+    token: admin,
+    body: {
+      blockId: "block-a",
+      no: "99X",
+      floor: 9,
+      residentName: "Test Sakini",
+      phone: "05550009999",
+      email: "test99@example.com",
+      occupancyType: "owner",
+    },
+  });
+  assert.equal(addRes.status, 201);
+  const newApt = addRes.body.data.apartments.find((a) => a.no === "99X");
+  assert.ok(newApt);
+
+  // Güncelle
+  const patchRes = await api("PATCH", `/api/apartments/${newApt.id}`, {
+    token: admin,
+    body: {
+      no: "99Y",
+      floor: 10,
+      residentName: "Test Sakini Güncel",
+      plateNumber: "34 TST 99",
+    },
+  });
+  assert.equal(patchRes.status, 200);
+  assert.equal(patchRes.body.apartment.no, "99Y");
+  assert.equal(patchRes.body.apartment.floor, 10);
+  assert.equal(patchRes.body.resident.name, "Test Sakini Güncel");
+  assert.equal(patchRes.body.resident.plateNumber, "34 TST 99");
+
+  // Sil
+  const delRes = await api("DELETE", `/api/apartments/${newApt.id}`, {
+    token: admin,
+  });
+  assert.equal(delRes.status, 200);
+  assert.equal(delRes.body.success, true);
+  const deleted = delRes.body.data.apartments.find((a) => a.id === newApt.id);
+  assert.strictEqual(deleted, undefined);
+});
+
 
 
 
