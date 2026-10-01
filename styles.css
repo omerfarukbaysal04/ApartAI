@@ -962,35 +962,6 @@ textarea:focus-visible {
   font-size: 15px;
 }
 
-.mode-switch {
-  display: flex;
-  min-width: 270px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(18px);
-}
-
-.mode-switch button {
-  flex: 1;
-  border: 0;
-  min-height: 38px;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  padding: 9px 12px;
-  font-weight: 750;
-}
-
-.mode-switch button.active {
-  background:
-    linear-gradient(135deg, rgba(51, 65, 85, 0.95), rgba(51, 103, 168, 0.95));
-  color: #ffffff;
-  box-shadow: 0 12px 24px rgba(51, 65, 85, 0.22);
-}
-
 .grid {
   display: grid;
   gap: 16px;
@@ -1644,9 +1615,6 @@ textarea {
     min-height: 100vh;
   }
 
-  .mode-switch {
-    min-width: 0;
-  }
 
   .session-bar {
     justify-content: flex-end;
@@ -6045,15 +6013,7 @@ html, body {
   }
 
   /* Yönetici / Sakin Butonu */
-  .mode-switch {
-    flex: 0 0 auto !important;
-    display: flex !important;
-  }
 
-  .mode-switch button {
-    padding: 4px 7px !important;
-    font-size: 11px !important;
-  }
 
   /* Aidatlar Mobilde Uyum */
   .dues-filter-panel {
@@ -6922,4 +6882,89 @@ html, body {
   }
 
   .cta-assurances { justify-content: flex-start; }
+}
+
+/* Oturum rolü göstergesi: arayüz tipi değiştirilemez, yalnızca belirtilir. */
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  background: linear-gradient(145deg, #ffffff, #e8edf4);
+  color: var(--ink-secondary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), var(--shadow-xs);
+}
+
+.role-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.65;
+}
+
+.role-chip.admin {
+  color: #1e293b;
+}
+
+.role-chip.resident {
+  color: #475569;
+}
+
+@media (max-width: 560px) {
+  .role-chip {
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+}
+
+/* AI sohbet balonu alt satırı: sağlayıcı rozeti + saat */
+.ai-msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ai-msg-footer .ai-msg-time {
+  margin: 0;
+}
+
+.ai-msg-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: help;
+}
+
+.ai-msg-provider::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Gerçek model yanıtı */
+.ai-msg-provider.live {
+  background: rgba(5, 150, 105, 0.12);
+  color: #047857;
+}
+
+/* Model yanıt vermedi, kural tabanlı metin döndü */
+.ai-msg-provider.fallback {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
 }

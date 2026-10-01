@@ -968,6 +968,16 @@ function requestPhotoSrc(request) {
   return request?.photoUrl || request?.photoDataUrl || "";
 }
 
+// AI sohbet yanıtının gerçek modelden mi yoksa kural tabanlı fallbackten mi
+// geldiğini gösterir. Model adı tooltip olarak verilir.
+function aiProviderBadge(meta) {
+  if (!meta) return "";
+  const live = meta.fallbackUsed === false;
+  const label = live ? (meta.provider === "gemini" ? "Gemini" : meta.provider === "openai" ? "OpenAI" : "AI") : "Demo AI";
+  const title = live ? `${meta.provider} · ${meta.model}` : "Model yanıt vermedi, kural tabanlı yanıt kullanıldı";
+  return `<span class="ai-msg-provider ${live ? "live" : "fallback"}" title="${safeText(title)}">${safeText(label)}</span>`;
+}
+
 function aiBadge(item) {
   if (!item) return `<span class="status warn">Demo AI</span>`;
   return item.aiFallbackUsed === false || item.fallbackUsed === false
@@ -1257,6 +1267,21 @@ function improveAnnouncement(text, tone) {
   return `${openings[tone] ?? openings.Kibar} ${cleaned}${closing}`;
 }
 
+// Ekran tipini oturumun rolüne sabitler. Yönetici ile sakin arayüzleri
+// arasında geçiş yapılamaz; her hesap kendi arayüzünde kalır.
+function enforceSessionMode() {
+  const role = state.sessionUser?.role;
+  if (!role) return;
+  const expected = role === "admin" ? "manager" : "resident";
+  if (state.mode === expected) return;
+  state.mode = expected;
+  // Mod düzeltilince o moda ait olmayan görünümü de başa al.
+  const managerViews = ["dashboard", "dues", "requests", "announcements", "surveys", "setup", "reports", "sites", "expenses", "assistant", "profile"];
+  const isManagerView = managerViews.includes(state.view);
+  if (expected === "manager" && !isManagerView) state.view = "dashboard";
+  if (expected === "resident" && isManagerView) state.view = "resident-home";
+}
+
 function render() {
   const app = document.querySelector("#app");
   ensureActiveSite();
@@ -1270,6 +1295,9 @@ function render() {
     return;
   }
   stopShowcase();
+  // Ekran tipi her zaman oturumun rolünden türetilir. Yönetici yönetici,
+  // sakin sakin kalır; rol dışına çıkan bir durum çizime yansımaz.
+  enforceSessionMode();
   document.body.classList.toggle("resident-mode", state.mode === "resident");
   document.body.classList.toggle("manager-mode", state.mode === "manager");
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
@@ -2433,13 +2461,11 @@ function sessionActions() {
   const notifs = userNotifications();
   const unreadCount = notifs.filter((n) => n.unread).length;
 
+  // Rol sabittir; arayüz tipi değiştirilemez, yalnızca gösterilir.
   const switcher =
     user.role === "admin"
-      ? `<div class="mode-switch" aria-label="Ekran tipi">
-          <button class="${state.mode === "manager" ? "active" : ""}" onclick="setState({ mode: 'manager', view: 'dashboard' })">Yönetici</button>
-          <button class="${state.mode === "resident" ? "active" : ""}" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${scoped.residents[0]?.id ?? ""}' })">Sakin</button>
-        </div>`
-      : `<span class="status info">Sakin Hesabı</span>`;
+      ? `<span class="role-chip admin">Yönetici Hesabı</span>`
+      : `<span class="role-chip resident">Sakin Hesabı</span>`;
 
   return `
     <div class="session-bar">
@@ -7284,9 +7310,6 @@ function managerMenuSheetModal() {
         </div>
 
         <div class="sheet-footer">
-          <button type="button" class="btn text-btn sheet-switch-btn" onclick="setState({ mode: 'resident', view: 'resident-home', selectedResidentId: '${scoped.residents[0]?.id ?? ""}', mobileManagerMenuOpen: false })">
-            🔄 Sakin Ekranına Geç
-          </button>
           <button type="button" class="btn sheet-logout-btn" onclick="toggleManagerMenuSheet(); logoutUser()">
             🚪 Çıkış Yap
           </button>
@@ -7389,7 +7412,10 @@ function renderAssistantMessagesHtml() {
       <div class="ai-chat-msg-row ${msg.role}">
         <div class="ai-chat-bubble ${msg.role}">
           <div class="ai-msg-content">${msg.content.replace(/\n/g, "<br/>").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")}</div>
-          <span class="ai-msg-time">${msg.time || ""}</span>
+          <span class="ai-msg-footer">
+            ${msg.role === "assistant" && msg.aiMeta ? aiProviderBadge(msg.aiMeta) : ""}
+            <span class="ai-msg-time">${msg.time || ""}</span>
+          </span>
         </div>
       </div>
 
@@ -7543,6 +7569,7 @@ async function sendAssistantMessage(customText) {
     let reply = "";
     let suggestedPrompts = [];
     let suggestedRequest = null;
+    let aiMeta = null;
 
     const minDelay = new Promise((resolve) => setTimeout(resolve, 600));
 
@@ -7558,6 +7585,7 @@ async function sendAssistantMessage(customText) {
       reply = res.reply || "Yanıt alınamadı.";
       suggestedPrompts = res.suggestedPrompts || [];
       suggestedRequest = res.suggestedRequest || null;
+      aiMeta = { provider: res.provider, model: res.model, fallbackUsed: res.fallbackUsed };
     } else {
       await minDelay;
       reply = `ApartAI Asistanı: "${safeText(text)}" sorunuz incelendi. Talebiniz analiz edilmiştir.`;
@@ -7570,6 +7598,7 @@ async function sendAssistantMessage(customText) {
       content: reply,
       suggestedPrompts,
       suggestedRequest,
+      aiMeta,
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
     };
 
