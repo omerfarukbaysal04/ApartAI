@@ -1448,8 +1448,9 @@ async function routeApi(req, res, url) {
     // Aidat yalnızca seçili site için oluşturulur.
     const siteId = resolveSiteId(url, authUser, data);
     const existing = new Set(data.dues.filter((due) => due.period === period).map((due) => due.apartmentId));
+    const blockId = clean(body.blockId || url.searchParams.get("blockId"));
     const newDues = data.apartments
-      .filter((apartment) => apartment.siteId === siteId && !existing.has(apartment.id))
+      .filter((apartment) => apartment.siteId === siteId && (!blockId || blockId === "all" || apartment.blockId === blockId) && !existing.has(apartment.id))
       .map((apartment) => ({ id: uid("due"), siteId, apartmentId: apartment.id, period, amount, dueDate, status: "pending" }));
     data.dues.push(...newDues);
     await writeData(data);

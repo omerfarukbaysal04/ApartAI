@@ -843,6 +843,19 @@ test("yönetici siteye bina ve daireleri toplu oluşturur (bulk-setup)", async (
   assert.ok(res.body.apartmentsCount >= 15);
 });
 
+test("dues/bulk blockId verildiğinde yalnızca o binanın dairelerine kayıt açar", async () => {
+  const token = await adminToken();
+  const res = await api("POST", "/api/dues/bulk?siteId=site-1&blockId=block-a", {
+    token,
+    body: { period: "2026-12", amount: 1900, dueDate: "2026-12-15", blockId: "block-a" },
+  });
+  assert.equal(res.status, 201);
+  const created = res.body.data.dues.filter((due) => due.period === "2026-12");
+  assert.ok(created.length > 0);
+  const blockAAptIds = new Set(res.body.data.apartments.filter((a) => a.blockId === "block-a").map((a) => a.id));
+  assert.ok(created.every((due) => blockAAptIds.has(due.apartmentId)));
+});
+
 
 
 

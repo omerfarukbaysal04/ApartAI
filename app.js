@@ -69,6 +69,7 @@ const seedState = {
   editingSurveyId: null,
   sessionUser: null,
   activeSiteId: "site-1",
+  activeBlockId: "all",
   isAssistantOpen: false,
   assistantMessages: [],
   isAssistantLoading: false,
@@ -606,6 +607,7 @@ function applyServerData(data, patch = {}) {
     assistantMessages: state.assistantMessages,
     sessionUser: state.sessionUser,
     activeSiteId: state.activeSiteId,
+    activeBlockId: state.activeBlockId || "all",
   };
   state = { ...state, ...data, ...uiState, ...patch };
   if (patch.view) {
@@ -614,6 +616,7 @@ function applyServerData(data, patch = {}) {
   if (state.sessionUser?.role === "resident") {
     state.mode = "resident";
     state.selectedResidentId = state.sessionUser.residentId;
+    state.activeBlockId = "all";
   }
   ensureActiveSite();
   render();
@@ -624,10 +627,15 @@ function ensureActiveSite() {
   const sites = state.sites || [];
   if (state.sessionUser?.role === "resident") {
     state.activeSiteId = state.sessionUser.siteId || sites[0]?.id || "";
+    state.activeBlockId = "all";
     return;
   }
   if (!sites.some((site) => site.id === state.activeSiteId)) {
     state.activeSiteId = sites[0]?.id || "";
+  }
+  const siteBlocks = (state.blocks || []).filter((b) => !b.siteId || b.siteId === state.activeSiteId);
+  if (state.activeBlockId && state.activeBlockId !== "all" && !siteBlocks.some((b) => b.id === state.activeBlockId)) {
+    state.activeBlockId = "all";
   }
 }
 
@@ -635,8 +643,13 @@ function activeSite() {
   return (state.sites || []).find((site) => site.id === state.activeSiteId) || null;
 }
 
-// Aktif siteye göre filtrelenmiş koleksiyonlar. render() öncesi yeniden kurulur,
-// böylece görünüm fonksiyonları site sınırını tek bir yerden alır.
+function activeBlock() {
+  if (!state.activeBlockId || state.activeBlockId === "all") return null;
+  return (state.blocks || []).find((b) => b.id === state.activeBlockId) || null;
+}
+
+// Aktif siteye ve (eğer seçilmişse) aktif apartman/blok binasına göre filtrelenmiş koleksiyonlar.
+// render() öncesi yeniden kurulur, böylece görünüm fonksiyonları site & bina sınırını tek bir yerden alır.
 let scoped = {
   sites: [],
   users: [],
@@ -650,35 +663,87 @@ let scoped = {
   healthScores: [],
   surveys: [],
   expenses: [],
+  allSiteBlocks: [],
+  allSiteApartments: [],
+  allSiteDues: [],
+  allSiteRequests: [],
+  allSiteResidents: [],
 };
 
 function rebuildScope() {
   const siteId = state.activeSiteId;
   // siteId taşımayan eski kayıtlar da görünür kalsın (geriye dönük uyumluluk).
   const pick = (rows) => (rows || []).filter((row) => !row.siteId || row.siteId === siteId);
+  const siteBlocks = pick(state.blocks);
+  const siteApartments = pick(state.apartments);
+  const siteDues = pick(state.dues);
+  const sitePayments = pick(state.payments);
+  const siteRequests = pick(state.requests);
+  const siteResidents = pick(state.residents);
+
+  const blockId = state.mode === "manager" ? state.activeBlockId : "all";
+  const isBlockScoped = blockId && blockId !== "all";
+
+  let filteredApartments = siteApartments;
+  let filteredBlocks = siteBlocks;
+  let filteredDues = siteDues;
+  let filteredPayments = sitePayments;
+  let filteredRequests = siteRequests;
+  let filteredResidents = siteResidents;
+
+  if (isBlockScoped) {
+    filteredBlocks = siteBlocks.filter((b) => b.id === blockId);
+    filteredApartments = siteApartments.filter((a) => a.blockId === blockId);
+    const aptIdSet = new Set(filteredApartments.map((a) => a.id));
+    filteredDues = siteDues.filter((d) => aptIdSet.has(d.apartmentId));
+    const dueIdSet = new Set(filteredDues.map((d) => d.id));
+    filteredPayments = sitePayments.filter((p) => (p.dueId && dueIdSet.has(p.dueId)) || (p.apartmentId && aptIdSet.has(p.apartmentId)));
+    filteredRequests = siteRequests.filter((r) => aptIdSet.has(r.apartmentId));
+    const residentIdSet = new Set(filteredApartments.map((a) => a.residentId).filter(Boolean));
+    filteredResidents = siteResidents.filter((r) => residentIdSet.has(r.id));
+  }
+
   scoped = {
     sites: state.sites || [],
     users: (state.users || []).filter((user) => user.role !== "resident" || !user.siteId || user.siteId === siteId),
-    blocks: pick(state.blocks),
-    residents: pick(state.residents),
-    apartments: pick(state.apartments),
-    dues: pick(state.dues),
-    payments: pick(state.payments),
-    requests: pick(state.requests),
+    blocks: filteredBlocks,
+    residents: filteredResidents,
+    apartments: filteredApartments,
+    dues: filteredDues,
+    payments: filteredPayments,
+    requests: filteredRequests,
     announcements: pick(state.announcements),
     healthScores: pick(state.healthScores),
     surveys: pick(state.surveys),
     expenses: pick(state.expenses),
+    allSiteBlocks: siteBlocks,
+    allSiteApartments: siteApartments,
+    allSiteDues: siteDues,
+    allSiteRequests: siteRequests,
+    allSiteResidents: siteResidents,
   };
 }
 
 function switchSite(siteId) {
   setState({
     activeSiteId: siteId,
+    activeBlockId: "all",
+    duesBlockFilter: "all",
+    duesSelectedAptId: "all",
     selectedRequestId: null,
     selectedDueId: null,
     requestStatusFilter: "all",
     requestCategoryFilter: "all",
+  });
+}
+
+function switchBlock(blockId) {
+  setState({
+    activeBlockId: blockId || "all",
+    duesBlockFilter: blockId || "all",
+    duesSelectedAptId: "all",
+    selectedRequestId: null,
+    selectedDueId: null,
   });
 }
 
@@ -2439,17 +2504,42 @@ function sessionActions() {
   `;
 }
 
-// Yöneticinin yönettiği siteler arasında geçiş yapmasını sağlar.
+// Yöneticinin yönettiği siteler ve bina/apartman blokları arasında geçiş yapmasını sağlar.
 function siteSwitcher() {
   const sites = state.sites || [];
-  if (sites.length <= 1) return "";
+  const siteBlocks = (state.blocks || []).filter((b) => !b.siteId || b.siteId === state.activeSiteId);
+  const activeBlk = siteBlocks.find((b) => b.id === state.activeBlockId);
+
   return `
-    <label class="site-switcher">
-      <span>Aktif site</span>
-      <select onchange="switchSite(this.value)">
-        ${sites.map((site) => `<option value="${site.id}" ${site.id === state.activeSiteId ? "selected" : ""}>${safeText(site.name)}</option>`).join("")}
-      </select>
-    </label>`;
+    <div class="hierarchy-selector-panel">
+      ${sites.length > 1 ? `
+        <label class="site-switcher">
+          <span>Site / Tesis</span>
+          <select onchange="switchSite(this.value)">
+            ${sites.map((site) => `<option value="${site.id}" ${site.id === state.activeSiteId ? "selected" : ""}>${safeText(site.name)}</option>`).join("")}
+          </select>
+        </label>
+      ` : `
+        <div style="font-size:11.5px; font-weight:700; color:rgba(255,255,255,0.85); margin-bottom:2px; display:flex; align-items:center; gap:6px;">
+          <span>📍</span> <span>${safeText(sites[0]?.name || "Site")}</span>
+        </div>
+      `}
+      ${siteBlocks.length > 0 ? `
+        <label class="site-switcher">
+          <span>Apartman / Blok</span>
+          <select onchange="switchBlock(this.value)">
+            <option value="all" ${(!state.activeBlockId || state.activeBlockId === "all") ? "selected" : ""}>🏢 Tüm Binalar (Genel Görünüm)</option>
+            ${siteBlocks.map((b) => `<option value="${b.id}" ${b.id === state.activeBlockId ? "selected" : ""}>🏢 ${safeText(b.name)}</option>`).join("")}
+          </select>
+        </label>
+      ` : ""}
+      ${activeBlk ? `
+        <div class="block-active-badge">
+          <span style="font-size:11.5px; font-weight:600; color:#2dd4bf;">📍 ${safeText(activeBlk.name)} seçili</span>
+          <button type="button" class="block-clear-btn" onclick="switchBlock('all')" title="Tüm site genel görünümüne dön">✕ Tüm Site</button>
+        </div>
+      ` : ""}
+    </div>`;
 }
 
 function managerNav() {
@@ -2520,6 +2610,12 @@ function pageDescription() {
     "resident-announcements": "Yönetim duyurularını takip et.",
     "resident-surveys": "Site kararlarına oy vererek görüşünü bildir veya oyunu düzenle.",
   };
+  if (state.mode === "manager" && state.activeBlockId && state.activeBlockId !== "all") {
+    const b = (state.blocks || []).find((item) => item.id === state.activeBlockId);
+    if (b) {
+      return `🏢 ${safeText(b.name)} Filtresi Aktif — ${descriptions[state.view] ?? ""}`;
+    }
+  }
   return descriptions[state.view] ?? "";
 }
 
@@ -2561,7 +2657,26 @@ function dashboardView() {
   const vaultBalance = dues.paid - totalExpense;
   const activeSurveys = (scoped.surveys || []).filter((s) => s.status === "active");
 
+  const curBlock = (state.activeBlockId && state.activeBlockId !== "all")
+    ? (state.blocks || []).find((b) => b.id === state.activeBlockId)
+    : null;
+
   return `
+    ${curBlock ? `
+      <div class="active-block-scope-banner">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:26px;">🏢</span>
+          <div>
+            <div style="font-size:11px; opacity:0.85; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Bina / Blok Filtresi Aktif</div>
+            <div style="font-size:16px; font-weight:800;">${safeText(curBlock.name)} — Veriler Bu Binaya Göre Gösteriliyor</div>
+            <div style="font-size:12px; opacity:0.9; margin-top:2px;">${scoped.apartments.length} Daire • ${scoped.dues.length} Aidat Kaydı • ${openRequests.length} Açık Talep</div>
+          </div>
+        </div>
+        <button type="button" class="btn" style="background:#ffffff; color:#0f766e; border:none; font-weight:700; font-size:12.5px; padding:7px 14px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15);" onclick="switchBlock('all')">
+          ✕ Tüm Siteye Dön (${scoped.allSiteBlocks?.length || 0} Bina)
+        </button>
+      </div>
+    ` : ""}
     <div class="grid dashboard-grid">
       <!-- 1. Sağlık Skoru Kartı -->
       <section class="section interactive-dash-card card-health" onclick="setState({ view: 'reports' })" title="Detaylı Sağlık Raporuna Git">
@@ -2701,9 +2816,12 @@ function dashboardView() {
 
 function duesView() {
   const allDues = scoped.dues || [];
-  const siteBlocks = scoped.blocks || [];
+  const siteBlocks = scoped.allSiteBlocks || scoped.blocks || [];
   const siteApartments = scoped.apartments || [];
   const allPeriods = [...new Set(allDues.map((d) => d.period))].filter(Boolean).sort().reverse();
+  const curBlock = (state.activeBlockId && state.activeBlockId !== "all")
+    ? (state.blocks || []).find((b) => b.id === state.activeBlockId)
+    : null;
 
   // Filtreleme mantığı
   let filteredDues = allDues.slice();
@@ -2746,6 +2864,17 @@ function duesView() {
   const activeWarningDue = state.warningModalDueId ? allDues.find((d) => d.id === state.warningModalDueId) : null;
 
   return `
+    ${curBlock ? `
+      <div class="active-block-scope-banner" style="margin-bottom:14px; padding:10px 16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:22px;">🏢</span>
+          <div>
+            <span style="font-weight:700;">${safeText(curBlock.name)}</span> için aidat ve tahsilat görünümü (${filteredDues.length} kayıt)
+          </div>
+        </div>
+        <button type="button" class="btn" style="background:#ffffff; color:#0f766e; border:none; font-weight:700; font-size:12px; padding:5px 12px; border-radius:6px; cursor:pointer;" onclick="switchBlock('all')">✕ Tüm Binalar</button>
+      </div>
+    ` : ""}
     <!-- 1. Üst KPI Özet Kartları -->
     <div class="grid dashboard-grid">
       <section class="section metric">
@@ -2938,8 +3067,8 @@ function duesView() {
       <section class="section">
         <div class="section-header">
           <div>
-            <h2>Toplu Yeni Aidat Oluştur</h2>
-            <p>Seçilen dönem için sitedeki tüm dairelere borç tahakkuk ettirilir.</p>
+            <h2>${curBlock ? `⚡ ${safeText(curBlock.name)} İçin Toplu Aidat Oluştur` : "Toplu Yeni Aidat Oluştur"}</h2>
+            <p>${curBlock ? `Yalnızca <strong>${safeText(curBlock.name)}</strong> bloğundaki dairelere borç tahakkuk ettirilir.` : "Seçilen dönem için sitedeki tüm dairelere borç tahakkuk ettirilir."}</p>
           </div>
         </div>
         <form onsubmit="createDues(event)" style="display:flex; flex-direction:column; gap:14px; margin-top:6px;">
@@ -2949,7 +3078,7 @@ function duesView() {
             <label>Son Ödeme<input name="dueDate" type="date" value="${new Date().toISOString().slice(0, 8)}15" required /></label>
           </div>
           <button class="btn primary" type="submit" style="width:100%; justify-content:center; padding:10px 16px; font-weight:700;">
-            ⚡ Tüm Daireler İçin Toplu Aidat Oluştur
+            ${curBlock ? `⚡ ${safeText(curBlock.name)} Daireleri İçin Aidat Oluştur (${scoped.apartments.length} Daire)` : "⚡ Tüm Daireler İçin Toplu Aidat Oluştur"}
           </button>
         </form>
       </section>
@@ -3926,8 +4055,22 @@ function requestsView() {
     return statusOk && categoryOk && entryTypeOk;
   });
   const selectedRequest = scoped.requests.find((request) => request.id === state.selectedRequestId);
+  const curBlock = (state.activeBlockId && state.activeBlockId !== "all")
+    ? (state.blocks || []).find((b) => b.id === state.activeBlockId)
+    : null;
 
   return `
+    ${curBlock ? `
+      <div class="active-block-scope-banner" style="margin-bottom:14px; padding:10px 16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:22px;">🏢</span>
+          <div>
+            <span style="font-weight:700;">${safeText(curBlock.name)}</span> için talepler listeleniyor (${filteredRequests.length} kayıt)
+          </div>
+        </div>
+        <button type="button" class="btn" style="background:#ffffff; color:#0f766e; border:none; font-weight:700; font-size:12px; padding:5px 12px; border-radius:6px; cursor:pointer;" onclick="switchBlock('all')">✕ Tüm Binalar</button>
+      </div>
+    ` : ""}
     <section class="section">
       <div class="section-header">
         <div>
@@ -5488,8 +5631,12 @@ function createDues(event) {
   const period = form.get("period");
   const amount = Number(form.get("amount"));
   const dueDate = form.get("dueDate");
+  const blockParam = (state.activeBlockId && state.activeBlockId !== "all") ? `&blockId=${encodeURIComponent(state.activeBlockId)}` : "";
   if (API_BASE) {
-    apiRequest(`/dues/bulk?siteId=${encodeURIComponent(state.activeSiteId)}`, { method: "POST", body: JSON.stringify({ period, amount, dueDate }) })
+    apiRequest(`/dues/bulk?siteId=${encodeURIComponent(state.activeSiteId)}${blockParam}`, {
+      method: "POST",
+      body: JSON.stringify({ period, amount, dueDate, blockId: state.activeBlockId }),
+    })
       .then((result) => applyServerData(result.data))
       .catch((error) => alert(error.message));
     return;
@@ -6608,16 +6755,31 @@ function managerMenuSheetModal() {
           <button type="button" class="sheet-close-btn" onclick="toggleManagerMenuSheet()" aria-label="Kapat">×</button>
         </div>
 
-        ${sites.length > 1 ? `
-          <div class="sheet-site-switcher">
-            <label>
-              <span>Aktif Site:</span>
-              <select onchange="switchSite(this.value); toggleManagerMenuSheet();">
-                ${sites.map((s) => `<option value="${s.id}" ${s.id === state.activeSiteId ? "selected" : ""}>${safeText(s.name)}</option>`).join("")}
-              </select>
-            </label>
-          </div>
-        ` : ""}
+        ${(() => {
+          const siteBlocks = (state.blocks || []).filter((b) => !b.siteId || b.siteId === state.activeSiteId);
+          if (sites.length <= 1 && siteBlocks.length === 0) return "";
+          return `
+            <div class="sheet-site-switcher" style="display:flex; flex-direction:column; gap:8px;">
+              ${sites.length > 1 ? `
+                <label>
+                  <span>Aktif Site:</span>
+                  <select onchange="switchSite(this.value); toggleManagerMenuSheet();">
+                    ${sites.map((s) => `<option value="${s.id}" ${s.id === state.activeSiteId ? "selected" : ""}>${safeText(s.name)}</option>`).join("")}
+                  </select>
+                </label>
+              ` : ""}
+              ${siteBlocks.length > 0 ? `
+                <label>
+                  <span>Apartman / Blok:</span>
+                  <select onchange="switchBlock(this.value); toggleManagerMenuSheet();">
+                    <option value="all" ${(!state.activeBlockId || state.activeBlockId === "all") ? "selected" : ""}>🏢 Tüm Binalar (Genel Görünüm)</option>
+                    ${siteBlocks.map((b) => `<option value="${b.id}" ${b.id === state.activeBlockId ? "selected" : ""}>🏢 ${safeText(b.name)}</option>`).join("")}
+                  </select>
+                </label>
+              ` : ""}
+            </div>
+          `;
+        })()}
 
         <div class="sheet-content-scroll">
           ${categories.map((cat) => `
