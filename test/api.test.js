@@ -20,6 +20,8 @@ process.env.NOTIFY_DRIVER = "log";
 process.env.AI_PROVIDER = "rules";
 process.env.GEMINI_API_KEY = "";
 process.env.OPENAI_API_KEY = "";
+process.env.DATABASE_URL = "";
+process.env.DB_DRIVER = "file";
 
 const app = require("../server");
 

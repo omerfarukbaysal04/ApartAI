@@ -56,6 +56,7 @@ const seedState = {
   activeBlockId: "all",
   isAssistantOpen: false,
   assistantMessages: [],
+  assistantMessagesSessionKey: "",
   isAssistantLoading: false,
   mobileNavOpen: false,
   mobileManagerMenuOpen: false,
@@ -557,6 +558,47 @@ function setState(patch) {
   render();
 }
 
+function resetSessionTransientState() {
+  state.selectedResidentId = null;
+  state.selectedRequestId = null;
+  state.selectedDueId = null;
+  state.reminderDraft = "";
+  state.reminderFallbackUsed = true;
+  state.selectedNotificationDetailId = null;
+  state.activePaymentDueId = null;
+  state.paymentStep = "form";
+  state.paymentReceiptData = null;
+  state.warningModalDueId = null;
+  state.warningModalAptId = null;
+  state.warningModalDraft = "";
+  state.warningModalTone = "friendly";
+  state.batchWhatsAppModalOpen = false;
+  state.editingSurveyId = null;
+  state.editingApartmentId = null;
+  state.mobileNavOpen = false;
+  state.mobileManagerMenuOpen = false;
+  state.isAssistantOpen = false;
+  state.isAssistantLoading = false;
+  authModalOpen = false;
+
+  state.requestStatusFilter = "all";
+  state.requestCategoryFilter = "all";
+  state.requestEntryTypeFilter = "all";
+  state.setupBlockFilter = "all";
+  state.duesPeriodFilter = "all";
+  state.duesBlockFilter = "all";
+  state.duesStatusFilter = "all";
+  state.duesSelectedAptId = "all";
+  state.financesDateFilter = "all";
+  state.financesStartDate = "";
+  state.financesEndDate = "";
+  state.financesSelectedMonth = "all";
+  state.financesCategoryFilter = "all";
+
+  state.assistantMessages = [];
+  state.assistantMessagesSessionKey = "";
+}
+
 function applyServerData(data, patch = {}) {
   const currentView = patch.view || state.view;
   const uiState = {
@@ -590,6 +632,7 @@ function applyServerData(data, patch = {}) {
     batchWhatsAppModalOpen: state.batchWhatsAppModalOpen,
     batchWhatsAppTone: state.batchWhatsAppTone,
     assistantMessages: state.assistantMessages,
+    assistantMessagesSessionKey: state.assistantMessagesSessionKey,
     sessionUser: state.sessionUser,
     activeSiteId: state.activeSiteId,
     activeBlockId: state.activeBlockId || "all",
@@ -807,10 +850,7 @@ async function apiRequest(path, options = {}) {
   // düşmesi değil; sunucunun mesajı olduğu gibi gösterilir.
   const isAuthAttempt = path.startsWith("/auth/login") || path.startsWith("/auth/register");
   if (response.status === 401 && !isAuthAttempt) {
-    setToken(null);
-    saveSession(null);
-    state.sessionUser = null;
-    render();
+    logoutUser();
     throw new Error("Oturum süresi doldu, lütfen tekrar giriş yapın.");
   }
   if (!response.ok) {
@@ -824,6 +864,8 @@ async function loadRemoteState() {
   if (!API_BASE) {
     state = loadLocalState();
     state.sessionUser = loadSession();
+    resetSessionTransientState();
+    syncAssistantHistoryForCurrentSession();
     const savedView = getSavedActiveView(state.sessionUser?.role);
     if (savedView) {
       state.view = savedView;
@@ -833,8 +875,11 @@ async function loadRemoteState() {
     return;
   }
   try {
-    state = { ...state, ...(await apiRequest("/state")) };
+    const serverState = await apiRequest("/state");
+    state = { ...structuredClone(seedState), ...serverState };
     state.sessionUser = loadSession();
+    resetSessionTransientState();
+    syncAssistantHistoryForCurrentSession();
     const role = state.sessionUser?.role;
     if (role === "resident") {
       state.mode = "resident";
@@ -1759,11 +1804,14 @@ function toggleSoundPreference(enabled) {
   }
 }
 
-const READ_NOTIFS_STORAGE_KEY = "apartai_read_notif_ids_v2";
+function getReadNotifStorageKey() {
+  const uid = state.sessionUser?.id ? `user_${state.sessionUser.id}` : "guest";
+  return `apartai_read_notif_ids_v2_${uid}`;
+}
 
 function getReadNotifIds() {
   try {
-    return JSON.parse(localStorage.getItem(READ_NOTIFS_STORAGE_KEY) || "[]");
+    return JSON.parse(localStorage.getItem(getReadNotifStorageKey()) || "[]");
   } catch {
     return [];
   }
@@ -1774,7 +1822,7 @@ function markNotifAsRead(id) {
   if (!ids.includes(id)) {
     ids.push(id);
     try {
-      localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(ids));
+      localStorage.setItem(getReadNotifStorageKey(), JSON.stringify(ids));
     } catch {}
   }
 }
@@ -2021,7 +2069,7 @@ function markAllNotificationsRead(event) {
     if (!ids.includes(n.id)) ids.push(n.id);
   });
   try {
-    localStorage.setItem(READ_NOTIFS_STORAGE_KEY, JSON.stringify(ids));
+    localStorage.setItem(getReadNotifStorageKey(), JSON.stringify(ids));
   } catch {}
   if (state.sessionUser?.role === "resident") {
     markAnnouncementsRead();
@@ -6204,7 +6252,7 @@ function applyLoggedInUser(user) {
   saveSession(safeUser);
   state.sessionUser = safeUser;
   authModalOpen = false;
-  state.selectedRequestId = null;
+  resetSessionTransientState();
   if (safeUser.role === "resident") {
     state.mode = "resident";
     state.view = "resident-home";
@@ -6217,6 +6265,8 @@ function applyLoggedInUser(user) {
     const allowed = Array.isArray(safeUser.siteIds) && safeUser.siteIds.length ? safeUser.siteIds : (state.sites || []).map((site) => site.id);
     if (!allowed.includes(state.activeSiteId)) state.activeSiteId = allowed[0] || "";
   }
+  saveActiveView(state.view);
+  syncAssistantHistoryForCurrentSession(true);
   render();
 }
 
@@ -6229,7 +6279,7 @@ function loginUser(event) {
     apiRequest("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) })
       .then((result) => {
         setToken(result.token);
-        state = { ...state, ...result.data };
+        state = { ...structuredClone(seedState), ...result.data };
         applyLoggedInUser(result.user);
       })
       .catch((error) => showToast(error.message, "danger"));
@@ -6255,7 +6305,7 @@ function registerResident(event) {
     apiRequest("/auth/register", { method: "POST", body: JSON.stringify(payload) })
       .then((result) => {
         setToken(result.token);
-        state = { ...state, ...result.data };
+        state = { ...structuredClone(seedState), ...result.data };
         applyLoggedInUser(result.user);
       })
       .catch((error) => showToast(error.message, "danger"));
@@ -6277,21 +6327,35 @@ function showPwaInfo() {
   showToast("ApartAI mobil uyumlu bir web uygulamasıdır. Akıllı telefonunuzda Safari veya Chrome tarayıcısının Paylaş veya Menü kısmından 'Ana Ekrana Ekle' seçeneğini kullanarak uygulamayı tek dokunuşla tam ekran kullanabilirsiniz.", "warn");
 }
 
-function logoutUser() {
+async function logoutUser() {
   setToken(null);
   saveSession(null);
   try {
     localStorage.removeItem(ACTIVE_VIEW_KEY);
-    history.replaceState(null, "", " ");
+    history.replaceState(null, "", window.location.pathname);
   } catch (e) {}
   state.sessionUser = null;
   state.mode = "manager";
   state.view = "dashboard";
-  state.isAssistantOpen = false;
-  state.mobileNavOpen = false;
-  state.mobileManagerMenuOpen = false;
+  resetSessionTransientState();
+  syncAssistantHistoryForCurrentSession(true);
   document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open", "manager-menu-open");
   document.documentElement.classList.remove("ai-chat-open", "manager-menu-open");
+
+  if (API_BASE) {
+    try {
+      const publicData = await apiRequest("/state");
+      state = { ...structuredClone(seedState), ...publicData, sessionUser: null, mode: "manager", view: "dashboard" };
+      resetSessionTransientState();
+      syncAssistantHistoryForCurrentSession(true);
+    } catch {
+      state = structuredClone(seedState);
+      syncAssistantHistoryForCurrentSession(true);
+    }
+  } else {
+    state = structuredClone(seedState);
+    syncAssistantHistoryForCurrentSession(true);
+  }
   render();
 }
 
@@ -7320,7 +7384,7 @@ function managerMenuSheetModal() {
 }
 
 function getAssistantHistoryKey() {
-  const uid = state.sessionUser?.id || "guest";
+  const uid = state.sessionUser?.id ? `user_${state.sessionUser.id}` : "guest";
   return `apartai_chat_v2_${uid}`;
 }
 
@@ -7339,6 +7403,22 @@ function saveAssistantHistory() {
   } catch {}
 }
 
+function syncAssistantHistoryForCurrentSession(force = false) {
+  const currentKey = getAssistantHistoryKey();
+  if (!force && state.assistantMessagesSessionKey === currentKey && Array.isArray(state.assistantMessages) && state.assistantMessages.length > 0) {
+    return;
+  }
+  state.assistantMessages = [];
+  state.assistantMessagesSessionKey = currentKey;
+  const saved = loadAssistantHistory();
+  if (saved && saved.length > 0) {
+    state.assistantMessages = saved;
+  } else {
+    initAssistantWelcome();
+  }
+  updateAssistantDOM();
+}
+
 function clearAssistantChat() {
   state.assistantMessages = [];
   try {
@@ -7350,6 +7430,7 @@ function clearAssistantChat() {
 }
 
 function initAssistantWelcome() {
+  state.assistantMessagesSessionKey = getAssistantHistoryKey();
   const isResident = state.mode === "resident";
   const isGuest = !state.sessionUser;
   const name = state.sessionUser?.name || "Ziyaretçi";
@@ -7395,13 +7476,9 @@ function initAssistantWelcome() {
 }
 
 function renderAssistantMessagesHtml() {
-  if (!state.assistantMessages || state.assistantMessages.length === 0) {
-    const saved = loadAssistantHistory();
-    if (saved && saved.length > 0) {
-      state.assistantMessages = saved;
-    } else {
-      initAssistantWelcome();
-    }
+  const currentKey = getAssistantHistoryKey();
+  if (state.assistantMessagesSessionKey !== currentKey || !state.assistantMessages || state.assistantMessages.length === 0) {
+    syncAssistantHistoryForCurrentSession();
   }
 
   const messages = state.assistantMessages || [];
@@ -7531,13 +7608,8 @@ function toggleAssistant() {
   state.isAssistantOpen = !state.isAssistantOpen;
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
   document.documentElement.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
-  if (state.isAssistantOpen && (!state.assistantMessages || state.assistantMessages.length === 0)) {
-    const saved = loadAssistantHistory();
-    if (saved && saved.length > 0) {
-      state.assistantMessages = saved;
-    } else {
-      initAssistantWelcome();
-    }
+  if (state.isAssistantOpen) {
+    syncAssistantHistoryForCurrentSession();
   }
   updateAssistantDOM();
 }
