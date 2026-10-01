@@ -120,18 +120,97 @@ class JsonRepository {
   }
 }
 
-// PostgreSQL sürücüsü için yer tutucu. Aynı arayüzü (init/getState/saveState/reset)
-// `pg` istemcisi ve `db/schema.sql` üzerinden uygular. Devreye almak için
-// DB_DRIVER=postgres ve DATABASE_URL ayarlanır.
+// PostgreSQL sürücüsü (Supabase / Neon uyumlu).
+// Tüm durum apartai_state tablosundaki JSONB belgesinde atomik olarak saklanır.
+// DATABASE_URL tanımlandığında otomatik olarak devreye girer.
 class PostgresRepository {
-  constructor() {
-    throw new Error(
-      "PostgresRepository henüz uygulanmadı. db/schema.sql + 'pg' istemcisi ile doldurulup DB_DRIVER=postgres ile devreye alınır."
+  constructor(options = {}) {
+    this.connectionString = options.connectionString || process.env.DATABASE_URL;
+    this.pool = null;
+    this.seedFile = options.seedFile || process.env.APARTAI_SEED_FILE || SEED_FILE;
+    this.dataFile = options.dataFile || process.env.APARTAI_DB_FILE || DATA_FILE;
+  }
+
+  async getPool() {
+    if (!this.pool) {
+      const { Pool } = require("pg");
+      this.pool = new Pool({
+        connectionString: this.connectionString,
+        ssl: this.connectionString && (this.connectionString.includes("localhost") || this.connectionString.includes("127.0.0.1"))
+          ? false
+          : { rejectUnauthorized: false },
+      });
+    }
+    return this.pool;
+  }
+
+  async init() {
+    const pool = await this.getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS apartai_state (
+        id text PRIMARY KEY,
+        data jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    `);
+    const res = await pool.query("SELECT data FROM apartai_state WHERE id = 'current'");
+    if (res.rows.length === 0) {
+      let initialData = null;
+      try {
+        if (fsSync.existsSync(this.dataFile)) {
+          initialData = JSON.parse(await fs.readFile(this.dataFile, "utf8"));
+        } else if (fsSync.existsSync(this.seedFile)) {
+          initialData = JSON.parse(await fs.readFile(this.seedFile, "utf8"));
+        }
+      } catch {
+        initialData = { sites: [], blocks: [], apartments: [], residents: [], dues: [], payments: [], requests: [], announcements: [], surveys: [], expenses: [], users: [] };
+      }
+      if (initialData) {
+        await pool.query(
+          "INSERT INTO apartai_state (id, data, updated_at) VALUES ('current', $1, now()) ON CONFLICT (id) DO NOTHING",
+          [JSON.stringify(initialData)]
+        );
+      }
+    }
+  }
+
+  async getState() {
+    await this.init();
+    const pool = await this.getPool();
+    const res = await pool.query("SELECT data FROM apartai_state WHERE id = 'current'");
+    if (res.rows.length > 0) {
+      return normalizeData(res.rows[0].data);
+    }
+    return normalizeData({});
+  }
+
+  async saveState(data) {
+    const pool = await this.getPool();
+    await pool.query(
+      `INSERT INTO apartai_state (id, data, updated_at)
+       VALUES ('current', $1, now())
+       ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`,
+      [JSON.stringify(data)]
     );
+  }
+
+  async reset() {
+    const pool = await this.getPool();
+    let seed = {};
+    if (fsSync.existsSync(this.seedFile)) {
+      seed = JSON.parse(await fs.readFile(this.seedFile, "utf8"));
+    }
+    await pool.query(
+      `INSERT INTO apartai_state (id, data, updated_at)
+       VALUES ('current', $1, now())
+       ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`,
+      [JSON.stringify(seed)]
+    );
+    return this.getState();
   }
 }
 
-function createRepository(driver = process.env.DB_DRIVER || "json") {
+function createRepository(driver = process.env.DB_DRIVER || (process.env.DATABASE_URL ? "postgres" : "json")) {
   switch (driver.toLowerCase()) {
     case "postgres":
     case "pg":

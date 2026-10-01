@@ -1,7 +1,9 @@
 const STORAGE_KEY = "apartai-mvp-state-v1";
 const SESSION_KEY = "apartai-session-v1";
 const TOKEN_KEY = "apartai-token-v1";
-const API_BASE = location.protocol === "file:" ? "" : "/api";
+const API_BASE = typeof window !== "undefined" && window.APARTAI_API_BASE !== undefined
+  ? window.APARTAI_API_BASE
+  : (location.protocol === "file:" ? "" : "/api");
 
 // Sosyal medya yapılandırması (küratörlü). Buradaki handle/url alanlarını
 // kendi hesaplarınla değiştir. `featured` alanı öne çıkan içeriği belirler:
