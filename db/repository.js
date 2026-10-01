@@ -18,6 +18,9 @@ const DATA_DIR = path.join(ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
 const SEED_FILE = path.join(DATA_DIR, "seed.json");
 
+// Yazma kilidi için sabit danışmanlı kilit anahtarı (uygulamaya özgü, rastgele).
+const WRITE_LOCK_KEY = 728413905;
+
 function normalizeData(data) {
   if (!Array.isArray(data.users)) {
     data.users = [
@@ -118,6 +121,12 @@ class JsonRepository {
     await fs.copyFile(this.seedFile, this.dataFile);
     return this.getState();
   }
+
+  // Tek süreçte çalışan JSON sürücüsünde süreç içi sıra yeterlidir; ek kilide
+  // gerek yoktur (bkz. server.js içindeki serializeWrite).
+  async withWriteLock(fn) {
+    return fn();
+  }
 }
 
 // PostgreSQL sürücüsü (Supabase / Neon uyumlu).
@@ -192,6 +201,28 @@ class PostgresRepository {
        ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`,
       [JSON.stringify(data)]
     );
+  }
+
+  // Yazma işlemlerini sunucu örnekleri arasında seri hale getirir.
+  //
+  // Tüm durum tek bir JSONB belgesinde tutulduğu için oku-değiştir-yaz döngüsü
+  // korumasız bırakılırsa eşzamanlı iki istek birbirinin değişikliğini siler
+  // (lost update). Postgres danışmanlı kilidi (advisory lock) isteğin tamamı
+  // boyunca tutulur; böylece aynı anda yalnızca tek bir yazma akışı çalışır.
+  async withWriteLock(fn) {
+    const pool = await this.getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("SELECT pg_advisory_lock($1)", [WRITE_LOCK_KEY]);
+      return await fn();
+    } finally {
+      try {
+        await client.query("SELECT pg_advisory_unlock($1)", [WRITE_LOCK_KEY]);
+      } catch {
+        /* bağlantı koptuysa kilit zaten serbest kalır */
+      }
+      client.release();
+    }
   }
 
   async reset() {

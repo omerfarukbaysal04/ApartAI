@@ -5,25 +5,6 @@ const API_BASE = typeof window !== "undefined" && window.APARTAI_API_BASE !== un
   ? window.APARTAI_API_BASE
   : (location.protocol === "file:" ? "" : "/api");
 
-// Sosyal medya yapılandırması (küratörlü). Buradaki handle/url alanlarını
-// kendi hesaplarınla değiştir. `featured` alanı öne çıkan içeriği belirler:
-//   - youtube: video URL'si ya da video ID'si
-//   - instagram/tiktok/x: gönderi (post/tweet) URL'si
-// `featured` boş bırakılırsa o platform için sadece kart gösterilir.
-const SOCIAL = {
-  youtube: { handle: "@ApartAI", url: "https://www.youtube.com/@ApartAI", featured: "" },
-  instagram: { handle: "@apartai", url: "https://www.instagram.com/apartai", featured: "" },
-  tiktok: { handle: "@apartai", url: "https://www.tiktok.com/@apartai", featured: "" },
-  x: { handle: "@apartai", url: "https://x.com/apartai", featured: "" },
-};
-
-const SOCIAL_META = {
-  youtube: { label: "YouTube", color: "#ff0000", icon: "M23 12s0-3.2-.4-4.6a2.4 2.4 0 0 0-1.7-1.7C19.4 5.3 12 5.3 12 5.3s-7.4 0-8.9.4A2.4 2.4 0 0 0 1.4 7.4C1 8.8 1 12 1 12s0 3.2.4 4.6a2.4 2.4 0 0 0 1.7 1.7c1.5.4 8.9.4 8.9.4s7.4 0 8.9-.4a2.4 2.4 0 0 0 1.7-1.7C23 15.2 23 12 23 12ZM9.8 15.3V8.7l5.7 3.3-5.7 3.3Z" },
-  instagram: { label: "Instagram", color: "#e1306c", icon: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.3 2.2.4.6.2 1 .4 1.4.9.5.4.7.8.9 1.4.1.4.3 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.8-.4 2.2-.2.6-.4 1-.9 1.4-.4.5-.8.7-1.4.9-.4.1-1 .3-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.3-2.2-.4a3.7 3.7 0 0 1-1.4-.9 3.7 3.7 0 0 1-.9-1.4c-.1-.4-.3-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.8.4-2.2.2-.6.4-1 .9-1.4.4-.5.8-.7 1.4-.9.4-.1 1-.3 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5Z" },
-  tiktok: { label: "TikTok", color: "#010101", icon: "M16.6 5.8a4.8 4.8 0 0 1-3-2.7h-2.9v12.4a2.6 2.6 0 1 1-2-2.5V9.9a5.4 5.4 0 1 0 4.9 5.4V9.2a7.7 7.7 0 0 0 4.4 1.4V7.7a4.8 4.8 0 0 1-1.4-1.9Z" },
-  x: { label: "X", color: "#000000", icon: "M18.2 2.5h3.3l-7.2 8.2 8.5 11.3h-6.6l-5.2-6.8-6 6.8H1.7l7.7-8.8L1.3 2.5H8l4.7 6.2 5.5-6.2Zm-1.2 17.8h1.8L7.1 4.3H5.2L17 20.3Z" },
-};
-
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) || "";
 }
@@ -666,7 +647,7 @@ function activeBlockScopeBanner() {
           <div style="font-size:12px; opacity:0.9; margin-top:2px;">${scoped.apartments.length} Daire • ${scoped.dues.length} Aidat Kaydı • ${openRequests.length} Açık Talep</div>
         </div>
       </div>
-      <button type="button" class="btn" style="background:#ffffff; color:#0f766e; border:none; font-weight:700; font-size:12.5px; padding:7px 14px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15); cursor:pointer;" onclick="switchBlock('all')">
+      <button type="button" class="btn" style="background:#ffffff; color:#334155; border:none; font-weight:700; font-size:12.5px; padding:7px 14px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15); cursor:pointer;" onclick="switchBlock('all')">
         ✕ Tüm Siteye Dön (${scoped.allSiteBlocks?.length || 0} Bina)
       </button>
     </div>
@@ -992,7 +973,10 @@ function aiBadge(item) {
 }
 
 function brandLogo(className = "brand-logo") {
-  return `<img class="${className}" src="assets/apartai-logo-transparent.png" alt="ApartAI" />`;
+  // Açık zeminli üst bar için yazısı koyulaştırılmış varyant kullanılır;
+  // koyu kenar çubuğunda özgün (beyaz yazılı) logo kalır.
+  const src = className === "landing-logo" ? "apartai-logo-light.png" : "apartai-logo-transparent.png";
+  return `<img class="${className}" src="assets/${src}" alt="ApartAI" />`;
 }
 
 function requestStatusText(status) {
@@ -1278,8 +1262,11 @@ function render() {
     document.body.classList.remove("resident-mode", "manager-mode", "ai-chat-open", "manager-menu-open");
     document.documentElement.classList.remove("ai-chat-open", "manager-menu-open");
     app.innerHTML = authView();
+    // Landing yeniden çizildiğinde slider zamanlayıcısını tazele.
+    restartShowcaseTimer();
     return;
   }
+  stopShowcase();
   document.body.classList.toggle("resident-mode", state.mode === "resident");
   document.body.classList.toggle("manager-mode", state.mode === "manager");
   document.body.classList.toggle("ai-chat-open", Boolean(state.isAssistantOpen));
@@ -1334,116 +1321,144 @@ function render() {
   `;
 }
 
-function youtubeId(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) return raw;
-  const match = raw.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : "";
+// --- Landing özellik slider'ı ---
+//
+// Otomatik ilerler, fare üzerine gelince durur, ok/nokta ile gezilebilir ve
+// kullanıcı "hareketi azalt" tercihini açtıysa otomatik geçiş yapılmaz.
+
+const SHOWCASE_SLIDES = [
+  {
+    icon: "🧠",
+    tag: "Neden ApartAI?",
+    title: "Arızayı fotoğraftan anlar",
+    text: "Sakin bir fotoğraf çeker, iki cümle yazar. Kategori, aciliyet ve lokasyon saniyeler içinde belirlenir; yöneticiye doğrudan uygulanabilir bir aksiyon önerilir.",
+    bullets: ["Görselden otomatik teşhis", "Aciliyete göre önceliklendirme", "Tekrar eden sorunu yakalar"],
+  },
+  {
+    icon: "📈",
+    tag: "Neden ApartAI?",
+    title: "Gecikmeyi olmadan önce görür",
+    text: "Geçmiş ödeme davranışına bakarak riskli daireleri önceden işaretler. Hatırlatma metnini sizin yerinize yazar, WhatsApp veya SMS ile tek tıkla gönderir.",
+    bullets: ["Risk skorlu daire listesi", "Hazır hatırlatma metni", "Tek tıkla WhatsApp / SMS"],
+  },
+  {
+    icon: "💰",
+    tag: "Neden ApartAI?",
+    title: "Kasayı şeffaf hale getirir",
+    text: "Her fatura, her gider kategorisiyle birlikte kayıt altında. Sakinler harcamaları kendi ekranından görebildiği için yönetime duyulan güven artar.",
+    bullets: ["Kategori bazlı gider analizi", "Sakine açık harcama kartı", "AI finansal asistan"],
+  },
+  {
+    icon: "🗳️",
+    tag: "Neden ApartAI?",
+    title: "Kararları WhatsApp kaosundan çıkarır",
+    text: "Kat malikleri oylamaları dijitale taşınır. Anketler bloklara göre kısıtlanabilir, katılım oranı ve oy dağılımı herkese açık biçimde izlenir.",
+    bullets: ["Blok bazlı anket kısıtlama", "Canlı katılım oranı", "Şeffaf sonuç dökümü"],
+  },
+  {
+    icon: "📊",
+    tag: "Neden ApartAI?",
+    title: "Siteyi tek bir skora indirger",
+    text: "Ödeme düzeni, çözüm hızı, şikayet yoğunluğu ve iletişim düzeni tek metriğe iner. Skorun neden düştüğünü ve ne yapmanız gerektiğini birlikte görürsünüz.",
+    bullets: ["100 üzerinden tek metrik", "Düşüş nedenleri listelenir", "Önerilen aksiyonlar"],
+  },
+  {
+    icon: "🏢",
+    tag: "Neden ApartAI?",
+    title: "Birden fazla siteyi yan yana yönetir",
+    text: "Yönetim firmaları için karşılaştırmalı panel. Hangi sitede tahsilat aksıyor, hangisinin skoru düşük; hepsi tek bakışta görünür.",
+    bullets: ["Siteler arası karşılaştırma", "Rol bazlı veri kapsamı", "Tek panelden hızlı geçiş"],
+  },
+];
+
+
+let showcaseIndex = 0;
+let showcaseTimer = null;
+let showcasePaused = false;
+const SHOWCASE_INTERVAL = 6000;
+
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function socialIcon(platform) {
-  const meta = SOCIAL_META[platform];
-  return `<svg class="social-icon" viewBox="0 0 24 24" aria-hidden="true" style="--brand:${meta.color}"><path d="${meta.icon}" /></svg>`;
-}
-
-function socialFeaturedSlot(platform) {
-  const conf = SOCIAL[platform];
-  if (!conf?.featured) {
-    return `<div class="social-featured empty"><span>Öne çıkan içerik eklenmedi</span></div>`;
-  }
-  // YouTube gizlilik dostu iframe ile doğrudan gömülür (çerez yükü düşük).
-  if (platform === "youtube") {
-    const vid = youtubeId(conf.featured);
-    if (!vid) return `<div class="social-featured empty"><span>Geçersiz YouTube bağlantısı</span></div>`;
-    return `<div class="social-featured"><iframe src="https://www.youtube-nocookie.com/embed/${vid}" title="YouTube önizleme" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
-  }
-  // Instagram / TikTok / X: dış scriptler yalnızca kullanıcı tıklayınca yüklenir
-  // (KVKK/gizlilik ve performans için tıkla-yükle önizleme).
+function showcaseSlide(slide, index) {
   return `
-    <div class="social-featured facade" id="social-facade-${platform}">
-      <button type="button" class="social-load" onclick="loadSocialEmbed('${platform}')">
-        ${socialIcon(platform)}
-        <span>Önizlemeyi yükle</span>
-        <small>İçerik ${SOCIAL_META[platform].label}'dan yüklenir</small>
-      </button>
-    </div>`;
-}
-
-function socialCard(platform) {
-  const conf = SOCIAL[platform];
-  const meta = SOCIAL_META[platform];
-  return `
-    <article class="social-card" style="--brand:${meta.color}">
-      <header class="social-card-head">
-        ${socialIcon(platform)}
-        <div>
-          <strong>${meta.label}</strong>
-          <span>${safeText(conf.handle)}</span>
-        </div>
-        <a class="social-follow" href="${conf.url}" target="_blank" rel="noopener noreferrer">Takip et</a>
-      </header>
-      ${socialFeaturedSlot(platform)}
+    <article class="hero-slide${index === showcaseIndex ? " active" : ""}" data-index="${index}" aria-hidden="${index === showcaseIndex ? "false" : "true"}">
+      <span class="hero-slide-ghost" aria-hidden="true">${slide.icon}</span>
+      <span class="hero-slide-tag">${safeText(slide.tag)}</span>
+      <h3>${safeText(slide.title)}</h3>
+      <p>${safeText(slide.text)}</p>
+      <ul class="hero-slide-bullets">
+        ${slide.bullets
+          .map(
+            (item) =>
+              `<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${safeText(item)}</li>`
+          )
+          .join("")}
+      </ul>
     </article>`;
 }
 
-function socialSection() {
-  const platforms = Object.keys(SOCIAL);
-  return `
-    <section class="social-section" id="sosyal-medya">
-      <div class="social-head">
-        <div class="auth-kicker"><span></span>Sosyal Medya</div>
-        <h2>Bizi takip et, içeriklerimizi sitenin içinden gör</h2>
-        <p>Hesaplarımızı tek tıkla aç ya da öne çıkan içeriklerimizi buradan önizle.</p>
-      </div>
-      <div class="social-grid">
-        ${platforms.map((platform) => socialCard(platform)).join("")}
-      </div>
-    </section>`;
-}
-
-// Resmi gömme scriptini bir kez yükler ve widget'ı işler.
-function loadScriptOnce(src) {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[data-social="${src}"]`);
-    if (existing) {
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.dataset.social = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Önizleme yüklenemedi."));
-    document.head.appendChild(script);
+// Yalnızca aktif slaytı ve noktaları günceller; tüm sayfayı yeniden çizmez.
+function paintShowcase() {
+  const slides = document.querySelectorAll(".hero-slide");
+  if (!slides.length) return;
+  slides.forEach((node) => {
+    const index = Number(node.dataset.index);
+    const isActive = index === showcaseIndex;
+    node.classList.toggle("active", isActive);
+    node.setAttribute("aria-hidden", isActive ? "false" : "true");
+  });
+  document.querySelectorAll(".showcase-dot").forEach((dot, index) => {
+    dot.classList.toggle("active", index === showcaseIndex);
   });
 }
 
-function loadSocialEmbed(platform) {
-  const conf = SOCIAL[platform];
-  const slot = document.querySelector(`#social-facade-${platform}`);
-  if (!conf?.featured || !slot) return;
-  const url = conf.featured;
-  if (platform === "instagram") {
-    slot.classList.remove("facade");
-    slot.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14"></blockquote>`;
-    loadScriptOnce("https://www.instagram.com/embed.js")
-      .then(() => window.instgrm?.Embeds?.process())
-      .catch((error) => (slot.innerHTML = `<div class="social-featured empty"><span>${safeText(error.message)}</span></div>`));
-  } else if (platform === "tiktok") {
-    slot.classList.remove("facade");
-    slot.innerHTML = `<blockquote class="tiktok-embed" cite="${url}"><a href="${url}"></a></blockquote>`;
-    loadScriptOnce("https://www.tiktok.com/embed.js").catch(
-      (error) => (slot.innerHTML = `<div class="social-featured empty"><span>${safeText(error.message)}</span></div>`)
-    );
-  } else if (platform === "x") {
-    slot.classList.remove("facade");
-    slot.innerHTML = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>`;
-    loadScriptOnce("https://platform.twitter.com/widgets.js")
-      .then(() => window.twttr?.widgets?.load(slot))
-      .catch((error) => (slot.innerHTML = `<div class="social-featured empty"><span>${safeText(error.message)}</span></div>`));
+function goToShowcase(index) {
+  const total = SHOWCASE_SLIDES.length;
+  showcaseIndex = ((index % total) + total) % total;
+  paintShowcase();
+  restartShowcaseTimer();
+}
+
+function moveShowcase(step) {
+  goToShowcase(showcaseIndex + step);
+}
+
+function restartShowcaseTimer() {
+  if (showcaseTimer) clearInterval(showcaseTimer);
+  if (prefersReducedMotion()) return;
+  showcaseTimer = setInterval(() => {
+    if (showcasePaused) return;
+    showcaseIndex = (showcaseIndex + 1) % SHOWCASE_SLIDES.length;
+    paintShowcase();
+  }, SHOWCASE_INTERVAL);
+}
+
+function handleShowcaseKey(event) {
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    moveShowcase(-1);
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    moveShowcase(1);
   }
+}
+
+function pauseShowcase() {
+  showcasePaused = true;
+  // İlerleme çubuğu da dursun ki gösterge zamanlayıcıyla tutarlı kalsın.
+  document.querySelector(".hero-stage")?.classList.add("paused");
+}
+
+function resumeShowcase() {
+  showcasePaused = false;
+  document.querySelector(".hero-stage")?.classList.remove("paused");
+}
+
+function stopShowcase() {
+  if (showcaseTimer) clearInterval(showcaseTimer);
+  showcaseTimer = null;
 }
 
 function authView() {
@@ -1451,17 +1466,13 @@ function authView() {
   return `
     <main class="auth-page">
       <nav class="landing-nav">
-        <div class="landing-brand">
+        <a class="landing-brand" href="#" onclick="event.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' });" aria-label="ApartAI">
           ${brandLogo("landing-logo")}
-          <div>
-            <strong>ApartAI</strong>
-            <span>Akıllı Site Yönetimi</span>
-          </div>
-        </div>
+        </a>
         <div class="landing-actions">
-          <button type="button" class="btn ghost" onclick="quickLogin('admin@apartai.local')">👑 Yönetici Girişi</button>
-          <button type="button" class="btn ghost" onclick="quickLogin('ayse@example.com')">🏠 Sakin Girişi</button>
-          <button type="button" class="btn primary" onclick="openAuthModal('login')">Giriş Yap</button>
+          <button type="button" class="btn ghost" onclick="openAuthModal('login')">Giriş Yap</button>
+          <button type="button" class="btn primary" onclick="openAuthModal('register')">Kayıt Ol</button>
+          <img class="landing-partner-logo" src="assets/partner-logo.png" alt="BaysalSoft" />
         </div>
       </nav>
 
@@ -1472,182 +1483,129 @@ function authView() {
 
         <div class="hero-content">
           <div class="hero-text">
-            <div class="hero-badge">
-              <span class="hero-badge-dot"></span>
-              Yapay Zeka Destekli Site Yönetim Platformu
-            </div>
             <h1>Apartman Yönetiminde<br/><span class="hero-gradient-text">Yapay Zeka Devrimi</span></h1>
             <p class="hero-desc">
               Aidatlar, arıza bildirimleri, kat malikleri anketleri ve resmi faaliyet bültenleri tek bir akıllı platformda.
               ApartAI veriyi anlık analiz eder, gecikme risklerini önler ve 7/24 sakin asistanlığı sunar.
             </p>
             <div class="hero-cta">
-              <button type="button" class="btn primary hero-btn" onclick="quickLogin('admin@apartai.local')">
-                <span>Yönetici Demosunu Başlat</span>
+              <button type="button" class="btn primary hero-btn" onclick="openAuthModal('login')">
+                <span>Panele Giriş Yap</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </button>
-              <button type="button" class="btn ghost hero-btn" onclick="quickLogin('ayse@example.com')">
-                <span>Sakin Portaline Gir</span>
+              <button type="button" class="btn ghost hero-btn" style="color:#334155; border-color:rgba(148,163,184,0.25);" onclick="openAuthModal('register')">
+                <span>Yeni Hesap Oluştur</span>
               </button>
             </div>
           </div>
 
-          <div class="hero-visual" aria-hidden="true">
-            <svg class="hero-svg" viewBox="0 0 520 420" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="buildGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.15"/>
-                  <stop offset="100%" stop-color="#0284c7" stop-opacity="0.08"/>
-                </linearGradient>
-                <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#2dd4bf"/>
-                  <stop offset="100%" stop-color="#0ea5e9"/>
-                </linearGradient>
-              </defs>
-
-              <!-- Pulsing grid circles -->
-              <circle class="hero-pulse-ring" cx="260" cy="210" r="200" stroke="rgba(45,212,191,0.08)" stroke-width="1"/>
-              <circle class="hero-pulse-ring ring-delay-1" cx="260" cy="210" r="150" stroke="rgba(45,212,191,0.12)" stroke-width="1"/>
-              <circle class="hero-pulse-ring ring-delay-2" cx="260" cy="210" r="100" stroke="rgba(45,212,191,0.15)" stroke-width="1"/>
-
-              <!-- Building silhouette left -->
-              <rect class="hero-building" x="80" y="120" width="110" height="220" rx="12" fill="url(#buildGrad)" stroke="rgba(45,212,191,0.2)" stroke-width="1.5"/>
-              <!-- Windows left -->
-              <rect class="hero-window w-blink-1" x="100" y="148" width="30" height="22" rx="4" fill="rgba(45,212,191,0.3)"/>
-              <rect class="hero-window w-blink-2" x="142" y="148" width="30" height="22" rx="4" fill="rgba(45,212,191,0.1)"/>
-              <rect class="hero-window w-blink-3" x="100" y="184" width="30" height="22" rx="4" fill="rgba(45,212,191,0.15)"/>
-              <rect class="hero-window w-blink-4" x="142" y="184" width="30" height="22" rx="4" fill="rgba(45,212,191,0.4)"/>
-              <rect class="hero-window w-blink-5" x="100" y="220" width="30" height="22" rx="4" fill="rgba(45,212,191,0.25)"/>
-              <rect class="hero-window w-blink-6" x="142" y="220" width="30" height="22" rx="4" fill="rgba(45,212,191,0.35)"/>
-              <rect class="hero-window w-blink-7" x="100" y="256" width="30" height="22" rx="4" fill="rgba(45,212,191,0.5)"/>
-              <rect class="hero-window w-blink-8" x="142" y="256" width="30" height="22" rx="4" fill="rgba(45,212,191,0.2)"/>
-              <!-- Door -->
-              <rect x="120" y="300" width="30" height="40" rx="6" fill="rgba(13,56,53,0.6)"/>
-
-              <!-- Building silhouette right (taller) -->
-              <rect class="hero-building" x="210" y="80" width="130" height="260" rx="14" fill="url(#buildGrad)" stroke="rgba(45,212,191,0.2)" stroke-width="1.5"/>
-              <!-- Windows right -->
-              <rect class="hero-window w-blink-2" x="232" y="108" width="34" height="24" rx="5" fill="rgba(14,165,233,0.3)"/>
-              <rect class="hero-window w-blink-5" x="280" y="108" width="34" height="24" rx="5" fill="rgba(14,165,233,0.12)"/>
-              <rect class="hero-window w-blink-8" x="232" y="148" width="34" height="24" rx="5" fill="rgba(14,165,233,0.18)"/>
-              <rect class="hero-window w-blink-1" x="280" y="148" width="34" height="24" rx="5" fill="rgba(14,165,233,0.4)"/>
-              <rect class="hero-window w-blink-4" x="232" y="188" width="34" height="24" rx="5" fill="rgba(14,165,233,0.35)"/>
-              <rect class="hero-window w-blink-7" x="280" y="188" width="34" height="24" rx="5" fill="rgba(14,165,233,0.1)"/>
-              <rect class="hero-window w-blink-6" x="232" y="228" width="34" height="24" rx="5" fill="rgba(14,165,233,0.45)"/>
-              <rect class="hero-window w-blink-3" x="280" y="228" width="34" height="24" rx="5" fill="rgba(14,165,233,0.2)"/>
-              <rect class="hero-window w-blink-5" x="232" y="268" width="34" height="24" rx="5" fill="rgba(14,165,233,0.28)"/>
-              <rect class="hero-window w-blink-1" x="280" y="268" width="34" height="24" rx="5" fill="rgba(14,165,233,0.5)"/>
-
-              <!-- Score dial -->
-              <g class="hero-score-group" transform="translate(380, 140)">
-                <circle cx="50" cy="50" r="46" fill="rgba(255,255,255,0.05)" stroke="rgba(45,212,191,0.15)" stroke-width="6"/>
-                <circle class="hero-score-arc" cx="50" cy="50" r="46" fill="none" stroke="url(#scoreGrad)" stroke-width="7" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="52" transform="rotate(-90 50 50)"/>
-                <text x="50" y="46" text-anchor="middle" font-size="24" font-weight="900" fill="#2dd4bf" dy=".3em">92</text>
-                <text x="50" y="72" text-anchor="middle" font-size="9" font-weight="600" fill="rgba(255,255,255,0.5)">SKOR</text>
-              </g>
-
-              <!-- Floating info chips -->
-              <g class="hero-chip chip-anim-1">
-                <rect x="350" y="270" width="155" height="36" rx="18" fill="rgba(255,255,255,0.07)" stroke="rgba(45,212,191,0.25)" stroke-width="1"/>
-                <circle cx="370" cy="288" r="5" fill="#10b981"/>
-                <text x="382" y="293" font-size="11" font-weight="700" fill="rgba(255,255,255,0.8)">Tahsilat: %94</text>
-              </g>
-              <g class="hero-chip chip-anim-2">
-                <rect x="60" y="370" width="145" height="36" rx="18" fill="rgba(255,255,255,0.07)" stroke="rgba(14,165,233,0.25)" stroke-width="1"/>
-                <circle cx="80" cy="388" r="5" fill="#0ea5e9"/>
-                <text x="92" y="393" font-size="11" font-weight="700" fill="rgba(255,255,255,0.8)">Anket: 14/16 Oy</text>
-              </g>
-              <g class="hero-chip chip-anim-3">
-                <rect x="350" y="330" width="165" height="36" rx="18" fill="rgba(255,255,255,0.07)" stroke="rgba(245,158,11,0.25)" stroke-width="1"/>
-                <circle cx="370" cy="348" r="5" fill="#f59e0b"/>
-                <text x="382" y="353" font-size="11" font-weight="700" fill="rgba(255,255,255,0.8)">AI: Asansör SLA ⚡</text>
-              </g>
-            </svg>
-          </div>
-        </div>
-
-        <div class="hero-stats-bar">
-          <div class="hero-stat"><span class="hero-stat-num">3dk</span><span class="hero-stat-label">Arıza Teşhisi</span></div>
-          <div class="hero-stat"><span class="hero-stat-num">%94</span><span class="hero-stat-label">Zamanında Tahsilat</span></div>
-          <div class="hero-stat"><span class="hero-stat-num">7/24</span><span class="hero-stat-label">AI Asistan</span></div>
-          <div class="hero-stat"><span class="hero-stat-num">A4</span><span class="hero-stat-label">Resmi Bülten</span></div>
-        </div>
-      </section>
-
-      <!-- Features Section -->
-      <section class="features-section" id="ozellikler">
-        <div class="features-header">
-          <span class="section-tag">NEDEN APARTAI?</span>
-          <h2>Site Yönetimini Kolaylaştıran<br/><span class="hero-gradient-text">5 Temel Özellik</span></h2>
-          <p>Her detay kat malikleri, site sakinleri ve yönetim kurulları arasındaki güveni artırmak için tasarlandı.</p>
-        </div>
-
-        <div class="features-grid">
-          <div class="feature-card feature-highlight">
-            <div class="feature-icon-wrap"><span>🧠</span></div>
-            <h3>Yapay Zeka Destekli Arıza Teşhisi</h3>
-            <p>Sakin arızanın fotoğrafını çeker, ApartAI görseli saniyeler içinde tarayarak kategorisini, aciliyet derecesini ve ilgili firmayı otomatik belirler.</p>
-            <div class="feature-tags">
-              <span>📸 Görsel Tarama</span>
-              <span>⚡ Aciliyet Skoru</span>
-              <span>🛠️ Firma Atama</span>
+          <div class="hero-stage" aria-label="ApartAI özellikleri">
+            <div class="hero-stage-aura" aria-hidden="true"></div>
+            ${SHOWCASE_SLIDES.map((slide, index) => showcaseSlide(slide, index)).join("")}
+            <div class="hero-stage-dots" id="showcase-dots">
+              ${SHOWCASE_SLIDES.map(
+                (slide, index) =>
+                  `<button type="button" class="showcase-dot${index === showcaseIndex ? " active" : ""}" onclick="goToShowcase(${index})" aria-label="${safeText(slide.title)}"><span class="showcase-dot-fill"></span></button>`
+              ).join("")}
             </div>
-          </div>
-
-          <div class="feature-card">
-            <div class="feature-icon-wrap"><span>📈</span></div>
-            <h3>Tahsilat Tahmini & Analiz</h3>
-            <p>Geçmiş ödeme sürelerini inceleyerek gecikme eğilimli daireleri tespit eder ve tek tıkla hatırlatma hazırlar.</p>
-            <div class="feature-mini-stat">%94<small>zamanında tahsilat</small></div>
-          </div>
-
-          <div class="feature-card">
-            <div class="feature-icon-wrap"><span>🗳️</span></div>
-            <h3>Karar Anketleri</h3>
-            <p>Kamera yenileme, aidat artışı gibi kritik kararları şeffaf dijital oylama ile hızla sonuca bağlayın.</p>
-            <div class="feature-bar-demo">
-              <div class="feature-bar-fill" style="width:82%"></div>
-            </div>
-            <small class="feature-bar-label">%82 katılım oranı</small>
-          </div>
-
-          <div class="feature-card">
-            <div class="feature-icon-wrap"><span>🖨️</span></div>
-            <h3>Resmi Faaliyet Bülteni</h3>
-            <p>A4 formatında basıma hazır aylık mali durum, çözülen arızalar ve yönetim kurulu kaşe/imza alanı içeren resmi bülten.</p>
-            <span class="feature-chip">📄 Tek Tıkla PDF / Baskı</span>
-          </div>
-
-          <div class="feature-card">
-            <div class="feature-icon-wrap"><span>🤖</span></div>
-            <h3>7/24 AI Asistan</h3>
-            <p>Sakinler ve yöneticiler için anlık yapay zeka destekli soru-cevap. Aidat borcu, plaka kaydı, arıza durumu hepsi bir tık uzağınızda.</p>
-            <span class="feature-chip">💬 Bağlamsal Sohbet</span>
           </div>
         </div>
       </section>
 
       <!-- CTA Section -->
       <section class="cta-section">
-        <div class="cta-content">
-          <h2>Hemen Deneyin, Ücretsiz</h2>
-          <p>Demo hesaplarıyla tüm özellikleri keşfedin. Kurulum gerektirmez.</p>
-          <div class="cta-buttons">
-            <button type="button" class="btn primary hero-btn" onclick="quickLogin('admin@apartai.local')">
-              👑 Yönetici Paneli
-            </button>
-            <button type="button" class="btn ghost hero-btn" onclick="quickLogin('ayse@example.com')">
-              🏠 Sakin Portalı
-            </button>
-            <button type="button" class="btn ghost hero-btn" onclick="openAuthModal('login')">
-              Giriş Yap / Kayıt Ol
-            </button>
+        <div class="cta-shell">
+          <div class="cta-pitch">
+            <span class="cta-eyebrow">Pilot başvuruları açık</span>
+            <h2>Siteniz ApartAI ile <span class="cta-accent">iki haftada</span> düzene girer</h2>
+            <p class="cta-lede">
+              Kurulum için teknik bilgiye gerek yok. Daire listenizi tek bir CSV dosyasıyla aktarın,
+              aidat dönemini oluşturun; gerisini ApartAI takip etsin.
+            </p>
+
+            <ul class="cta-points">
+              <li>
+                <span class="cta-point-num">01</span>
+                <div>
+                  <strong>Daireleri aktarın</strong>
+                  <small>CSV ile toplu içeri aktarma; bloklar otomatik oluşturulur.</small>
+                </div>
+              </li>
+              <li>
+                <span class="cta-point-num">02</span>
+                <div>
+                  <strong>Aidat dönemini açın</strong>
+                  <small>Tek tıkla tüm dairelere borç kaydı, gecikme riski anında görünür.</small>
+                </div>
+              </li>
+              <li>
+                <span class="cta-point-num">03</span>
+                <div>
+                  <strong>Sakinleri davet edin</strong>
+                  <small>Uygulama indirmeden, tarayıcıdan giriş yaparlar.</small>
+                </div>
+              </li>
+            </ul>
+
+            <div class="cta-assurances">
+              <span>✓ Kurulum ücreti yok</span>
+              <span>✓ Kredi kartı istenmez</span>
+              <span>✓ Verileriniz size ait</span>
+            </div>
           </div>
+
+          <aside class="cta-signup">
+            <div class="cta-signup-head">
+              <span class="cta-badge">Ücretsiz</span>
+              <h3>Hesabınızı oluşturun</h3>
+              <p>Dakikalar içinde kendi sitenizi kurun ve paneli gerçek verinizle deneyin.</p>
+            </div>
+
+            <ul class="cta-includes">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Sınırsız daire ve blok</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>AI arıza analizi ve sağlık skoru</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Aidat, kasa ve anket modülleri</li>
+            </ul>
+
+            <button type="button" class="btn primary cta-signup-btn" onclick="openAuthModal('register')">
+              <span>Ücretsiz Hesap Oluştur</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+
+            <p class="cta-signin">
+              Zaten hesabınız var mı?
+              <button type="button" class="cta-link" onclick="openAuthModal('login')">Giriş yapın</button>
+            </p>
+
+          </aside>
         </div>
       </section>
 
+
       <footer class="landing-footer">
-        <p>© 2026 ApartAI — Yapay Zeka Destekli Akıllı Site Yönetim Platformu</p>
+        <div class="landing-footer-socials">
+          <a href="https://github.com/omerfarukbaysal04" target="_blank" rel="noopener noreferrer" title="GitHub">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+          </a>
+          <a href="https://www.linkedin.com/in/baysal/" target="_blank" rel="noopener noreferrer" title="LinkedIn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>
+          </a>
+          <a href="https://www.youtube.com/@baysalsoft" target="_blank" rel="noopener noreferrer" title="YouTube">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+          </a>
+          <a href="https://x.com/BaysalSoft" target="_blank" rel="noopener noreferrer" title="X (Twitter)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg>
+          </a>
+          <a href="mailto:baysalomerfaruk54@gmail.com" rel="noopener noreferrer" title="E-posta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
+          </a>
+        </div>
+        <p class="landing-footer-copy">© 2026 <span class="gradient-text-footer">ApartAI</span> — Yapay Zeka Destekli Akıllı Site Yönetim Platformu</p>
+        <p class="landing-footer-links">
+          <span>Geri bildirim: <a href="mailto:baysalomerfaruk54@gmail.com">baysalomerfaruk54@gmail.com</a></span>
+          <span>•</span>
+          <span>Ömer Faruk Baysal tarafından geliştirildi</span>
+        </p>
       </footer>
 
       ${authModalOpen ? authModalView(isLogin) : ""}
@@ -1674,14 +1632,9 @@ function authModalView(isLogin) {
         ${
           isLogin
             ? `<form class="grid" onsubmit="loginUser(event)">
-                <label>E-posta<input name="email" type="email" value="admin@apartai.local" required /></label>
-                <label>Şifre<input name="password" type="password" value="demo123" required /></label>
+                <label>E-posta<input name="email" type="email" autocomplete="email" required /></label>
+                <label>Şifre<input name="password" type="password" autocomplete="current-password" required /></label>
                 <button class="btn primary" type="submit">Panele Gir</button>
-                <div class="demo-users">
-                  <button type="button" onclick="quickLogin('admin@apartai.local')">Yönetici demosu</button>
-                  <button type="button" onclick="quickLogin('ayse@example.com')">Sakin demosu</button>
-                </div>
-                <p class="auth-note">Demo hesapları pilot akışlarını hızlıca denemen için hazırlandı.</p>
               </form>`
             : `<form class="grid" onsubmit="registerResident(event)">
                 <label>Ad soyad<input name="name" required /></label>
@@ -1702,7 +1655,7 @@ function authModalView(isLogin) {
                   <label>Daire no<input name="apartmentNo" required /></label>
                   <label>Kat<input name="floor" type="number" value="1" required /></label>
                 </div>
-                <label>Şifre<input name="password" type="password" value="demo123" required /></label>
+                <label>Şifre<input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="En az 6 karakter" required /></label>
                 <button class="btn primary" type="submit">Sakin Hesabı Oluştur</button>
               </form>`
         }
@@ -2396,7 +2349,7 @@ function paymentGatewayModal() {
                 <strong>${safeText(state.tempPaymentPayload?.cardHolder || "Ayşe Demir")}</strong> adına kayıtlı <strong>05** *** 22 33</strong> numaralı cep telefonunuza 6 haneli güvenlik kodu gönderilmiştir.
               </p>
 
-              <div style="background:#e0f2fe; border:1px solid #bae6fd; border-radius:8px; padding:8px 12px; font-size:12px; color:#0369a1; margin-bottom:14px;">
+              <div style="background:#e0f2fe; border:1px solid #bae6fd; border-radius:8px; padding:8px 12px; font-size:12px; color:#475569; margin-bottom:14px;">
                 💡 <strong>Demo Test İpucu:</strong> Test için kutuya <strong>123456</strong> veya dilediğiniz 6 haneyi giriniz.
               </div>
 
@@ -2584,7 +2537,7 @@ function siteSwitcher() {
       ` : ""}
       ${activeBlk ? `
         <div class="block-active-badge">
-          <span style="font-size:11.5px; font-weight:600; color:#2dd4bf;">📍 ${safeText(activeBlk.name)} seçili</span>
+          <span style="font-size:11.5px; font-weight:600; color:#94a3b8;">📍 ${safeText(activeBlk.name)} seçili</span>
           <button type="button" class="block-clear-btn" onclick="switchBlock('all')" title="Tüm site genel görünümüne dön">✕ Tüm Site</button>
         </div>
       ` : ""}
@@ -3053,7 +3006,7 @@ function duesView() {
                 <button class="btn btn-whatsapp" style="background:#25d366; border-color:#16a34a; color:#ffffff; font-weight:600;" onclick="shareApartmentViaWhatsApp('${selectedApartment.id}')">
                   💬 WhatsApp ile Borç Uyarısı İlet
                 </button>
-                <button class="btn btn-sms" style="background:#0284c7; border-color:#0369a1; color:#ffffff; font-weight:600;" onclick="shareApartmentViaSMS('${selectedApartment.id}')">
+                <button class="btn btn-sms" style="background:#64748b; border-color:#475569; color:#ffffff; font-weight:600;" onclick="shareApartmentViaSMS('${selectedApartment.id}')">
                   📱 SMS ile Borç Uyarısı İlet
                 </button>
                 <button class="btn" style="background:rgba(255,255,255,0.2); border-color:rgba(255,255,255,0.3); color:#ffffff;" onclick="markAllApartmentDuesPaid('${selectedApartment.id}')">
@@ -3366,9 +3319,9 @@ function warningReminderModal() {
             </div>
           </div>
           <div class="warning-channel-card" onclick="sendWarningViaSMS('${resident?.phone || ""}', '', '${due?.id || ""}')" title="SMS uygulamasını açar ve metni panoya kopyalar">
-            <span style="font-size:20px; color:#0284c7;">📱</span>
+            <span style="font-size:20px; color:#64748b;">📱</span>
             <div>
-              <strong style="color:#0369a1;">SMS İhtar</strong>
+              <strong style="color:#475569;">SMS İhtar</strong>
               <small style="display:block; color:var(--muted); font-size:11px;">SMS Aç & Kopyala</small>
             </div>
           </div>
@@ -3592,7 +3545,7 @@ function batchWhatsAppModal() {
 
         <!-- Üst Hızlı İşlem Araç Çubuğu -->
         <div style="display:flex; flex-wrap:wrap; gap:8px; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:14px; align-items:center;">
-          <button class="btn" style="font-size:12.5px; padding:6px 12px; background:#ffffff; border-color:#0284c7; color:#0369a1; font-weight:600;" onclick="copyAllOverduePhones()" title="Toplu SMS panellerine yapıştırmak için tüm telefon numaralarını kopyalar">
+          <button class="btn" style="font-size:12.5px; padding:6px 12px; background:#ffffff; border-color:#64748b; color:#475569; font-weight:600;" onclick="copyAllOverduePhones()" title="Toplu SMS panellerine yapıştırmak için tüm telefon numaralarını kopyalar">
             📋 Tüm Telefon Numaralarını Kopyala (${list.length})
           </button>
           <button class="btn" style="font-size:12.5px; padding:6px 12px; background:#ffffff; border-color:#22c55e; color:#15803d; font-weight:600;" onclick="copyGeneralReminderTemplate()" title="Genel aidat duyuru şablonunu panoya kopyalar">
@@ -4430,7 +4383,7 @@ function setupView() {
           <div>
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:24px;">🏗️</span>
-              <h3 style="margin:0; font-size:18px; color:#0f766e;">Toplu Site, Bina (Ç1..Ç12) ve Daire (ÇD1..ÇD20) Sihirbazı</h3>
+              <h3 style="margin:0; font-size:18px; color:#334155;">Toplu Site, Bina (Ç1..Ç12) ve Daire (ÇD1..ÇD20) Sihirbazı</h3>
             </div>
             <p style="margin:4px 0 0; font-size:13px; color:#334155;">
               Büyük siteler için tüm binaları, kat dağılımlarını ve daire numaralarını saniyeler içinde topluca oluşturun.
@@ -4441,7 +4394,7 @@ function setupView() {
           </button>
         </div>
 
-        <form id="bulk-setup-form" class="form-grid wide" onsubmit="bulkSetupSite(event)" style="background:#ffffff; padding:18px; border-radius:12px; border:1px solid #ccfbf1;">
+        <form id="bulk-setup-form" class="form-grid wide" onsubmit="bulkSetupSite(event)" style="background:#ffffff; padding:18px; border-radius:12px; border:1px solid #e2e8f0;">
           <label>
             <span>Bina / Blok Ön Eki</span>
             <input name="prefix" value="Ç" required placeholder="Örn: Ç veya Blok-" />
@@ -4571,9 +4524,9 @@ function editApartmentModal() {
   return `
     <div class="modal-backdrop" onclick="closeEditApartmentModal()" style="display:flex; align-items:center; justify-content:center; position:fixed; inset:0; background:rgba(15,23,42,0.65); z-index:9999; backdrop-filter:blur(4px); padding:16px;">
       <div class="modal-content" onclick="event.stopPropagation()" style="background:var(--surface); border-radius:16px; border:1px solid var(--border); box-shadow:0 20px 40px rgba(0,0,0,0.25); max-width:540px; width:100%; overflow:hidden;">
-        <div style="padding:18px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg, rgba(15,118,110,0.06), rgba(13,148,136,0.02));">
+        <div style="padding:18px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg, rgba(51, 65, 85,0.06), rgba(71, 85, 105,0.02));">
           <div>
-            <div style="font-size:11px; font-weight:700; color:#0f766e; text-transform:uppercase; letter-spacing:0.5px;">${safeText(block?.name || "Blok")} • Daire Düzenleme</div>
+            <div style="font-size:11px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:0.5px;">${safeText(block?.name || "Blok")} • Daire Düzenleme</div>
             <h3 style="margin:2px 0 0; font-size:18px; font-weight:800;">Daire ${safeText(apt.no)} & Sakin Bilgileri</h3>
           </div>
           <button type="button" class="btn text-btn" onclick="closeEditApartmentModal()" style="font-size:20px; line-height:1; cursor:pointer;">✕</button>
@@ -4952,7 +4905,7 @@ function blockSetupView() {
                       </td>
                       <td><code style="font-size:12px; font-weight:700;">${safeText(resident?.plateNumber || "-")}</code></td>
                       <td style="text-align:right; white-space:nowrap;">
-                        <button type="button" class="btn text-btn btn-sm" onclick="openEditApartmentModal('${apt.id}')" title="Daireyi Düzenle" style="margin-right:6px; font-weight:700; color:#0f766e;">
+                        <button type="button" class="btn text-btn btn-sm" onclick="openEditApartmentModal('${apt.id}')" title="Daireyi Düzenle" style="margin-right:6px; font-weight:700; color:#334155;">
                           ✏️ Düzenle
                         </button>
                         <button type="button" class="btn text-btn btn-sm" onclick="removeApartment('${apt.id}')" title="Daireyi Sil" style="font-weight:700; color:#ef4444;">
@@ -6257,12 +6210,6 @@ function loginUser(event) {
   applyLoggedInUser(user);
 }
 
-function quickLogin(email) {
-  const form = document.createElement("form");
-  form.innerHTML = `<input name="email" value="${email}"><input name="password" value="demo123">`;
-  loginUser({ preventDefault() {}, target: form });
-}
-
 function registerResident(event) {
   event.preventDefault();
   const form = new FormData(event.target);
@@ -6989,7 +6936,7 @@ function residentSurveysView() {
               ` : `
                 <div class="survey-results">
                   ${userVote ? `
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; background:#f0fdfa; padding:8px 12px; border-radius:8px; border:1px solid #ccfbf1;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; background:#f0fdfa; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
                       <span style="font-size:13px; font-weight:600; color:var(--primary);">
                         Sizin Tercihiniz: <strong>"${safeText(userVote.option || (survey.options && survey.options[userVote.optionIndex]) || 'Oyunuz Kaydedildi')}"</strong>
                       </span>

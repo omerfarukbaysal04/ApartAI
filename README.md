@@ -1,172 +1,290 @@
-# ApartAI MVP
+# ApartAI
 
-ApartAI dokümantasyonuna göre başlatılmış statik MVP prototipi.
+AI destekli apartman ve site yönetim asistanı. Aidat, arıza/şikayet, duyuru, anket ve kasa süreçlerini tek panelde toplar; verileri yorumlayıp yöneticiye skor, risk ve aksiyon önerisi sunar.
 
-## Kapsam
+Ürün dokümantasyonu: [`ApartAI_urun_dokumantasyonu.md`](./ApartAI_urun_dokumantasyonu.md)
 
-- Yönetici paneli
-- Site Sağlık Skoru v1
-- Aidat oluşturma ve manuel ödeme takibi
-- Arıza/şikayet talep yönetimi
-- Sakin mobil web ekranı
-- Gemini/OpenAI destekli AI şikayet analizi ve kural tabanlı fallback
-- Gemini/OpenAI destekli AI duyuru metni iyileştirme ve aidat hatırlatma taslağı
-- Aylık yönetici özeti
+---
 
-## Yapılanlar
+## Mimari
 
-- [x] Statik MVP prototipi oluşturuldu.
-- [x] Bağımlılıksız Node.js backend eklendi.
-- [x] JSON dosya tabanlı veri kalıcılığı eklendi.
-- [x] GitHub reposu oluşturulup proje push edildi.
-- [x] Modern landing ekranı ve auth modalı tasarlandı.
-- [x] Yönetici/sakin rol bazlı demo giriş akışı eklendi.
-- [x] Site, blok, daire ve sakin kayıt akışı eklendi.
-- [x] Aidat oluşturma, ödeme işaretleme ve risk özeti eklendi.
-- [x] Aidat hatırlatma taslağı ve hatırlatma kaydı eklendi.
-- [x] Sakin talep açma akışı eklendi.
-- [x] Talep fotoğrafı ekleme ve yönetici detayında görüntüleme eklendi.
-- [x] Talep detay modalı, yönetici notu, durum güncelleme ve silme eklendi.
-- [x] Kural tabanlı AI simülasyonları eklendi.
-- [x] OpenAI API entegrasyonu için gerçek AI/fallback servis katmanı eklendi.
-- [x] Gemini 2.5 Flash provider ayarları ve marka logoları eklendi.
-- [x] AI debug endpoint'i, terminal logları ve Gemini geçici hata retry akışı eklendi.
-- [x] Rapor ekranı aylık özet, blok yoğunluğu ve pilot metrikleriyle geliştirildi.
-- [x] PostgreSQL geçiş şeması taslağı eklendi.
-- [x] Gerçek auth: scrypt parola hash, imzalı token ve rol bazlı endpoint koruması eklendi.
-- [x] Veri erişimi repository katmanına alındı (JSON varsayılan, Postgres'e hazır).
-- [x] Encoding kök nedeni (chunk sınırı UTF-8 bozulması) düzeltildi ve input validasyonu eklendi.
-- [x] `node:test` ile sıfır bağımlılıklı API/birim test paketi eklendi.
-- [x] Multimodal AI: talep fotoğrafı Gemini/OpenAI görsel girdisi olarak analiz ediliyor (anahtar yoksa fallback).
-- [x] Fotoğraf saklama dosya storage seam'ine alındı (yerel FS varsayılan, S3'e hazır); `data/`'ya statik erişim engellendi.
-- [x] Site Sağlık Skoru sunucuda hesaplanıyor ve skor geçmişi raporda gösteriliyor.
-- [x] CSV ile toplu daire/sakin içeri aktarma eklendi.
-- [x] Landing ekranına küratörlü sosyal medya bölümü eklendi (YouTube gömme + tıkla-yükle önizlemeler).
-- [x] Duyuru okunma takibi (sakin ekranında otomatik işaretleme) ve yönetici bildirim geçmişi eklendi.
-- [x] Bildirim katmanı eklendi: hatırlatma ve duyurular SMS/e-posta seam'i üzerinden iletiliyor, sonuç geçmişte görünüyor.
-- [x] Talep atama eklendi: firma/kişi ataması, atama tarihi ve raporda firma performans tablosu (ortalama çözüm süresi).
-- [x] Çoklu site desteği eklendi: tüm veri `siteId` ile ayrıldı, yönetici site seçici ve "Tüm Siteler" karşılaştırma ekranı geldi.
-- [x] Veri erişimi rol bazlı kapsandı: sakin yalnızca kendi sitesini ve kendi kayıtlarını, yönetici yönettiği siteleri görür.
+```
+Tarayıcı
+   │
+   ▼
+Vercel  ── statik frontend (index.html, app.js, styles.css, assets/)
+   │        /api/*     → proxy ─┐
+   │        /uploads/* → proxy ─┤
+   │                            ▼
+   │                   Render (node server.js)
+   │                            │
+   │                            ▼
+   └──────────────────► PostgreSQL (Supabase / Neon)
+                         ├── apartai_state  (uygulama verisi, JSONB)
+                         └── apartai_files  (yüklenen görseller)
+```
 
-## Yol Haritası
+- **Frontend:** bağımlılıksız vanilla JS. Vercel'de statik olarak servis edilir.
+- **Backend:** tek dosyalık Node HTTP sunucusu (`server.js`), Render'da çalışır.
+- **Veri:** `db/repository.js` arkasında. `DATABASE_URL` varsa PostgreSQL, yoksa yerel `data/db.json`.
+- **Dosyalar:** `db/storage.js` arkasında. `DATABASE_URL` varsa PostgreSQL, yoksa yerel `uploads/`.
 
-### Faz 0 — Sağlamlaştırma (pilot öncesi şart)
+Yönlendirme `vercel.json` içinde, backend servis tanımı `render.yaml` içindedir.
 
-- [x] Demo auth akışını gerçek parola hash (scrypt) ve token/session altyapısına taşı, API uçlarını koru.
-- [x] Veri erişimini repository katmanına taşı (JSON varsayılan, `DB_DRIVER=postgres` ile Postgres'e hazır).
-- [x] Encoding (mojibake) kök nedenini çöz ve temel input validasyonu ekle.
-- [x] Test altyapısı ve kritik API uçları için smoke/regresyon testleri ekle.
+---
 
-### Faz 1 — MVP'yi pilota hazırlama
-
-- [x] Fotoğraf analizini multimodal AI (görsel + metin) akışına taşı.
-- [x] MVP fotoğraf saklamasını dosya saklama seam'ine taşı (yerel FS varsayılan, `STORAGE_DRIVER=s3` ile S3'e hazır).
-- [x] Pilot siteler için CSV içeri aktarma (toplu daire/sakin, blok otomatik oluşturma) ekle.
-- [x] Site Sağlık Skoru'nu sunucuda hesapla ve skor geçmişi (anlık görüntü) kaydet.
-
-### Faz 2 — Operasyonel derinlik
-
-- [x] Duyuru okunma takibi ve bildirim geçmişi ekle.
-- [x] SMS/e-posta bildirim seam'i ekle (log varsayılan, `NOTIFY_DRIVER=webhook` ile gerçek ağ geçidine bağlanır).
-- [x] Talep atama ve firma/taşeron takibi + çözüm süresi performansı ekle.
-
-### Faz 3+ — Entegrasyon ve akıllı yönetim katmanı
-
-- [x] Yönetim firmaları için çoklu site görünümü ekle (`siteId` filtrelemesi).
-- [x] Site geneli dijital anket ve istişare oylamaları (katılım oranı ve oy dağılımı).
-- [x] **Apartman Kasası & Gelir-Gider Yönetimi:** Kasa bakiyesi, faturalar, kategori bazlı gider analizi, sakinler için şeffaf harcama kartı ve AI finansal asistan entegrasyonu.
-- [ ] Online ödeme (Iyzico / PayTR) veya banka hareketi içeri aktarma altyapısını planla.
-- [ ] Karşılaştırmalı site skorları, tedarikçi performansı ve tahsilat tahmini ekle.
-
-## Çalıştırma
-
-Statik demo için `index.html` dosyasını tarayıcıda açmak yeterlidir. Bu modda veriler tarayıcı `localStorage` alanında saklanır.
-
-Backend bağlantılı çalışma için:
+## Hızlı başlangıç (yerel)
 
 ```bash
+npm install
 npm run dev
-# veya
-npm start
-# veya
-node server.js
 ```
 
-Gemini API ile çalıştırmak için `.env` dosyasını doldur:
+Tarayıcıda: `http://localhost:4173`
 
-```powershell
-AI_PROVIDER=gemini
-GEMINI_API_KEY="AIza..."
-GEMINI_MODEL=gemini-2.5-flash
-AI_DEBUG=true
-node server.js
+`DATABASE_URL` tanımlı değilse veriler `data/db.json` dosyasında, görseller `uploads/` klasöründe tutulur. İlk çalıştırmada `data/seed.json` üzerinden oluşturulur.
+
+Backend olmadan salt-frontend demo için `index.html` doğrudan açılabilir; bu modda veriler tarayıcının `localStorage` alanında tutulur.
+
+### Demo kullanıcıları (yalnızca yerel geliştirme)
+
+Seed iki site içerir: **Çınar Apartmanı** (`site-1`) ve **Meltem Sitesi** (`site-2`).
+
+| Rol | E-posta | Şifre |
+|---|---|---|
+| Yönetici (iki siteyi de yönetir) | `admin@apartai.local` | `demo123` |
+| Sakin — Çınar Apartmanı | `ayse@example.com` | `demo123` |
+| Sakin — Meltem Sitesi | `deniz@example.com` | `demo123` |
+
+> Bu hesaplar arayüzde gösterilmez. Canlı ortamda aşağıdaki araçla gerçek bir
+> yönetici hesabı açıp demo kullanıcıları kaldırın.
+
+---
+
+## Yönetici hesabı oluşturma
+
+Gerçek bir yönetici hesabı `tools/create-admin.js` ile açılır. Şifre komut
+satırından alınmaz (kabuk geçmişine düşmemesi için), çalışırken gizli olarak
+sorulur:
+
+```bash
+node tools/create-admin.js --email ben@sirket.com --name "Ad Soyad"
 ```
 
-`.env.example` dosyası örnek ayarları içerir. `GEMINI_API_KEY` yoksa sistem otomatik olarak kural tabanlı Demo AI fallback akışını kullanır. OpenAI hattı yedek/provider seçeneği olarak korunur.
-AI sorunlarını key göstermeden incelemek için `GET /api/ai/debug` endpoint'i son AI denemelerini, HTTP status ve fallback sebebini döndürür.
-Gemini tarafında `429/500/502/503/504` gibi geçici hatalar alınırsa istek kısa aralıklarla 3 kez denenir.
+Hangi veritabanına yazacağı ortama göre belirlenir: `DATABASE_URL` tanımlıysa
+PostgreSQL, tanımlı değilse yerel `data/db.json`. Canlı veritabanına yazmak için
+bağlantı dizesini tanımlayıp aynı komutu çalıştırın:
 
-Ardından tarayıcıda:
-
-```text
-http://localhost:4173
+```bash
+DATABASE_URL="postgres://..." node tools/create-admin.js --email ben@sirket.com --name "Ad Soyad"
 ```
 
-Bu modda veriler `data/db.json` dosyasında saklanır. İlk çalıştırmada `data/seed.json` üzerinden oluşturulur.
+| Bayrak | Açıklama |
+|---|---|
+| `--email` | Zorunlu. Giriş e-postası. |
+| `--name` | Zorunlu. Panelde görünen ad. |
+| `--sites` | Opsiyonel. Virgülle ayrılmış site id listesi. Verilmezse tüm siteler. |
+| `--phone` | Opsiyonel. |
+
+E-posta zaten kayıtlıysa kullanıcı yöneticiye yükseltilir ve şifresi sıfırlanır.
+Otomasyonda şifre `ADMIN_PASSWORD` ortam değişkeniyle de verilebilir.
+
+---
+
+## Ortam değişkenleri
+
+`.env.example` dosyasını `.env` olarak kopyalayıp doldurun. Production'da bunlar Render panelinden tanımlanır.
+
+| Değişken | Zorunlu | Açıklama |
+|---|---|---|
+| `AUTH_SECRET` | **Production'da evet** | Token imza anahtarı. Tanımlı değilse veritabanına kalıcı bir anahtar yazılır; yine de açıkça tanımlanması önerilir. |
+| `DATABASE_URL` | Production'da evet | PostgreSQL bağlantı dizesi. Tanımlıysa hem veri hem dosya saklama otomatik Postgres'e geçer. |
+| `DB_DRIVER` | hayır | `postgres` veya `json`. Varsayılan: `DATABASE_URL` varsa `postgres`. |
+| `STORAGE_DRIVER` | hayır | `postgres` veya `local`. Varsayılan: `DATABASE_URL` varsa `postgres`. |
+| `GEMINI_API_KEY` | hayır | Yoksa kural tabanlı fallback çalışır. |
+| `GEMINI_MODEL` | hayır | Varsayılan `gemini-2.5-flash`. |
+| `AI_PROVIDER` | hayır | `gemini` veya `openai`. |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | hayır | Alternatif sağlayıcı. |
+| `AI_DEBUG` | hayır | `true` ise AI denemeleri loglanır. |
+| `MAX_IMAGE_BYTES` | hayır | Yüklenebilir en büyük görsel. Varsayılan `819200` (800 KB). |
+| `RATE_LIMIT_AI` | hayır | AI asistan için 5 dakikadaki istek sınırı. Varsayılan `15`. |
+| `RATE_LIMIT_LOGIN` | hayır | 5 dakikadaki başarısız giriş sınırı. Varsayılan `10`. |
+| `NOTIFY_DRIVER` | hayır | `log` (simülasyon) veya `webhook`. |
+| `NOTIFY_WEBHOOK_URL` | hayır | `webhook` sürücüsünde hedef adres. |
+| `PORT` | hayır | Render otomatik ayarlar. |
+
+### `AUTH_SECRET` üretme
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+---
+
+## Dağıtım
+
+**Render (backend):** `render.yaml` servisi tanımlar. Panelden `GEMINI_API_KEY`, `DATABASE_URL` ve `AUTH_SECRET` girilir.
+
+**Vercel (frontend):** `vercel.json` statik dosyaları yayınlar, `/api/*` ve `/uploads/*` isteklerini Render'a yönlendirir. `.vercelignore`, backend dosyalarının statik dağıtıma girmesini engeller.
+
+Veritabanı tabloları ilk çalıştırmada otomatik oluşturulur; elle şema kurulumu gerekmez.
+
+---
 
 ## Test
 
-Sıfır bağımlılıklı test paketi Node'un yerleşik test çalıştırıcısını kullanır:
-
 ```bash
 npm test
-# veya
-node --test
 ```
 
-## Kimlik Doğrulama
+Testler izole bir geçici veritabanı ve yükleme klasörü kullanır; gerçek `data/` ve `uploads/` etkilenmez.
 
-Parolalar `scrypt` ile hash'lenir; eski düz-metin parolalar ilk okumada otomatik migrate edilir. `POST /api/auth/login` ve `register` imzalı bir token döndürür; istemci bunu saklayıp her istekte `Authorization: Bearer <token>` başlığıyla gönderir. Mutasyon uçları token ister; yönetici işlemleri `admin` rolü gerektirir. Token imza anahtarı `AUTH_SECRET` env değişkeninden okunur; yoksa `data/.auth_secret` dosyasına üretilip kaydedilir.
+---
+
+## Kimlik doğrulama ve yetkilendirme
+
+Parolalar `scrypt` ile hash'lenir. `POST /api/auth/login` ve `/api/auth/register` imzalı bir token döndürür; istemci bunu `Authorization: Bearer <token>` başlığıyla gönderir.
+
+Erişim seviyeleri:
+
+- **genel** — kimlik gerekmez
+- **oturum** — geçerli token gerekir (sakin veya yönetici)
+- **admin** — yönetici rolü gerekir
+
+### Veri kapsamı
+
+| Kim | Ne görür |
+|---|---|
+| Oturumsuz | Yalnızca site ve blok listesi (kayıt formu için) |
+| Sakin | Yalnızca kendi sitesi; kendi dairesi, borcu, talepleri ve sitesinin duyuruları |
+| Yönetici | Yalnızca yönettiği siteler (`siteIds`) |
+
+Site kapsamlı uçlar `?siteId=` parametresi alır; verilmezse kullanıcının ilk sitesi kullanılır. Yetkisiz bir `siteId` `400` döndürür.
+
+---
 
 ## API
 
-Erişim: (genel) kimlik gerektirmez, (oturum) geçerli token gerekir, (admin) yönetici rolü gerekir.
+### Kimlik ve profil
 
-- `GET /api/state` (genel) — oturumsuz yalnızca site/blok listesi; oturumlu kullanıcının kapsamındaki veri
-- `GET /api/sites/overview` (admin) — yönetilen sitelerin karşılaştırmalı özeti
-- `POST /api/sites` (admin) — yeni site oluştur
-- `GET /api/ai/status` (genel)
-- `GET /api/ai/debug` (admin)
-- `POST /api/auth/login` (genel)
-- `POST /api/auth/register` (genel)
-- `POST /api/dues/bulk` (admin)
-- `POST /api/dues/:id/pay` (admin)
-- `POST /api/dues/:id/reminder-draft` (admin)
-- `POST /api/dues/:id/reminder` (admin)
-- `POST /api/requests` (oturum)
-- `PATCH /api/requests/:id` (admin)
-- `DELETE /api/requests/:id` (admin)
-- `PATCH /api/requests/:id/status` (admin)
-- `POST /api/announcements` (admin)
-- `POST /api/announcements/:id/read` (oturum) — duyuruyu okundu işaretle
-- `POST /api/apartments` (admin)
-- `POST /api/apartments/import` (admin) — CSV toplu içeri aktarma
-- `GET /api/health-score` (admin) — mevcut skor + geçmiş
-- `POST /api/health-score/snapshot` (admin) — skor anlık görüntüsü kaydet
-- `POST /api/reset` (admin)
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `POST /api/auth/login` | genel | Giriş; token döndürür. Başarısız denemeler hız sınırına tabidir. |
+| `POST /api/auth/register` | genel | Sakin kaydı; seçilen blok siteyi belirler. |
+| `PATCH /api/auth/profile` | oturum | Ad, telefon, e-posta, şifre, plaka, avatar. |
 
-Yüklenen talep fotoğrafları `/uploads/<dosya>` yolundan servis edilir.
+### Durum ve siteler
 
-Site kapsamı: `dues/bulk`, `announcements`, `apartments/import`, `health-score` ve `health-score/snapshot` uçları `?siteId=` parametresi alır; verilmezse kullanıcının ilk sitesi kullanılır. Erişim yetkisi olmayan bir `siteId` 400 döndürür.
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `GET /api/state` | genel | Kullanıcının kapsamındaki tüm veri. |
+| `GET /api/sites/overview` | admin | Yönetilen sitelerin karşılaştırmalı özeti. |
+| `POST /api/sites` | admin | Yeni site oluşturur. |
+| `POST /api/sites/:id/bulk-setup` | admin | Toplu blok/daire kurulumu. |
+| `PATCH /api/blocks/:id` | admin | Blok adını günceller. |
 
-## Veritabanı
+### Daireler
 
-Veri erişimi `db/repository.js` içindeki repository katmanı arkasındadır. Varsayılan sürücü JSON dosyasıdır (`data/db.json`). PostgreSQL'e geçmek için `PostgresRepository` aynı arayüzle doldurulur ve `DB_DRIVER=postgres` ile devreye alınır. Geçiş şeması `db/schema.sql` dosyasındadır.
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `POST /api/apartments` | admin | Daire ve sakin ekler. |
+| `PATCH /api/apartments/:id` | admin | Daire günceller. |
+| `DELETE /api/apartments/:id` | admin | Daire siler. |
+| `POST /api/apartments/import` | admin | CSV toplu içeri aktarma. |
 
-## Demo Kullanıcıları
+### Aidat ve finans
 
-Seed iki site içerir: **Çınar Apartmanı** (site-1) ve **Meltem Sitesi** (site-2).
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `POST /api/dues/bulk` | admin | Dönem için toplu aidat oluşturur. |
+| `POST /api/dues/:id/pay` | oturum | Ödeme işler. |
+| `POST /api/dues/:id/reminder-draft` | admin | AI hatırlatma taslağı üretir. |
+| `POST /api/dues/:id/reminder` | admin | Hatırlatma gönderir ve kaydeder. |
+| `GET /api/finances` | oturum | Kasa bakiyesi ve gelir-gider özeti (şeffaflık). |
+| `POST /api/expenses` | admin | Gider kaydı ekler. |
+| `DELETE /api/expenses/:id` | admin | Gider siler. |
 
-- Yönetici (her iki siteyi yönetir): `admin@apartai.local` / `demo123`
-- Sakin (Çınar Apartmanı): `ayse@example.com` / `demo123`
-- Sakin (Meltem Sitesi): `deniz@example.com` / `demo123`
+### Talepler
+
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `POST /api/requests` | oturum | Talep açar; AI kategori/aciliyet önerir, fotoğraf analiz edilir. |
+| `PATCH /api/requests/:id` | admin | Durum, yönetici notu, firma ataması. |
+| `PATCH /api/requests/:id/status` | admin | Yalnızca durum günceller. |
+| `DELETE /api/requests/:id` | admin | Talebi ve fotoğrafını siler. |
+
+### Duyuru ve anketler
+
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `POST /api/announcements` | admin | Duyuru yayınlar; AI metni düzenler, sakinlere bildirim gider. |
+| `POST /api/announcements/:id/read` | oturum | Okundu işaretler (idempotent). |
+| `POST /api/surveys` | admin | Anket oluşturur. |
+| `POST /api/surveys/:id/vote` | oturum | Oy verir. |
+| `PATCH /api/surveys/:id/close` | admin | Anketi kapatır. |
+| `DELETE /api/surveys/:id` | admin | Anketi siler. |
+
+### Skor ve AI
+
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `GET /api/health-score` | admin | Site Sağlık Skoru ve geçmişi. |
+| `POST /api/health-score/snapshot` | admin | Anlık skoru geçmişe kaydeder. |
+| `POST /api/ai/assistant` | genel | Landing demo sohbeti. IP bazlı hız sınırı vardır. |
+| `GET /api/ai/status` | genel | Sağlayıcı ve model durumu. |
+| `GET /api/ai/debug` | admin | Son AI denemeleri, HTTP durumu, fallback nedeni. |
+
+### Diğer
+
+| Uç | Erişim | Açıklama |
+|---|---|---|
+| `POST /api/reset` | admin | Veriyi seed'e döndürür. |
+
+Yüklenen görseller `/uploads/<dosya>` yolundan servis edilir.
+
+---
+
+## Site Sağlık Skoru
+
+100 üzerinden, ürün dokümanındaki ağırlıklarla hesaplanır: ödeme düzeni %35, arıza çözüm hızı %25, şikayet yoğunluğu %20, tekrarlayan sorun oranı %10, duyuru düzeni %10. Skorun yanında düşüş nedenleri ve önerilen aksiyonlar üretilir. Sunucu ve istemci aynı formülü kullanır.
+
+---
+
+## Tasarım notları
+
+**Veri saklama.** Tüm uygulama durumu `apartai_state` tablosunda tek bir JSONB belgesi olarak tutulur. Bu, JSON dosya modelinden geçişi basitleştirir; karşılığında her yazma belgenin tamamını yeniden yazar. Yazma istekleri hem süreç içi kuyrukla hem de PostgreSQL danışmanlı kilidiyle (`pg_advisory_lock`) seri hale getirilir; aksi hâlde eşzamanlı oku-değiştir-yaz döngüleri birbirinin değişikliğini ezer.
+
+> Kilit isteğin tamamı boyunca tutulur. AI çağrısı yapan yazma uçlarında (talep açma, duyuru yayınlama) bu süre modelin yanıt süresine bağlıdır. Pilot ölçeğinde sorun değildir; trafik arttığında kilidi yalnızca okuma-yazma penceresine daraltmak gerekir.
+
+**Görseller.** Talep fotoğrafları ve avatarlar kayıtların içine gömülmez; `db/storage.js` üzerinden saklanıp kayda yalnızca URL yazılır. Yükleme öncesi tür ve boyut doğrulanır (`MAX_IMAGE_BYTES`). Render gibi geçici diskli ortamlarda dosyalar Postgres'te tutulduğu için yeniden başlatmadan etkilenmez.
+
+**Bildirimler.** `db/notifier.js` arkasındadır. Varsayılan `log` sürücüsü gönderimi simüle eder; `NOTIFY_DRIVER=webhook` ile SMS/e-posta ağ geçidine bağlanır.
+
+---
+
+## Yol haritası
+
+### Tamamlananlar
+
+- Gerçek auth: scrypt parola hash, imzalı token, rol bazlı endpoint koruması
+- Repository ve storage katmanları; PostgreSQL sürücüsü
+- Encoding (UTF-8 chunk sınırı) düzeltmesi ve girdi doğrulama
+- `node:test` ile API ve birim test paketi
+- Multimodal AI talep analizi (görsel + metin) ve kural tabanlı fallback
+- Sunucu tarafı Site Sağlık Skoru ve skor geçmişi
+- CSV ile toplu daire/sakin içeri aktarma
+- Duyuru okunma takibi ve bildirim geçmişi
+- Talep atama ve firma/taşeron performans tablosu
+- Çoklu site desteği ve rol bazlı veri kapsamı
+- Dijital anket ve istişare oylamaları
+- Apartman kasası, gelir-gider yönetimi ve AI finansal asistan
+- Mobil arayüz revizyonu, bildirim merkezi, bina hiyerarşisi
+- Gri-beyaz gradient arayüz teması ve otomatik ilerleyen landing özellik slider'ı
+- Kalıcı dosya saklama, görsel boyut sınırı, eşzamanlı yazma koruması, hız sınırlama
+
+### Sıradakiler
+
+- [ ] Online ödeme (Iyzico / PayTR) veya banka hareketi içeri aktarma
+- [ ] Tahsilat tahmini ve bütçe sapma analizi
+- [ ] Tedarikçi performans skorlaması
+- [ ] Yazma kilidini AI çağrılarının dışına daraltma

@@ -4,7 +4,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { createRepository } = require("./db/repository");
-const { createStorage } = require("./db/storage");
+const { createStorage, validateImageDataUrl, PUBLIC_PREFIX, MAX_IMAGE_BYTES } = require("./db/storage");
 const { createNotifier } = require("./db/notifier");
 
 const PORT = Number(process.env.PORT || 4173);
@@ -16,7 +16,6 @@ loadEnvFile();
 const repository = createRepository();
 const storage = createStorage();
 const notifier = createNotifier();
-const AUTH_SECRET = resolveAuthSecret();
 const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL || 60 * 60 * 24 * 7);
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -57,21 +56,72 @@ function loadEnvFile() {
   }
 }
 
-function resolveAuthSecret() {
-  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+// Token imza anahtarı. Öncelik sırası:
+//   1. AUTH_SECRET ortam değişkeni (production'da önerilen)
+//   2. Veritabanındaki kalıcı kayıt (geçici diskli barındırmayı atlatır)
+//   3. data/.auth_secret dosyası (yerel geliştirme)
+// 2. adım olmadan Render gibi geçici diskli ortamlarda her yeniden başlatmada
+// yeni anahtar üretilir ve tüm kullanıcılar oturumdan düşer.
+let authSecret = process.env.AUTH_SECRET || "";
+let authSecretPromise = null;
+
+function readSecretFile() {
   try {
     if (fsSync.existsSync(SECRET_FILE)) {
       const stored = fsSync.readFileSync(SECRET_FILE, "utf8").trim();
       if (stored) return stored;
     }
-    const generated = crypto.randomBytes(32).toString("hex");
-    fsSync.mkdirSync(DATA_DIR, { recursive: true });
-    fsSync.writeFileSync(SECRET_FILE, generated, { mode: 0o600 });
-    return generated;
   } catch {
-    // Fallback to an ephemeral secret; tokens won't survive restarts.
-    return crypto.randomBytes(32).toString("hex");
+    /* okunamazsa yok say */
   }
+  return "";
+}
+
+function writeSecretFile(secret) {
+  try {
+    fsSync.mkdirSync(DATA_DIR, { recursive: true });
+    fsSync.writeFileSync(SECRET_FILE, secret, { mode: 0o600 });
+  } catch {
+    /* yazılamazsa yok say */
+  }
+}
+
+async function ensureAuthSecret() {
+  if (authSecret) return authSecret;
+  if (!authSecretPromise) {
+    authSecretPromise = (async () => {
+      // Kalıcı depoda daha önce üretilmiş bir anahtar var mı?
+      try {
+        const data = await repository.getState();
+        if (data.authSecret) {
+          authSecret = data.authSecret;
+          return authSecret;
+        }
+      } catch {
+        /* depo hazır değilse dosyaya düş */
+      }
+      const fromFile = readSecretFile();
+      const secret = fromFile || crypto.randomBytes(32).toString("hex");
+      // Depoya yaz ki yeniden başlatmalarda aynı kalsın.
+      try {
+        const data = await repository.getState();
+        data.authSecret = secret;
+        await repository.saveState(data);
+      } catch {
+        /* depoya yazılamazsa en azından dosyada kalsın */
+      }
+      if (!fromFile) writeSecretFile(secret);
+      authSecret = secret;
+      if (process.env.NODE_ENV === "production") {
+        console.warn(
+          "[auth] AUTH_SECRET ortam değişkeni tanımlı değil. Anahtar veritabanına yazıldı; " +
+            "yine de Render/Vercel panelinden AUTH_SECRET tanımlamanız önerilir."
+        );
+      }
+      return authSecret;
+    })();
+  }
+  return authSecretPromise;
 }
 
 function hashPassword(password) {
@@ -97,7 +147,7 @@ function base64url(input) {
 
 function signToken(payload) {
   const body = base64url(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }));
-  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(body).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const signature = crypto.createHmac("sha256", authSecret).update(body).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return `${body}.${signature}`;
 }
 
@@ -105,7 +155,7 @@ function verifyToken(token) {
   if (!token || typeof token !== "string" || !token.includes(".")) return null;
   const [body, signature] = token.split(".");
   if (!body || !signature) return null;
-  const expected = crypto.createHmac("sha256", AUTH_SECRET).update(body).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const expected = crypto.createHmac("sha256", authSecret).update(body).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const sigBuffer = Buffer.from(signature);
   const expBuffer = Buffer.from(expected);
   if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) return null;
@@ -222,6 +272,87 @@ class ValidationError extends Error {
 
 function ensure(condition, message) {
   if (!condition) throw new ValidationError(message);
+}
+
+// Yüklenen görseli tür/boyut olarak doğrular ve storage'a yazar; geriye kalıcı
+// bir URL döndürür. Zaten URL ise (yeniden gönderilen form) olduğu gibi döner.
+// Boş değer gönderilmişse null döner ve çağıran eski dosyayı silebilir.
+// --- Hız sınırlama (rate limiting) ---
+//
+// `/api/ai/assistant` landing demosu için herkese açıktır ve gerçek bir model
+// anahtarıyla çalışır; sınırsız bırakılırsa kota/maliyet suistimale açıktır.
+// Giriş ucu da kaba kuvvet denemelerine karşı sınırlanır.
+// Sayaçlar süreç içinde tutulur (tek örnekli dağıtım için yeterli).
+const RATE_LIMITS = {
+  ai: { max: Number(process.env.RATE_LIMIT_AI || 15), windowMs: 5 * 60 * 1000 },
+  login: { max: Number(process.env.RATE_LIMIT_LOGIN || 10), windowMs: 5 * 60 * 1000 },
+};
+const rateBuckets = new Map();
+
+// Vercel/Render arkasında gerçek istemci IP'si x-forwarded-for başlığındadır.
+function clientIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket?.remoteAddress || "unknown";
+}
+
+// Sayaca dokunmadan sınırın aşılıp aşılmadığına bakar.
+function peekRateLimit(bucket, req) {
+  const limit = RATE_LIMITS[bucket];
+  if (!limit) return { allowed: true };
+  const key = `${bucket}:${clientIp(req)}`;
+  const now = Date.now();
+  const hits = (rateBuckets.get(key) || []).filter((t) => now - t < limit.windowMs);
+  rateBuckets.set(key, hits);
+  if (hits.length >= limit.max) {
+    const retryAfter = Math.ceil((limit.windowMs - (now - hits[0])) / 1000);
+    return { allowed: false, retryAfter: Math.max(retryAfter, 1) };
+  }
+  return { allowed: true };
+}
+
+// Bir denemeyi sayaca işler.
+function recordRateLimit(bucket, req) {
+  const limit = RATE_LIMITS[bucket];
+  if (!limit) return;
+  const key = `${bucket}:${clientIp(req)}`;
+  const now = Date.now();
+  const hits = (rateBuckets.get(key) || []).filter((t) => now - t < limit.windowMs);
+  hits.push(now);
+  rateBuckets.set(key, hits);
+  // Sayaç haritası sınırsız büyümesin: ara sıra süresi dolmuş anahtarları at.
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (!v.length || now - v[v.length - 1] > limit.windowMs) rateBuckets.delete(k);
+    }
+  }
+}
+
+// Sınır aşıldıysa 429 yazar ve true döner. `record` false ise sayaç
+// artırılmaz; giriş ucunda yalnızca başarısız denemeler işlenir.
+function rejectIfRateLimited(res, req, bucket, record = true) {
+  const result = peekRateLimit(bucket, req);
+  if (!result.allowed) {
+    res.writeHead(429, {
+      "content-type": "application/json; charset=utf-8",
+      "retry-after": String(result.retryAfter),
+    });
+    res.end(JSON.stringify({ error: `Çok fazla istek gönderildi. ${result.retryAfter} saniye sonra tekrar deneyin.` }));
+    return true;
+  }
+  if (record) recordRateLimit(bucket, req);
+  return false;
+}
+
+async function storeImageField(value, idHint) {
+  const raw = clean(value);
+  if (!raw) return null;
+  // Halihazırda kaydedilmiş bir dosyaya işaret ediyorsa yeniden yazma.
+  if (raw.startsWith(`${PUBLIC_PREFIX}/`)) return { url: raw, unchanged: true };
+  const check = validateImageDataUrl(raw, MAX_IMAGE_BYTES);
+  ensure(check.ok, check.error);
+  const stored = await storage.saveDataUrl(raw, idHint);
+  ensure(stored?.url, "Görsel kaydedilemedi.");
+  return stored;
 }
 
 function today() {
@@ -1182,7 +1313,45 @@ function routeAccess(method, pathname) {
   return "admin";
 }
 
+// Tek seferlik veri taşıma: eski kayıtlarda avatar base64 olarak gömülüydü.
+// Bu, belgeyi megabaytlarca şişiriyor ve her yazmada tümüyle yeniden
+// gönderiliyordu. Bulunanları storage katmanına taşıyıp yerine URL yazar.
+let migrationsPromise = null;
+
+async function runStartupMigrations() {
+  if (!migrationsPromise) {
+    migrationsPromise = (async () => {
+      try {
+        const data = await repository.getState();
+        let moved = 0;
+        const relocate = async (record, hint) => {
+          if (!record || typeof record.avatar !== "string") return;
+          if (!record.avatar.startsWith("data:")) return;
+          // Mevcut veri olduğu için boyut sınırı uygulanmaz; amaç temizlik.
+          const stored = await storage.saveDataUrl(record.avatar, hint);
+          if (stored?.url) {
+            record.avatar = stored.url;
+            moved += 1;
+          }
+        };
+        for (const user of data.users || []) await relocate(user, `avatar-${user.id}`);
+        for (const resident of data.residents || []) await relocate(resident, `avatar-${resident.id}`);
+        if (moved > 0) {
+          await repository.saveState(data);
+          console.log(`[migration] ${moved} gömülü avatar storage katmanına taşındı.`);
+        }
+      } catch (error) {
+        console.warn("[migration] Avatar taşıma atlandı:", error.message);
+      }
+    })();
+  }
+  return migrationsPromise;
+}
+
 async function routeApi(req, res, url) {
+  // Token imzalama/doğrulama anahtarı ilk istekten önce hazır olmalı.
+  await ensureAuthSecret();
+  await runStartupMigrations();
   const data = await readData();
   const method = req.method;
 
@@ -1200,12 +1369,16 @@ async function routeApi(req, res, url) {
   }
 
   if (method === "POST" && url.pathname === "/api/auth/login") {
+    // Kaba kuvvet denemelerine karşı IP bazlı sınır: yalnızca başarısız
+    // denemeler sayılır, böylece normal kullanım cezalandırılmaz.
+    if (rejectIfRateLimited(res, req, "login", false)) return;
     const body = await readBody(req);
     const email = clean(body.email).toLocaleLowerCase("tr-TR");
     const password = clean(body.password);
     ensure(email && password, "E-posta ve şifre zorunludur.");
     const user = data.users.find((item) => item.email.toLocaleLowerCase("tr-TR") === email);
     if (!user || !verifyPassword(password, user.passwordHash)) {
+      recordRateLimit("login", req);
       json(res, 401, { error: "E-posta veya şifre hatalı" });
       return;
     }
@@ -1296,6 +1469,18 @@ async function routeApi(req, res, url) {
       user.passwordHash = hashPassword(newPassword);
     }
 
+    // Avatar storage katmanına yazılır; kayıtlarda yalnızca URL tutulur.
+    let avatarUrl;
+    if (body.avatar !== undefined) {
+      const previous = user.avatar;
+      const stored = await storeImageField(body.avatar, `avatar-${user.id}`);
+      avatarUrl = stored?.url || "";
+      // Eski dosyayı yalnızca gerçekten değiştiyse sil.
+      if (previous && previous !== avatarUrl && previous.startsWith(`${PUBLIC_PREFIX}/`)) {
+        await storage.remove(previous);
+      }
+    }
+
     // Sakin için resident kaydı güncellemesi (plaka, acil durum vb.)
     let resident = null;
     if (user.role === "resident" && user.residentId) {
@@ -1306,15 +1491,11 @@ async function routeApi(req, res, url) {
         if (email) resident.email = email;
         if (body.plateNumber !== undefined) resident.plateNumber = clean(body.plateNumber);
         if (body.emergencyContact !== undefined) resident.emergencyContact = clean(body.emergencyContact);
-        if (body.avatar !== undefined) {
-          resident.avatar = clean(body.avatar);
-        }
+        if (avatarUrl !== undefined) resident.avatar = avatarUrl;
       }
     }
 
-    if (body.avatar !== undefined) {
-      user.avatar = clean(body.avatar);
-    }
+    if (avatarUrl !== undefined) user.avatar = avatarUrl;
 
     await writeData(data);
     json(res, 200, { user: publicUser(user), resident, data: stateForUser(data, user) });
@@ -1425,6 +1606,8 @@ async function routeApi(req, res, url) {
   }
 
   if (method === "POST" && url.pathname === "/api/ai/assistant") {
+    // Herkese açık uç: model kotasını korumak için IP bazlı sınır.
+    if (rejectIfRateLimited(res, req, "ai")) return;
     const body = await readBody(req);
     const message = clean(body.message);
     ensure(message, "Mesaj boş olamaz.");
@@ -1576,12 +1759,18 @@ async function routeApi(req, res, url) {
       requireSiteAccess(apartment.siteId, authUser, data);
     }
     const photoDataUrl = clean(body.photoDataUrl);
+    // Tür/boyut doğrulaması AI çağrısından önce yapılır ki geçersiz görsel
+    // için boşuna model çağrısı yapılmasın.
+    if (photoDataUrl && !photoDataUrl.startsWith(`${PUBLIC_PREFIX}/`)) {
+      const check = validateImageDataUrl(photoDataUrl, MAX_IMAGE_BYTES);
+      ensure(check.ok, check.error);
+    }
     const entryType = clean(body.entryType) || "fault"; // fault, complaint, suggestion
     const categoryOverride = clean(body.category);
     const urgencyOverride = clean(body.urgency);
     const analysis = await analyzeComplaintWithAI({ data: siteScope(data, apartment.siteId), title, description, photoDataUrl });
-    // Görseli AI'a verdikten sonra dosyaya yaz; db.json'da base64 tutma.
-    const stored = await storage.saveDataUrl(photoDataUrl, "req");
+    // Görseli AI'a verdikten sonra kalıcı depoya yaz; kayıtta yalnızca URL tutulur.
+    const stored = await storeImageField(photoDataUrl, "req");
     const request = {
       id: uid("req"),
       siteId: apartment.siteId,
@@ -2143,15 +2332,28 @@ async function routeApi(req, res, url) {
 }
 
 async function serveStatic(res, url) {
-  // Yüklenen dosyalar storage katmanından servis edilir.
-  const uploadPath = storage.resolvePublicUrl?.(url.pathname);
-  const filePath = uploadPath
-    ? path.normalize(uploadPath)
-    : path.normalize(path.join(ROOT, url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname)));
+  // Yüklenen dosyalar storage katmanından okunur (yerel disk veya Postgres).
+  if (url.pathname.startsWith(`${PUBLIC_PREFIX}/`)) {
+    const file = await storage.read(url.pathname);
+    if (!file) {
+      res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+      return;
+    }
+    res.writeHead(200, {
+      "content-type": file.contentType,
+      // Yüklenen görseller değişmez isimlidir; uzun süre önbelleklenebilir.
+      "cache-control": "public, max-age=31536000, immutable",
+    });
+    res.end(file.buffer);
+    return;
+  }
+
+  const filePath = path.normalize(path.join(ROOT, url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname)));
 
   // Veri dizinine (db.json, seed.json, .auth_secret) ve .env'e statik erişimi engelle.
   const blocked = filePath.startsWith(DATA_DIR) || path.basename(filePath) === ".env";
-  if (!uploadPath && (blocked || !filePath.startsWith(ROOT))) {
+  if (blocked || !filePath.startsWith(ROOT)) {
     res.writeHead(403);
     res.end("Forbidden");
     return;
@@ -2171,6 +2373,23 @@ async function serveStatic(res, url) {
   }
 }
 
+// Veri tek bir belge olarak saklandığı için eşzamanlı oku-değiştir-yaz
+// döngüleri birbirinin değişikliğini ezebilir. Yazma istekleri önce süreç
+// içinde kuyruğa alınır, sonra repository'nin kilidiyle örnekler arasında
+// seri hale getirilir.
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+let writeChain = Promise.resolve();
+
+function serializeWrite(fn) {
+  const run = writeChain.then(fn, fn);
+  // Zincirin bir hatayla kopmaması için sonucu yutarak devam ettir.
+  writeChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 const server = http.createServer(async (req, res) => {
   setCorsHeaders(res, req.headers.origin || "*");
   if (req.method === "OPTIONS") {
@@ -2181,7 +2400,11 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname.startsWith("/api/")) {
-      await routeApi(req, res, url);
+      if (MUTATING_METHODS.has(req.method)) {
+        await serializeWrite(() => repository.withWriteLock(() => routeApi(req, res, url)));
+      } else {
+        await routeApi(req, res, url);
+      }
       return;
     }
     await serveStatic(res, url);

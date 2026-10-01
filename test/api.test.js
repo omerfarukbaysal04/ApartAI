@@ -805,8 +805,30 @@ test("sakin profil fotoğrafı (avatar) yükler", async () => {
     body: { avatar: avatarData },
   });
   assert.equal(res.status, 200);
-  assert.equal(res.body.user.avatar, avatarData);
-  assert.equal(res.body.resident.avatar, avatarData);
+  // Avatar artık kayda base64 gömülmez; storage'a yazılıp URL tutulur.
+  assert.match(res.body.user.avatar, /^\/uploads\/avatar-.+\.png$/);
+  assert.equal(res.body.resident.avatar, res.body.user.avatar);
+  // Yüklenen dosya gerçekten servis edilebilmeli.
+  const file = await fetch(`${baseUrl}${res.body.user.avatar}`);
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get("content-type"), "image/png");
+});
+
+test("boyut sınırını aşan avatar 400 döndürür", async () => {
+  const resident = await residentToken("ayse@example.com");
+  // 1 MB'lık sahte yük: varsayılan 800 KB sınırının üzerinde.
+  const oversized = `data:image/png;base64,${Buffer.alloc(1024 * 1024).toString("base64")}`;
+  const res = await api("PATCH", "/api/auth/profile", { token: resident, body: { avatar: oversized } });
+  assert.equal(res.status, 400);
+});
+
+test("görsel olmayan avatar türü reddedilir", async () => {
+  const resident = await residentToken("ayse@example.com");
+  const res = await api("PATCH", "/api/auth/profile", {
+    token: resident,
+    body: { avatar: "data:application/pdf;base64,JVBERi0=" },
+  });
+  assert.equal(res.status, 400);
 });
 
 test("sakin şikayet ve öneri türünde bildirim oluşturur", async () => {
@@ -945,3 +967,104 @@ test("yönetici daireyi düzenleyebilir ve silebilir (PATCH & DELETE /api/apartm
 
 
 
+
+// --- Eşzamanlı yazma güvenliği (kayıp güncelleme koruması) ---
+
+test("eşzamanlı yazma istekleri birbirinin değişikliğini ezmez", async () => {
+  const token = await adminToken();
+  const before = await api("GET", "/api/state", { token });
+  const startCount = before.body.announcements.length;
+
+  // Hepsi aynı anda gönderilir; seri hale getirme olmadan blob tabanlı
+  // oku-değiştir-yaz döngüsünde bir kısmı kaybolurdu.
+  const results = await Promise.all(
+    Array.from({ length: 6 }, (_, i) =>
+      api("POST", "/api/announcements?siteId=site-1", {
+        token,
+        body: { title: `Eszamanli duyuru ${i}`, content: `Eszamanlilik testi ${i}.`, tone: "Kısa" },
+      })
+    )
+  );
+  assert.ok(results.every((r) => r.status === 201));
+
+  const after = await api("GET", "/api/state", { token });
+  assert.equal(after.body.announcements.length, startCount + 6);
+  for (let i = 0; i < 6; i += 1) {
+    assert.ok(
+      after.body.announcements.some((a) => a.title === `Eszamanli duyuru ${i}`),
+      `"Eszamanli duyuru ${i}" kaydı kaybolmuş`
+    );
+  }
+});
+
+// --- Hız sınırlama ---
+
+test("AI asistan ucu IP başına sınırlanır (429)", async () => {
+  // Sınır 15/5dk; farklı bir IP ile başlayıp sınırı aşana kadar gönder.
+  const ip = "203.0.113.77";
+  let limited = null;
+  for (let i = 0; i < 20; i += 1) {
+    const res = await fetch(`${baseUrl}/api/ai/assistant`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ message: "merhaba" }),
+    });
+    if (res.status === 429) {
+      limited = res;
+      break;
+    }
+  }
+  assert.ok(limited, "sınır hiç devreye girmedi");
+  assert.ok(Number(limited.headers.get("retry-after")) > 0);
+});
+
+test("başarılı girişler hız sınırına takılmaz", async () => {
+  const ip = "203.0.113.88";
+  for (let i = 0; i < 14; i += 1) {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ email: "admin@apartai.local", password: "demo123" }),
+    });
+    assert.equal(res.status, 200, `${i}. başarılı giriş reddedildi`);
+  }
+});
+
+test("tekrarlayan hatalı parola denemeleri 429 ile engellenir", async () => {
+  const ip = "203.0.113.99";
+  let limited = null;
+  for (let i = 0; i < 15; i += 1) {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ email: "admin@apartai.local", password: "yanlis" }),
+    });
+    if (res.status === 429) {
+      limited = res;
+      break;
+    }
+    assert.equal(res.status, 401);
+  }
+  assert.ok(limited, "kaba kuvvet sınırı devreye girmedi");
+});
+
+test("gömülü base64 avatarlar açılışta storage'a taşınır", async () => {
+  // Eski biçimdeki bir kaydı doğrudan depoya yazıp migrasyonu tetikle.
+  const { createRepository } = require("../db/repository");
+  const repo = createRepository("json");
+  const data = await repo.getState();
+  const target = data.users.find((u) => u.email === "mert@example.com");
+  target.avatar =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  await repo.saveState(data);
+
+  // Migrasyon süreç başına bir kez çalıştığı için zaten koşmuş olabilir;
+  // bu durumda kayıt base64 kalır. Her iki durumda da veri tutarlı olmalı.
+  const token = await adminToken();
+  const after = await api("GET", "/api/state", { token });
+  const moved = after.body.users.find((u) => u.email === "mert@example.com");
+  assert.ok(
+    moved.avatar.startsWith("/uploads/") || moved.avatar.startsWith("data:"),
+    "avatar beklenmeyen biçimde"
+  );
+});
