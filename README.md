@@ -146,6 +146,24 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Veritabanı tabloları ilk çalıştırmada otomatik oluşturulur; elle şema kurulumu gerekmez.
 
+### Servisleri uyanık tutma
+
+Her iki ücretsiz plan da hareketsizlikte uykuya geçer ve bu zincirleme bir etki
+yaratır: siteye kimse girmeyince Render backend'i ~15 dakikada uyur, uyuyan
+backend veritabanına bağlanmaz, Supabase de ~7 gün sonra projeyi duraklatır.
+Duraklatılan projede uygulama tamamen erişilemez hâle gelir.
+
+`.github/workflows/keep-alive.yml` bunu önler: günde bir kez `/api/state` ucuna
+istek atar. Bu uç veritabanına gittiği için hem Render hem Supabase uyanık kalır.
+İş, yalnızca HTTP 200 almakla yetinmez; gövdede gerçek veri olup olmadığını da
+kontrol eder, böylece veritabanı erişilemezken sessizce başarılı saymaz.
+
+Farklı bir adres için depo ayarlarından `APARTAI_BASE_URL` değişkenini tanımlayın
+(Settings → Secrets and variables → Actions → Variables).
+
+> GitHub, 60 gün hiç hareket görmeyen depolarda zamanlanmış işleri devre dışı
+> bırakır. Uzun bir aradan sonra Actions sekmesinden yeniden etkinleştirin.
+
 ---
 
 ## Test

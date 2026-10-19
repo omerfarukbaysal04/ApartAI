@@ -1,0 +1,66 @@
+name: Keep alive
+
+# Supabase ücretsiz planda projeler ~7 gün hareketsizlikten sonra duraklatılır.
+# "Hareket" veritabanına gelen sorgu demektir; panele girmek sayılmaz.
+#
+# Render ücretsiz planda backend ~15 dakika trafik almayınca uykuya geçtiği için
+# siteye kimse girmediğinde Supabase'e hiç bağlanılmaz ve sayaç dolar. Bu iş
+# günde bir kez backend'i uyandırır; backend de veritabanına dokunduğu için
+# her iki servis de uyanık kalır.
+#
+# /api/state seçildi: herkese açık, veritabanına gidiyor (routeApi her istekte
+# readData() çağırıyor) ve dönen içerik uygulamanın gerçekten çalıştığını
+# kanıtlıyor — yalnızca sürecin ayakta olduğunu değil.
+
+on:
+  schedule:
+    # Her gün 06:17 UTC. Tam saat başları GitHub'da yoğun olduğu için kaydırıldı.
+    - cron: "17 6 * * *"
+  workflow_dispatch: # Panelden elle de çalıştırılabilir.
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Backend'i uyandır ve veritabanına ulaştığını doğrula
+        env:
+          # Farklı bir adres kullanmak için depo ayarlarından APARTAI_BASE_URL
+          # değişkenini tanımlayın (Settings > Secrets and variables > Actions).
+          BASE_URL: ${{ vars.APARTAI_BASE_URL || 'https://apartai.onrender.com' }}
+        run: |
+          set -uo pipefail
+
+          # Render ücretsiz planda soğuk başlangıç bir dakikayı bulabilir, bu
+          # yüzden artan beklemelerle birkaç kez denenir.
+          attempts=6
+          delay=20
+
+          for i in $(seq 1 "$attempts"); do
+            echo "Deneme $i/$attempts -> $BASE_URL/api/state"
+
+            body=$(curl -sS --max-time 90 -w $'\n%{http_code}' "$BASE_URL/api/state" || true)
+            code=$(printf '%s' "$body" | tail -n1)
+            payload=$(printf '%s' "$body" | sed '$d')
+
+            if [ "$code" = "200" ]; then
+              # 200 tek başına yetmez: veritabanı erişilemezken de gövdede hata
+              # dönebiliyor. İçeriğin gerçek veri olduğunu doğrula.
+              if printf '%s' "$payload" | grep -q '"sites"'; then
+                echo "Başarılı: backend ayakta ve veritabanı yanıt veriyor."
+                exit 0
+              fi
+              echo "HTTP 200 alındı ama beklenen veri yok. Gövde: $(printf '%s' "$payload" | head -c 300)"
+            else
+              echo "HTTP $code. Gövde: $(printf '%s' "$payload" | head -c 300)"
+            fi
+
+            if [ "$i" -lt "$attempts" ]; then
+              echo "$delay saniye bekleniyor..."
+              sleep "$delay"
+              delay=$((delay * 2))
+            fi
+          done
+
+          echo "::error::Backend veya veritabanı $attempts denemede yanıt vermedi. Supabase projesi duraklatılmış olabilir."
+          exit 1
